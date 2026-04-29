@@ -18,7 +18,7 @@ export default defineNuxtConfig({
       ripple: true,
     },
   },
-  css: ['~/assets/css/main.css'],
+  css: ['~/assets/css/main.css', '~/assets/css/diagram.css'],
   runtimeConfig: {
     public: {
       awsRegion: process.env.NUXT_PUBLIC_AWS_REGION || 'us-east-1',
