@@ -174,7 +174,7 @@ export interface LoadBalancerComponent extends NetworkComponent {
   type: NetworkComponentType.LOAD_BALANCER
   sku: 'Basic' | 'Standard' | 'Gateway'
   tier: 'Regional' | 'Global'
-  type_: 'Public' | 'Internal'
+  loadBalancerType: 'Public' | 'Internal'
   frontendIpConfigs?: LoadBalancerFrontend[]
   backendPools?: LoadBalancerBackendPool[]
   loadBalancingRules?: LoadBalancingRule[]
