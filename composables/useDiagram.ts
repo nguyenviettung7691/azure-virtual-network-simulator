@@ -11,7 +11,7 @@ export const useDiagram = () => {
   const isDirty = computed(() => diagramStore.isDirty)
 
   function createComponent(type: NetworkComponentType, formData: Record<string, any>) {
-    const id = `${type.toLowerCase()}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const id = `${type.toLowerCase()}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
     const component = {
       id,
       type,
