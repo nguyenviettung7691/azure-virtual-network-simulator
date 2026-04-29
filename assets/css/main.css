@@ -1,0 +1,688 @@
+/* ============================================================
+   CSS Custom Properties — Ocean Blue (default theme)
+   ============================================================ */
+:root {
+  --primary: #0078d4;
+  --primary-light: #50a7f0;
+  --primary-dark: #005a9e;
+  --surface: #ffffff;
+  --surface-alt: #f3f2f1;
+  --surface-hover: #edebe9;
+  --text: #323130;
+  --text-muted: #605e5c;
+  --border: #edebe9;
+  --success: #107c10;
+  --warning: #ff8c00;
+  --danger: #d13438;
+  --info: #0078d4;
+  --shadow: rgba(0, 0, 0, 0.1);
+  --shadow-md: rgba(0, 0, 0, 0.15);
+  --radius: 6px;
+  --radius-lg: 12px;
+  --transition: 200ms ease;
+  --toolbar-height: 56px;
+  --panel-width: 280px;
+  --right-panel-width: 320px;
+  --component-size: 180px;
+}
+
+/* ============================================================
+   Dark Mode
+   ============================================================ */
+.dark-mode {
+  --surface: #1b1a19;
+  --surface-alt: #252423;
+  --surface-hover: #323130;
+  --text: #f3f2f1;
+  --text-muted: #a19f9d;
+  --border: #3b3a39;
+  --shadow: rgba(0, 0, 0, 0.4);
+  --shadow-md: rgba(0, 0, 0, 0.5);
+}
+
+/* ============================================================
+   Theme Variants
+   ============================================================ */
+.theme-azure-dark {
+  --primary: #60cdff;
+  --primary-light: #9fe6ff;
+  --primary-dark: #0078d4;
+  --success: #6ccb5f;
+  --warning: #fcba19;
+  --danger: #f1707b;
+  --info: #60cdff;
+}
+
+.theme-forest-green {
+  --primary: #107c10;
+  --primary-light: #54b354;
+  --primary-dark: #054b05;
+  --success: #107c10;
+  --warning: #ff8c00;
+  --danger: #d13438;
+  --info: #0078d4;
+}
+
+.theme-sunset-orange {
+  --primary: #d83b01;
+  --primary-light: #f27228;
+  --primary-dark: #a02800;
+  --success: #107c10;
+  --warning: #ff8c00;
+  --danger: #d13438;
+  --info: #0078d4;
+}
+
+.theme-midnight-purple {
+  --primary: #8764b8;
+  --primary-light: #b29ed4;
+  --primary-dark: #5b3d8a;
+  --success: #107c10;
+  --warning: #ff8c00;
+  --danger: #d13438;
+  --info: #8764b8;
+}
+
+.theme-rose-gold {
+  --primary: #b4009e;
+  --primary-light: #d86bc9;
+  --primary-dark: #7d0070;
+  --success: #107c10;
+  --warning: #ff8c00;
+  --danger: #d13438;
+  --info: #b4009e;
+}
+
+/* ============================================================
+   Base Reset & Typography
+   ============================================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background-color: var(--surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   App Layout
+   ============================================================ */
+.app-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--surface);
+  color: var(--text);
+  transition: background-color var(--transition), color var(--transition);
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.diagram-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--surface-alt);
+}
+
+/* ============================================================
+   Toolbar
+   ============================================================ */
+.app-toolbar {
+  height: var(--toolbar-height);
+  min-height: var(--toolbar-height);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background-color: var(--primary);
+  color: #ffffff;
+  border-bottom: 1px solid var(--primary-dark);
+  box-shadow: 0 2px 4px var(--shadow);
+  z-index: 100;
+}
+
+.app-toolbar .toolbar-brand {
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #ffffff;
+}
+
+.app-toolbar .toolbar-spacer {
+  flex: 1;
+}
+
+/* ============================================================
+   Left Panel (Component Palette)
+   ============================================================ */
+.left-panel {
+  width: var(--panel-width);
+  min-width: var(--panel-width);
+  max-width: var(--panel-width);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  transition: width var(--transition), min-width var(--transition), max-width var(--transition);
+  z-index: 10;
+}
+
+.left-panel.collapsed {
+  width: 0;
+  min-width: 0;
+  max-width: 0;
+}
+
+.left-panel .panel-header {
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background-color: var(--surface-alt);
+}
+
+.left-panel .panel-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+}
+
+/* ============================================================
+   Right Panel (Properties / Details)
+   ============================================================ */
+.right-panel {
+  width: var(--right-panel-width);
+  min-width: var(--right-panel-width);
+  max-width: var(--right-panel-width);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  transition: width var(--transition), min-width var(--transition), max-width var(--transition);
+  z-index: 10;
+}
+
+.right-panel.collapsed {
+  width: 0;
+  min-width: 0;
+  max-width: 0;
+}
+
+.right-panel .panel-header {
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background-color: var(--surface-alt);
+}
+
+.right-panel .panel-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+}
+
+/* Panel toggle buttons */
+.panel-toggle-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 48px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: background-color var(--transition), color var(--transition);
+  z-index: 20;
+}
+
+.panel-toggle-btn:hover {
+  background-color: var(--surface-hover);
+  color: var(--primary);
+}
+
+/* ============================================================
+   Vue Flow Canvas Overrides
+   ============================================================ */
+.vue-flow {
+  background-color: var(--surface-alt);
+}
+
+.vue-flow__background {
+  background-color: var(--surface-alt);
+}
+
+.vue-flow__background pattern circle {
+  fill: var(--border);
+}
+
+.vue-flow__controls {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.vue-flow__controls button {
+  background-color: var(--surface);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  transition: background-color var(--transition);
+}
+
+.vue-flow__controls button:hover {
+  background-color: var(--surface-hover);
+}
+
+.vue-flow__controls button svg {
+  fill: var(--text);
+}
+
+.vue-flow__minimap {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+/* Edges */
+.vue-flow__edge-path {
+  stroke: var(--primary);
+  stroke-width: 2;
+}
+
+.vue-flow__edge.selected .vue-flow__edge-path {
+  stroke: var(--primary-light);
+}
+
+.vue-flow__edge-text {
+  fill: var(--text);
+  font-size: 12px;
+}
+
+/* Connection line */
+.vue-flow__connection-path {
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+}
+
+/* Handles */
+.vue-flow__handle {
+  width: 10px;
+  height: 10px;
+  background-color: var(--primary);
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  transition: background-color var(--transition), transform var(--transition);
+}
+
+.vue-flow__handle:hover {
+  background-color: var(--primary-light);
+  transform: scale(1.3);
+}
+
+.vue-flow__handle-connecting {
+  background-color: var(--success);
+}
+
+.vue-flow__handle-valid {
+  background-color: var(--success);
+}
+
+/* ============================================================
+   Network Component Nodes
+   ============================================================ */
+.network-node {
+  background-color: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  min-width: 140px;
+  max-width: 200px;
+  cursor: grab;
+  transition: box-shadow var(--transition), border-color var(--transition);
+  box-shadow: 0 1px 4px var(--shadow);
+}
+
+.network-node:hover {
+  box-shadow: 0 4px 12px var(--shadow-md);
+}
+
+.network-node.selected {
+  box-shadow: 0 0 0 2px var(--primary), 0 4px 12px var(--shadow-md);
+}
+
+.network-node .node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.network-node .node-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.network-node .node-title {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.network-node .node-type-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* VNet node — container style */
+.network-node.node-vnet {
+  background-color: rgba(0, 120, 212, 0.06);
+  border-color: #0078d4;
+  min-width: 320px;
+  min-height: 220px;
+  padding: 16px;
+}
+
+/* Subnet node — container style */
+.network-node.node-subnet {
+  background-color: rgba(80, 167, 240, 0.06);
+  border-color: #50a7f0;
+  border-style: dashed;
+  min-width: 240px;
+  min-height: 140px;
+  padding: 12px;
+}
+
+/* Type-specific border colors */
+.network-node.node-nsg { border-color: #d13438; }
+.network-node.node-asg { border-color: #b4009e; }
+.network-node.node-ip-address { border-color: #0099bc; }
+.network-node.node-dns-zone { border-color: #038387; }
+.network-node.node-vnet-peering { border-color: #0078d4; }
+.network-node.node-udr { border-color: #8764b8; }
+.network-node.node-vpn-gateway { border-color: #004578; }
+.network-node.node-app-gateway { border-color: #0063b1; }
+.network-node.node-nva { border-color: #6b4226; }
+.network-node.node-load-balancer { border-color: #0078d4; }
+.network-node.node-vm { border-color: #107c10; }
+.network-node.node-vmss { border-color: #107c10; }
+.network-node.node-aks { border-color: #326ce5; }
+.network-node.node-app-service { border-color: #0062ad; }
+.network-node.node-functions { border-color: #7b2fb5; }
+.network-node.node-storage-account { border-color: #0078d4; }
+.network-node.node-blob-storage { border-color: #0063b1; }
+.network-node.node-managed-disk { border-color: #6b4226; }
+.network-node.node-key-vault { border-color: #c7b130; }
+.network-node.node-managed-identity { border-color: #b4009e; }
+.network-node.node-service-endpoint { border-color: #038387; }
+.network-node.node-private-endpoint { border-color: #005a9e; }
+.network-node.node-firewall { border-color: #d13438; }
+.network-node.node-bastion { border-color: #004578; }
+.network-node.node-network-ic { border-color: #005a9e; }
+
+/* ============================================================
+   Component Palette Items (in left panel)
+   ============================================================ */
+.palette-group {
+  margin-bottom: 8px;
+}
+
+.palette-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  padding: 6px 8px 4px;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  cursor: grab;
+  transition: background-color var(--transition);
+  user-select: none;
+}
+
+.palette-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.palette-item:active {
+  cursor: grabbing;
+  background-color: var(--surface-hover);
+}
+
+.palette-item .item-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.palette-item .item-label {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================
+   Scrollbar Styling
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-alt);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+/* ============================================================
+   Utility Classes
+   ============================================================ */
+.text-primary { color: var(--primary); }
+.text-muted { color: var(--text-muted); }
+.text-success { color: var(--success); }
+.text-warning { color: var(--warning); }
+.text-danger { color: var(--danger); }
+
+.bg-surface { background-color: var(--surface); }
+.bg-surface-alt { background-color: var(--surface-alt); }
+
+.border-primary { border-color: var(--primary); }
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: 4px; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.transition-all {
+  transition: all var(--transition);
+}
+
+/* ============================================================
+   PrimeVue Theme Overrides
+   ============================================================ */
+.p-button-primary {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+.p-button-primary:hover {
+  background-color: var(--primary-dark) !important;
+  border-color: var(--primary-dark) !important;
+}
+
+.p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+.p-inputtext:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2) !important;
+}
+
+.p-dropdown:not(.p-disabled).p-focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2) !important;
+}
+
+.p-checkbox .p-checkbox-box.p-highlight {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+.p-radiobutton .p-radiobutton-box.p-highlight {
+  border-color: var(--primary) !important;
+}
+
+.p-radiobutton .p-radiobutton-box.p-highlight .p-radiobutton-icon {
+  background-color: var(--primary) !important;
+}
+
+/* Dark mode PrimeVue adjustments */
+.dark-mode .p-component {
+  color: var(--text);
+}
+
+.dark-mode .p-inputtext,
+.dark-mode .p-dropdown,
+.dark-mode .p-multiselect,
+.dark-mode .p-textarea {
+  background-color: var(--surface-alt);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.dark-mode .p-dropdown-panel,
+.dark-mode .p-multiselect-panel {
+  background-color: var(--surface);
+  border-color: var(--border);
+}
+
+.dark-mode .p-dropdown-item:hover,
+.dark-mode .p-multiselect-item:hover {
+  background-color: var(--surface-hover);
+}
+
+/* ============================================================
+   Modal / Dialog
+   ============================================================ */
+.p-dialog {
+  border-radius: var(--radius-lg) !important;
+}
+
+.p-dialog .p-dialog-header {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  border-bottom: 1px solid var(--border);
+}
+
+.p-dialog .p-dialog-content {
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+}
+
+.p-dialog .p-dialog-footer {
+  background-color: var(--surface-alt) !important;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg) !important;
+}
+
+/* ============================================================
+   Animations
+   ============================================================ */
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-fade-in { animation: fadeIn 200ms ease; }
+.animate-slide-in-left { animation: slideInLeft 200ms ease; }
+.animate-slide-in-right { animation: slideInRight 200ms ease; }
+.animate-pulse { animation: pulse 1.5s ease infinite; }
