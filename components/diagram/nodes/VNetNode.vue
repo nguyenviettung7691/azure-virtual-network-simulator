@@ -102,7 +102,7 @@ function onDblClick() {
 
 .node-label {
   font-size: 10px;
-  color: #605e5c;
+  color: var(--text-muted, #605e5c);
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -118,8 +118,8 @@ function onDblClick() {
 
 .node-region {
   font-size: 10px;
-  color: #605e5c;
-  background-color: rgba(0, 120, 212, 0.1);
+  color: var(--text, #323130);
+  background-color: rgba(0, 120, 212, 0.18);
   padding: 2px 6px;
   border-radius: 10px;
   white-space: nowrap;
@@ -138,12 +138,12 @@ function onDblClick() {
 }
 
 .prop-label {
-  color: #605e5c;
+  color: var(--text-muted, #605e5c);
   flex-shrink: 0;
 }
 
 .prop-value {
-  color: #323130;
+  color: var(--text, #323130);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;

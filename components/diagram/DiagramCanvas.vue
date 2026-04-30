@@ -166,12 +166,13 @@ onMounted(() => {
         nextTick(() => setViewport({ x: 0, y: 0, zoom: 1 }))
       })
     }
-    if (name === 'autoLayout') {
-      after(() => nextTick(() => {
-        setNodes([...diagramStore.nodes] as any)
-        nextTick(() => fitView())
-      }))
-    }
+     if (name === 'autoLayout') {
+       after(() => nextTick(() => {
+         setNodes([...diagramStore.nodes] as any)
+         setEdges([...diagramStore.edges] as any)
+         nextTick(() => fitView())
+       }))
+     }
     if (name === 'loadDiagram') {
       after(() => nextTick(() => {
         setNodes([...diagramStore.nodes] as any)
@@ -479,7 +480,7 @@ function loadSampleDiagram() {
     createdAt: now,
   } as any, { x: 880, y: 810 })
 
-  // Edges (containment edges Subnet→VNet are omitted — expressed via parentNode after auto-layout)
+  // Edges (containment is expressed by parentNode after auto-layout; only attachment edges are drawn)
   const makeEdge = (source: string, target: string): DiagramEdge => ({
     id: `edge-${source}-${target}`,
     source,
@@ -500,12 +501,6 @@ function loadSampleDiagram() {
   diagramStore.addEdge(makeEdge(nic1Id, vm1Id))
   diagramStore.addEdge(makeEdge(nic2Id, vm2Id))
   diagramStore.addEdge(makeEdge(nic3Id, vm3Id))
-  // VMs → Subnets
-  diagramStore.addEdge(makeEdge(vm1Id, subnet1Id))
-  diagramStore.addEdge(makeEdge(vm2Id, subnet1Id))
-  diagramStore.addEdge(makeEdge(vm3Id, subnet3Id))
-  diagramStore.addEdge(makeEdge(vm4Id, subnet2Id))
-
   // Pre-built connection tests: Public Internet → each VM on port 80
   // Replace any existing tests so the sample always starts fresh.
   testsStore.clearAllTests()
