@@ -17,7 +17,8 @@ export const useTests = () => {
     async () => {
       if (debounceTimer) clearTimeout(debounceTimer)
       debounceTimer = setTimeout(async () => {
-        if (testsStore.autoRunEnabled && testsStore.tests.length > 0) {
+        debounceTimer = null
+        if (testsStore.autoRunEnabled && testsStore.tests.length > 0 && !testsStore.isRunning) {
           await runAllTests()
         }
         const challengesStore = useChallengesStore()
@@ -27,6 +28,13 @@ export const useTests = () => {
       }, 500)
     }
   )
+
+  onUnmounted(() => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
+  })
 
   return {
     tests: computed(() => testsStore.tests),

@@ -2,7 +2,7 @@
   <header class="app-header">
     <div class="header-left">
       <div class="app-logo">
-        <Icon icon="mdi:network" class="logo-icon" />
+        <img src="/virtual-networks.svg" class="logo-img" alt="" />
         <span class="logo-text">Azure VNet Simulator</span>
       </div>
     </div>
@@ -146,7 +146,8 @@ function openSetups() {
   align-items: center;
   gap: 0.5rem;
   padding: 0 0.75rem;
-  height: var(--header-height, 52px);
+  height: var(--header-height, 84px);
+  min-height: var(--header-height, 84px);
   background: var(--surface-card);
   border-bottom: 1px solid var(--surface-border);
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
@@ -157,7 +158,7 @@ function openSetups() {
 .header-left {
   display: flex;
   align-items: center;
-  min-width: 200px;
+  min-width: 180px;
 }
 
 .app-logo {
@@ -166,14 +167,15 @@ function openSetups() {
   gap: 0.5rem;
 }
 
-.logo-icon {
-  font-size: 1.5rem;
-  color: var(--primary-color);
+.logo-img {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
 }
 
 .logo-text {
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 1.1rem;
   color: var(--primary-color);
   white-space: nowrap;
 }
@@ -182,46 +184,49 @@ function openSetups() {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: 0.35rem;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
 .header-center::-webkit-scrollbar { display: none; }
 
+/* Each category group is a labelled card: label on top, icon row below */
 .component-group {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.1rem;
-  padding: 0 0.4rem;
-  border-right: 1px solid var(--surface-border);
+  gap: 3px;
+  padding: 0;
+  border-radius: 7px;
+  background: var(--group-card-bg, rgba(0, 0, 0, 0.07));
+  border: 1.5px solid var(--group-card-border, rgba(0, 0, 0, 0.2));
+  box-shadow: var(--group-card-shadow, 0 1px 4px rgba(0, 0, 0, 0.12));
 }
-
-.component-group:last-child { border-right: none; }
 
 .group-label {
   font-size: 0.65rem;
   color: var(--text-color-secondary);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   white-space: nowrap;
-  margin-right: 0.2rem;
 }
 
 .group-items {
   display: flex;
-  gap: 0;
+  gap: 2px;
 }
 
 .component-btn {
-  width: 28px !important;
-  height: 28px !important;
+  width: 38px !important;
+  height: 38px !important;
   padding: 0 !important;
 }
 
 .btn-icon {
-  font-size: 1.1rem;
+  font-size: 1.5rem;
 }
 
 .header-right {

@@ -465,7 +465,7 @@ export const COMPONENT_ICONS: Record<NetworkComponentType, string> = {
   [NetworkComponentType.KEY_VAULT]: 'mdi:key',
   [NetworkComponentType.MANAGED_IDENTITY]: 'mdi:badge-account',
   [NetworkComponentType.SERVICE_ENDPOINT]: 'mdi:connection',
-  [NetworkComponentType.PRIVATE_ENDPOINT]: 'mdi:lock-network',
+  [NetworkComponentType.PRIVATE_ENDPOINT]: 'mdi:shield-lock-outline',
   [NetworkComponentType.FIREWALL]: 'mdi:wall-fire',
   [NetworkComponentType.BASTION]: 'mdi:castle',
 }

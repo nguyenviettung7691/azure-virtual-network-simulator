@@ -19,7 +19,9 @@ interface DiagramStoreState {
   addingComponentType: NetworkComponentType | null
   showConfirmDialog: boolean
   confirmDialogMessage: string
-  confirmDialogAction: (() => void) | null
+  confirmDialogAction: ((checkboxChecked?: boolean) => void) | null
+  confirmDialogCheckboxLabel: string | null
+  confirmDialogCheckboxChecked: boolean
 }
 
 export const useDiagramStore = defineStore('diagram', {
@@ -35,6 +37,8 @@ export const useDiagramStore = defineStore('diagram', {
     showConfirmDialog: false,
     confirmDialogMessage: '',
     confirmDialogAction: null,
+    confirmDialogCheckboxLabel: null,
+    confirmDialogCheckboxChecked: false,
   }),
 
   getters: {
@@ -67,7 +71,6 @@ export const useDiagramStore = defineStore('diagram', {
       // @ts-ignore – DiagramNode extends a deeply generic vue-flow type; TS depth limit hit
       this.nodes = [...this.nodes, node]
       this.isDirty = true
-      this.autoLayout()
     },
 
     updateNode(id: string, updates: Partial<AnyNetworkComponent>) {
@@ -134,7 +137,24 @@ export const useDiagramStore = defineStore('diagram', {
 
     autoLayout() {
       if (this.nodes.length === 0) return
-      this.nodes = applyDagreLayout([...this.nodes], [...this.edges])
+      try {
+        const newNodes = applyDagreLayout([...this.nodes], [...this.edges])
+        // Build a parent map from the newly laid-out nodes
+        const parentMap = new Map<string, string>()
+        newNodes.forEach(n => {
+          const p = (n as any).parentNode
+          if (p) parentMap.set(n.id, p)
+        })
+        // Remove edges that only express containment (child → parent or parent → child)
+        const currentEdges = this.edges as unknown as EdgeBase[]
+        const filteredEdges = currentEdges.filter(e => {
+          return parentMap.get(e.source) !== e.target && parentMap.get(e.target) !== e.source
+        })
+        this.nodes = newNodes
+        this.edges = filteredEdges as unknown as DiagramEdge[]
+      } catch (err) {
+        console.error('[autoLayout] dagre layout failed:', err)
+      }
     },
 
     openAddComponentModal(type: NetworkComponentType) {
@@ -155,21 +175,27 @@ export const useDiagramStore = defineStore('diagram', {
       this.addingComponentType = null
     },
 
-    confirmAction(message: string, action: () => void) {
+    confirmAction(message: string, action: ((checkboxChecked?: boolean) => void), checkboxLabel?: string) {
       this.confirmDialogMessage = message
       this.confirmDialogAction = action
+      this.confirmDialogCheckboxLabel = checkboxLabel ?? null
+      this.confirmDialogCheckboxChecked = false
       this.showConfirmDialog = true
     },
 
     executeConfirmedAction() {
-      if (this.confirmDialogAction) this.confirmDialogAction()
+      if (this.confirmDialogAction) this.confirmDialogAction(this.confirmDialogCheckboxChecked)
       this.showConfirmDialog = false
       this.confirmDialogAction = null
+      this.confirmDialogCheckboxLabel = null
+      this.confirmDialogCheckboxChecked = false
     },
 
     cancelConfirmDialog() {
       this.showConfirmDialog = false
       this.confirmDialogAction = null
+      this.confirmDialogCheckboxLabel = null
+      this.confirmDialogCheckboxChecked = false
     },
 
     setViewport(viewport: { x: number; y: number; zoom: number }) {

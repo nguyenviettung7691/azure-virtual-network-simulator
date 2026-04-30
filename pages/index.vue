@@ -16,7 +16,7 @@
     <AccountSettingsModal />
     <SavedSetupsModal />
     <ComponentFormModal />
-    <ConfirmDialog />
+    <ConfirmActionDialog />
     <ChallengeSetupModal />
     <CongratulationsModal />
     <TestFormModal />

@@ -47,14 +47,20 @@ export const useExport = () => {
     try {
       const dataUrl = await toPng(el, { backgroundColor: '#ffffff', quality: 1, pixelRatio: 2 })
       const img = new Image()
-      img.src = dataUrl
-      await new Promise<void>(resolve => { img.onload = () => resolve() })
-      const pdf = new jsPDF({
-        orientation: img.width > img.height ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [img.width, img.height],
+      await new Promise<void>(resolve => {
+        img.onload = () => resolve()
+        img.src = dataUrl
       })
-      pdf.addImage(dataUrl, 'PNG', 0, 0, img.width, img.height)
+      const imgWidth = img.width
+      const imgHeight = img.height
+      img.onload = null
+      img.src = ''
+      const pdf = new jsPDF({
+        orientation: imgWidth > imgHeight ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [imgWidth, imgHeight],
+      })
+      pdf.addImage(dataUrl, 'PNG', 0, 0, imgWidth, imgHeight)
       pdf.save(`${filename}.pdf`)
     } catch (err) {
       console.error('PDF export failed:', err)

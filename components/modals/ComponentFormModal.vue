@@ -51,33 +51,33 @@ watch(() => diagramStore.showComponentModal, (visible) => {
 })
 
 const formMap: Record<NetworkComponentType, any> = {
-  [NetworkComponentType.VNET]: resolveComponent('FormsVNetForm'),
-  [NetworkComponentType.SUBNET]: resolveComponent('FormsSubnetForm'),
-  [NetworkComponentType.NSG]: resolveComponent('FormsNsgForm'),
-  [NetworkComponentType.ASG]: resolveComponent('FormsAsgForm'),
-  [NetworkComponentType.IP_ADDRESS]: resolveComponent('FormsIpAddressForm'),
-  [NetworkComponentType.DNS_ZONE]: resolveComponent('FormsDnsZoneForm'),
-  [NetworkComponentType.VPN_GATEWAY]: resolveComponent('FormsVpnGatewayForm'),
-  [NetworkComponentType.APP_GATEWAY]: resolveComponent('FormsAppGatewayForm'),
-  [NetworkComponentType.NVA]: resolveComponent('FormsNvaForm'),
-  [NetworkComponentType.LOAD_BALANCER]: resolveComponent('FormsLoadBalancerForm'),
-  [NetworkComponentType.UDR]: resolveComponent('FormsUdrForm'),
-  [NetworkComponentType.VNET_PEERING]: resolveComponent('FormsVnetPeeringForm'),
-  [NetworkComponentType.NETWORK_IC]: resolveComponent('FormsNetworkICForm'),
-  [NetworkComponentType.VM]: resolveComponent('FormsComputeForm'),
-  [NetworkComponentType.VMSS]: resolveComponent('FormsComputeForm'),
-  [NetworkComponentType.AKS]: resolveComponent('FormsComputeForm'),
-  [NetworkComponentType.APP_SERVICE]: resolveComponent('FormsComputeForm'),
-  [NetworkComponentType.FUNCTIONS]: resolveComponent('FormsComputeForm'),
-  [NetworkComponentType.STORAGE_ACCOUNT]: resolveComponent('FormsStorageForm'),
-  [NetworkComponentType.BLOB_STORAGE]: resolveComponent('FormsStorageForm'),
-  [NetworkComponentType.MANAGED_DISK]: resolveComponent('FormsStorageForm'),
-  [NetworkComponentType.KEY_VAULT]: resolveComponent('FormsIdentityForm'),
-  [NetworkComponentType.MANAGED_IDENTITY]: resolveComponent('FormsIdentityForm'),
-  [NetworkComponentType.SERVICE_ENDPOINT]: resolveComponent('FormsNetworkICForm'),
-  [NetworkComponentType.PRIVATE_ENDPOINT]: resolveComponent('FormsNetworkICForm'),
-  [NetworkComponentType.FIREWALL]: resolveComponent('FormsNsgForm'),
-  [NetworkComponentType.BASTION]: resolveComponent('FormsVpnGatewayForm'),
+  [NetworkComponentType.VNET]: resolveComponent('VNetForm'),
+  [NetworkComponentType.SUBNET]: resolveComponent('SubnetForm'),
+  [NetworkComponentType.NSG]: resolveComponent('NsgForm'),
+  [NetworkComponentType.ASG]: resolveComponent('AsgForm'),
+  [NetworkComponentType.IP_ADDRESS]: resolveComponent('IpAddressForm'),
+  [NetworkComponentType.DNS_ZONE]: resolveComponent('DnsZoneForm'),
+  [NetworkComponentType.VPN_GATEWAY]: resolveComponent('VpnGatewayForm'),
+  [NetworkComponentType.APP_GATEWAY]: resolveComponent('AppGatewayForm'),
+  [NetworkComponentType.NVA]: resolveComponent('NvaForm'),
+  [NetworkComponentType.LOAD_BALANCER]: resolveComponent('LoadBalancerForm'),
+  [NetworkComponentType.UDR]: resolveComponent('UdrForm'),
+  [NetworkComponentType.VNET_PEERING]: resolveComponent('VnetPeeringForm'),
+  [NetworkComponentType.NETWORK_IC]: resolveComponent('NetworkICForm'),
+  [NetworkComponentType.VM]: resolveComponent('ComputeForm'),
+  [NetworkComponentType.VMSS]: resolveComponent('ComputeForm'),
+  [NetworkComponentType.AKS]: resolveComponent('ComputeForm'),
+  [NetworkComponentType.APP_SERVICE]: resolveComponent('ComputeForm'),
+  [NetworkComponentType.FUNCTIONS]: resolveComponent('ComputeForm'),
+  [NetworkComponentType.STORAGE_ACCOUNT]: resolveComponent('StorageForm'),
+  [NetworkComponentType.BLOB_STORAGE]: resolveComponent('StorageForm'),
+  [NetworkComponentType.MANAGED_DISK]: resolveComponent('StorageForm'),
+  [NetworkComponentType.KEY_VAULT]: resolveComponent('IdentityForm'),
+  [NetworkComponentType.MANAGED_IDENTITY]: resolveComponent('IdentityForm'),
+  [NetworkComponentType.SERVICE_ENDPOINT]: resolveComponent('NetworkICForm'),
+  [NetworkComponentType.PRIVATE_ENDPOINT]: resolveComponent('NetworkICForm'),
+  [NetworkComponentType.FIREWALL]: resolveComponent('NsgForm'),
+  [NetworkComponentType.BASTION]: resolveComponent('VpnGatewayForm'),
 }
 
 const activeForm = computed(() => currentType.value ? formMap[currentType.value] : null)
@@ -106,6 +106,17 @@ function onDelete() {
 </script>
 
 <style scoped>
-.form-wrapper { padding: 0.25rem 0; }
-.no-form { padding: 1rem; color: var(--text-color-secondary); }
+.form-wrapper {
+  padding: 1rem 1.5rem 1.25rem;
+}
+.form-wrapper :deep(.component-form) {
+  gap: 1.1rem;
+}
+.form-wrapper :deep(.field) {
+  gap: 0.45rem;
+}
+.form-wrapper :deep(.field label) {
+  font-size: 0.92rem;
+}
+.no-form { padding: 1.25rem 1.5rem; color: var(--text-color-secondary); }
 </style>

@@ -2,7 +2,7 @@
   <div
     class="subnet-node diagram-node"
     :class="{ selected }"
-    :style="{ width: `${width || 300}px`, minHeight: `${height || 200}px` }"
+    :style="{ width: `${width || 300}px`, height: `${height || 200}px` }"
     @dblclick="onDblClick"
   >
     <Handle type="source" :position="Position.Right" />

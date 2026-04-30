@@ -36,18 +36,18 @@
 }
 
 .canvas-empty-state .empty-icon {
-  font-size: 56px;
+  font-size: 76px;
   color: var(--border);
 }
 
 .canvas-empty-state .empty-title {
-  font-size: 18px;
+  font-size: 23px;
   font-weight: 600;
   color: var(--text-muted);
 }
 
 .canvas-empty-state .empty-subtitle {
-  font-size: 13px;
+  font-size: 16px;
   color: var(--text-muted);
 }
 
@@ -56,6 +56,11 @@
   gap: 8px;
   pointer-events: all;
   margin-top: 8px;
+  cursor: default;
+}
+
+.canvas-empty-state .empty-quick-start button {
+  cursor: pointer !important;
 }
 
 /* ============================================================
@@ -100,8 +105,8 @@
 }
 
 .generic-node-icon-wrap {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -110,8 +115,8 @@
 }
 
 .generic-icon {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 
 .generic-node-info {
@@ -122,7 +127,7 @@
 }
 
 .generic-node-type {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted, #605e5c);
   text-transform: uppercase;
   letter-spacing: 0.4px;
@@ -132,7 +137,7 @@
 }
 
 .generic-node-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text, #323130);
   white-space: nowrap;
@@ -142,10 +147,34 @@
 }
 
 .generic-node-detail {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted, #605e5c);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 1px;
+}
+
+/* ============================================================
+   Lock / Interaction State
+   ============================================================ */
+
+/* Highlight the lock control button when the diagram is in locked (view-only) state */
+.vue-flow__controls-button.control-locked {
+  background-color: var(--p-primary-color, #0078d4);
+  color: #ffffff;
+  border-color: var(--p-primary-color, #0078d4);
+}
+
+.vue-flow__controls-button.control-locked:hover {
+  background-color: var(--p-primary-hover-color, #106ebe);
+  border-color: var(--p-primary-hover-color, #106ebe);
+}
+
+/* Show pointer cursor on node name labels when the canvas is in interactive (unlocked) state.
+   generic-node-name: used by all compact-card nodes (ComputeNode, NsgNode, etc.)
+   node-name: used by container nodes VNetNode and SubnetNode */
+.diagram-canvas-wrapper.is-interactive .generic-node-name,
+.diagram-canvas-wrapper.is-interactive .node-name {
+  cursor: pointer;
 }

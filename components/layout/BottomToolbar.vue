@@ -91,6 +91,7 @@ const diagramStore = useDiagramStore()
 const authStore = useAuthStore()
 const challengesStore = useChallengesStore()
 const savedSetupsStore = useSavedSetupsStore()
+const testsStore = useTestsStore()
 
 const { exportToPng, exportToSvgFile, exportToPdf, exportToDrawioFile, exportToVsdxFile } = useExport()
 const { importFromFile } = useImport()
@@ -173,7 +174,11 @@ function onReset() {
   if (diagramStore.nodeCount === 0) return
   diagramStore.confirmAction(
     'This will remove all components from the diagram. Are you sure?',
-    () => diagramStore.resetDiagram()
+    (resetTests?: boolean) => {
+      diagramStore.resetDiagram()
+      if (resetTests) testsStore.clearAllTests()
+    },
+    'Also reset all network tests'
   )
 }
 </script>

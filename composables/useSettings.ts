@@ -18,6 +18,8 @@ export const useSettings = () => {
     showTooltips: computed(() => settingsStore.showTooltips),
     sidebarCollapsed: computed(() => settingsStore.sidebarCollapsed),
     rightPanelCollapsed: computed(() => settingsStore.rightPanelCollapsed),
+    isSyncing: computed(() => settingsStore.isSyncing),
+    syncError: computed(() => settingsStore.syncError),
 
     updateTheme: settingsStore.updateTheme.bind(settingsStore),
     updateDarkMode: settingsStore.updateDarkMode.bind(settingsStore),

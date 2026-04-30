@@ -54,6 +54,9 @@ export const useAuthStore = defineStore('auth', {
           attributes: attributes as Record<string, string>,
         }
         this.isAuthenticated = true
+        const settingsStore = useSettingsStore()
+        settingsStore.setCurrentUser(user.userId)
+        await settingsStore.loadFromMongoDB()
       } catch {
         this.user = null
         this.isAuthenticated = false
@@ -123,6 +126,8 @@ export const useAuthStore = defineStore('auth', {
         await signOut()
         this.user = null
         this.isAuthenticated = false
+        const settingsStore = useSettingsStore()
+        settingsStore.setCurrentUser(null)
       } catch (err: any) {
         console.error('Logout error:', err)
       } finally {

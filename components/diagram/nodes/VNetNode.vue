@@ -2,7 +2,7 @@
   <div
     class="vnet-node diagram-node"
     :class="{ selected }"
-    :style="{ width: `${nodeWidth}px`, minHeight: `${nodeHeight}px` }"
+    :style="{ width: `${nodeWidth}px`, height: `${nodeHeight}px` }"
     @dblclick="onDblClick"
   >
     <Handle type="source" :position="Position.Right" />

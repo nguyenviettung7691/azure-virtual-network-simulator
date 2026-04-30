@@ -1,5 +1,19 @@
 import { defineStore } from 'pinia'
 import type { UserSettings, ThemeType, DarkModeType } from '~/types/settings'
+import { getUserSettings, saveUserSettings } from '~/lib/mongodb'
+
+// Module-level debounce handle — kept outside reactive state intentionally
+let _saveTimer: ReturnType<typeof setTimeout> | null = null
+
+// Clear pending timer on HMR to prevent stale callbacks holding store references
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    if (_saveTimer) {
+      clearTimeout(_saveTimer)
+      _saveTimer = null
+    }
+  })
+}
 
 const DEFAULT_SETTINGS: UserSettings = {
   theme: 'ocean-blue',
@@ -24,6 +38,9 @@ export const useSettingsStore = defineStore('settings', {
   state: () => ({
     ...DEFAULT_SETTINGS,
     showSettingsModal: false,
+    isSyncing: false,
+    syncError: null as string | null,
+    currentUserId: null as string | null,
   }),
 
   getters: {
@@ -62,18 +79,21 @@ export const useSettingsStore = defineStore('settings', {
       this.theme = theme
       this.applyTheme()
       this.saveToLocalStorage()
+      this._scheduleSave()
     },
 
     updateDarkMode(mode: DarkModeType) {
       this.darkMode = mode
       this.applyDarkMode()
       this.saveToLocalStorage()
+      this._scheduleSave()
     },
 
     updateSettings(updates: Partial<UserSettings>) {
       Object.assign(this, updates)
       this.applyAll()
       this.saveToLocalStorage()
+      this._scheduleSave()
     },
 
     applyTheme() {
@@ -138,6 +158,84 @@ export const useSettingsStore = defineStore('settings', {
 
     closeSettingsModal() {
       this.showSettingsModal = false
+    },
+
+    // MongoDB Atlas sync -------------------------------------------------------
+
+    setCurrentUser(userId: string | null) {
+      this.currentUserId = userId
+      if (!userId && _saveTimer !== null) {
+        clearTimeout(_saveTimer)
+        _saveTimer = null
+      }
+    },
+
+    async loadFromMongoDB() {
+      if (!this.currentUserId) return
+      this.isSyncing = true
+      this.syncError = null
+      try {
+        const config = useRuntimeConfig().public
+        const remote = await getUserSettings(this.currentUserId, {
+          mongodbEndpoint: config.mongodbEndpoint,
+          mongodbApiKey: config.mongodbApiKey,
+          mongodbDatabase: config.mongodbDatabase,
+          mongodbCollection: config.mongodbCollection,
+        })
+        if (remote) {
+          // Remote wins — apply then warm the local cache
+          this.theme = remote.theme || DEFAULT_SETTINGS.theme
+          this.darkMode = remote.darkMode || DEFAULT_SETTINGS.darkMode
+          this.language = remote.language || DEFAULT_SETTINGS.language
+          this.autoSave = remote.autoSave ?? DEFAULT_SETTINGS.autoSave
+          this.autoSaveInterval = remote.autoSaveInterval || DEFAULT_SETTINGS.autoSaveInterval
+          this.showMinimap = remote.showMinimap ?? DEFAULT_SETTINGS.showMinimap
+          this.showGrid = remote.showGrid ?? DEFAULT_SETTINGS.showGrid
+          this.snapToGrid = remote.snapToGrid ?? DEFAULT_SETTINGS.snapToGrid
+          this.gridSize = remote.gridSize || DEFAULT_SETTINGS.gridSize
+          this.defaultRegion = remote.defaultRegion || DEFAULT_SETTINGS.defaultRegion
+          this.defaultResourceGroup = remote.defaultResourceGroup || DEFAULT_SETTINGS.defaultResourceGroup
+          this.showTooltips = remote.showTooltips ?? DEFAULT_SETTINGS.showTooltips
+          this.animateEdges = remote.animateEdges ?? DEFAULT_SETTINGS.animateEdges
+          this.compactNodes = remote.compactNodes ?? DEFAULT_SETTINGS.compactNodes
+          this.sidebarCollapsed = remote.sidebarCollapsed ?? DEFAULT_SETTINGS.sidebarCollapsed
+          this.rightPanelCollapsed = remote.rightPanelCollapsed ?? DEFAULT_SETTINGS.rightPanelCollapsed
+          this.applyAll()
+          this.saveToLocalStorage()
+        }
+      } catch (err: any) {
+        this.syncError = err?.message || 'Failed to load settings from MongoDB'
+      } finally {
+        this.isSyncing = false
+      }
+    },
+
+    async saveToMongoDB() {
+      if (!this.currentUserId) return
+      this.isSyncing = true
+      this.syncError = null
+      try {
+        const config = useRuntimeConfig().public
+        await saveUserSettings(this.currentUserId, this.settings, {
+          mongodbEndpoint: config.mongodbEndpoint,
+          mongodbApiKey: config.mongodbApiKey,
+          mongodbDatabase: config.mongodbDatabase,
+          mongodbCollection: config.mongodbCollection,
+        })
+      } catch (err: any) {
+        this.syncError = err?.message || 'Failed to save settings to MongoDB'
+      } finally {
+        this.isSyncing = false
+      }
+    },
+
+    _scheduleSave() {
+      if (!this.currentUserId) return
+      if (_saveTimer !== null) clearTimeout(_saveTimer)
+      _saveTimer = setTimeout(() => {
+        _saveTimer = null
+        this.saveToMongoDB()
+      }, 1500)
     },
   },
 })

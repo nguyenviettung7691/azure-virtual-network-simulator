@@ -19,11 +19,11 @@
       <template v-if="form.type === 'connection' || form.type === 'loadbalance'">
         <div class="field">
           <label>Source Component</label>
-          <Select v-model="form.condition.sourceId" :options="nodeOptions" option-label="label" option-value="value" class="w-full" placeholder="Select source" />
+          <Select v-model="form.condition.sourceId" :options="sourceOptions" option-label="label" option-value="value" class="w-full" placeholder="Select source" />
         </div>
         <div class="field">
           <label>Target Component</label>
-          <Select v-model="form.condition.targetId" :options="nodeOptions" option-label="label" option-value="value" class="w-full" placeholder="Select target" />
+          <Select v-model="form.condition.targetId" :options="targetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select target" />
         </div>
         <div v-if="form.type === 'connection'" class="field">
           <label>Port (optional)</label>
@@ -59,6 +59,7 @@
 
 <script setup lang="ts">
 import { NetworkComponentType } from '~/types/network'
+import { INTERNET_SOURCE_ID } from '~/types/test'
 
 const testsStore = useTestsStore()
 const diagramStore = useDiagramStore()
@@ -90,6 +91,12 @@ watch(() => testsStore.showTestFormModal, (v) => {
   }
 })
 
+// Reset source/target selections when test type changes to avoid stale cross-type values
+watch(() => form.value.type, () => {
+  form.value.condition.sourceId = ''
+  form.value.condition.targetId = ''
+})
+
 const testTypes = [
   { label: 'Connection Test', value: 'connection' },
   { label: 'Load Balance Test', value: 'loadbalance' },
@@ -97,9 +104,60 @@ const testTypes = [
   { label: 'DNS Resolution Test', value: 'dns' },
 ]
 
-const nodeOptions = computed(() =>
+// Allowed source component types per test type.
+// Connection: bidirectional traffic originators (VMs, NICs, compute, network appliances).
+// Load Balance: any component may originate traffic; source selection is optional context.
+const SOURCE_TYPES_BY_TEST: Record<string, NetworkComponentType[]> = {
+  connection: [
+    NetworkComponentType.VM, NetworkComponentType.VMSS, NetworkComponentType.NETWORK_IC,
+    NetworkComponentType.SUBNET, NetworkComponentType.VNET, NetworkComponentType.AKS,
+    NetworkComponentType.APP_SERVICE, NetworkComponentType.FUNCTIONS, NetworkComponentType.NVA,
+    NetworkComponentType.APP_GATEWAY, NetworkComponentType.LOAD_BALANCER,
+  ],
+}
+
+// Allowed target component types per test type.
+// Connection: any addressable endpoint.
+// Load Balance: must target a load-distributing component.
+const TARGET_TYPES_BY_TEST: Record<string, NetworkComponentType[]> = {
+  connection: [
+    NetworkComponentType.VM, NetworkComponentType.VMSS, NetworkComponentType.NETWORK_IC,
+    NetworkComponentType.SUBNET, NetworkComponentType.VNET, NetworkComponentType.AKS,
+    NetworkComponentType.APP_SERVICE, NetworkComponentType.FUNCTIONS, NetworkComponentType.NVA,
+    NetworkComponentType.APP_GATEWAY, NetworkComponentType.STORAGE_ACCOUNT,
+    NetworkComponentType.KEY_VAULT, NetworkComponentType.LOAD_BALANCER,
+    NetworkComponentType.IP_ADDRESS, NetworkComponentType.DNS_ZONE,
+    NetworkComponentType.PRIVATE_ENDPOINT, NetworkComponentType.SERVICE_ENDPOINT,
+  ],
+  loadbalance: [
+    NetworkComponentType.LOAD_BALANCER, NetworkComponentType.APP_GATEWAY,
+  ],
+}
+
+const allNodeOptions = computed(() =>
   diagramStore.nodes.map(n => ({ label: `${n.data.name} (${n.data.type})`, value: n.id }))
 )
+
+const sourceOptions = computed(() => {
+  const allowedTypes = SOURCE_TYPES_BY_TEST[form.value.type]
+  const nodeOpts = allowedTypes
+    ? diagramStore.nodes
+        .filter(n => allowedTypes.includes(n.data.type))
+        .map(n => ({ label: `${n.data.name} (${n.data.type})`, value: n.id }))
+    : allNodeOptions.value
+  if (form.value.type === 'connection' || form.value.type === 'loadbalance') {
+    return [{ label: 'Public Internet', value: INTERNET_SOURCE_ID }, ...nodeOpts]
+  }
+  return nodeOpts
+})
+
+const targetOptions = computed(() => {
+  const allowedTypes = TARGET_TYPES_BY_TEST[form.value.type]
+  if (!allowedTypes) return allNodeOptions.value
+  return diagramStore.nodes
+    .filter(n => allowedTypes.includes(n.data.type))
+    .map(n => ({ label: `${n.data.name} (${n.data.type})`, value: n.id }))
+})
 
 const dnsOptions = computed(() =>
   diagramStore.nodes.filter(n => n.data.type === NetworkComponentType.DNS_ZONE)
@@ -109,6 +167,11 @@ const dnsOptions = computed(() =>
 function submit() {
   formError.value = ''
   if (!form.value.name.trim()) { formError.value = 'Test name is required'; return }
+
+  if (form.value.type === 'connection' || form.value.type === 'loadbalance') {
+    if (!form.value.condition.sourceId) { formError.value = 'Source component is required'; return }
+    if (!form.value.condition.targetId) { formError.value = 'Target component is required'; return }
+  }
 
   if (testsStore.editingTest) {
     testsStore.updateTest(testsStore.editingTest.id, {
@@ -123,7 +186,6 @@ function submit() {
       type: form.value.type as any,
       description: form.value.description,
       condition: form.value.condition as any,
-      autoRun: true,
     })
   }
   testsStore.closeTestFormModal()

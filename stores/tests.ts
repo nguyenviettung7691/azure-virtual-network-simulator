@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { NetworkTest, TestResult, TestType, TestStatus, TestCondition } from '~/types/test'
+import { INTERNET_SOURCE_ID } from '~/types/test'
 import { NetworkComponentType } from '~/types/network'
 
 function generateId(): string {
@@ -111,6 +112,10 @@ export const useTestsStore = defineStore('tests', {
       this.showTestFormModal = false
       this.editingTest = null
     },
+
+    clearAllTests() {
+      this.tests = []
+    },
   },
 })
 
@@ -135,6 +140,20 @@ function simulateTest(test: NetworkTest, nodes: any[], edges: any[]): TestResult
 
 function simulateConnectionTest(test: NetworkTest, nodes: any[], edges: any[], timestamp: string): TestResult {
   const { sourceId, targetId } = test.condition
+
+  // Guard: require both source and target to be set before doing any lookups
+  if (!sourceId) {
+    return { status: 'fail', message: 'Connection test is missing a source component.', timestamp }
+  }
+  if (!targetId) {
+    return { status: 'fail', message: 'Connection test is missing a target component.', timestamp }
+  }
+
+  // Public Internet is a virtual entity — always exists, no diagram node to look up
+  if (sourceId === INTERNET_SOURCE_ID) {
+    return simulateInternetConnectionTest(test, nodes, timestamp)
+  }
+
   const sourceNode = nodes.find(n => n.id === sourceId)
   const targetNode = nodes.find(n => n.id === targetId)
 
@@ -167,6 +186,87 @@ function simulateConnectionTest(test: NetworkTest, nodes: any[], edges: any[], t
     path,
     hopCount: path.length,
     latencyMs: Math.floor(Math.random() * 5) + 1,
+  }
+}
+
+function simulateInternetConnectionTest(test: NetworkTest, nodes: any[], timestamp: string): TestResult {
+  const { targetId, port } = test.condition
+  const targetNode = nodes.find((n: any) => n.id === targetId)
+
+  if (!targetNode) {
+    return { status: 'fail', message: 'Target component not found in diagram', timestamp }
+  }
+
+  const d = targetNode.data as any
+  const portStr = port ? String(port) : undefined
+
+  // Collect NSGs that apply to this target: NIC NSGs and Subnet NSG
+  const applicableNsgs: any[] = []
+
+  if (d.nicIds?.length) {
+    for (const nicId of d.nicIds) {
+      const nicNode = nodes.find((n: any) => n.id === nicId)
+      if (nicNode?.data?.nsgId) {
+        const nsg = nodes.find((n: any) => n.id === nicNode.data.nsgId)
+        if (nsg) applicableNsgs.push(nsg)
+      }
+    }
+  }
+
+  if (d.nsgId) {
+    const nsg = nodes.find((n: any) => n.id === d.nsgId)
+    if (nsg) applicableNsgs.push(nsg)
+  }
+
+  if (d.subnetId) {
+    const subnet = nodes.find((n: any) => n.id === d.subnetId)
+    if (subnet?.data?.nsgId) {
+      const nsg = nodes.find((n: any) => n.id === subnet.data.nsgId)
+      if (nsg) applicableNsgs.push(nsg)
+    }
+  }
+
+  if (applicableNsgs.length === 0) {
+    return {
+      status: 'warning',
+      message: `No NSGs found protecting ${d.name}. Inbound port ${port ?? 'any'} traffic from Internet is unrestricted.`,
+      timestamp,
+    }
+  }
+
+  // Check rules from highest-priority (lowest priority number) first
+  for (const nsg of applicableNsgs) {
+    const rules = (nsg.data?.securityRules || []).slice().sort((a: any, b: any) => a.priority - b.priority)
+    for (const rule of rules) {
+      if (rule.direction !== 'Inbound') continue
+      const portMatches = !portStr || rule.destinationPortRange === '*' || rule.destinationPortRange === portStr
+      if (!portMatches) continue
+      if (rule.access === 'Deny') {
+        return {
+          status: 'fail',
+          message: `Connection from Internet to ${d.name}:${port} blocked by NSG "${nsg.data.name}" rule "${rule.name}"`,
+          path: ['Internet', `NSG: ${nsg.data.name}`, d.name],
+          timestamp,
+        }
+      }
+      if (rule.access === 'Allow') {
+        return {
+          status: 'pass',
+          message: `Connection from Internet to ${d.name}:${port} is allowed by NSG "${nsg.data.name}" rule "${rule.name}"`,
+          path: ['Internet', d.name],
+          hopCount: 3,
+          latencyMs: Math.floor(Math.random() * 20) + 5,
+          timestamp,
+        }
+      }
+    }
+  }
+
+  // No matching rule found — default Azure deny
+  return {
+    status: 'fail',
+    message: `No matching Allow rule found on NSGs for ${d.name}:${port}. Traffic blocked by default deny.`,
+    timestamp,
   }
 }
 

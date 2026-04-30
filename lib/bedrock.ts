@@ -5,6 +5,13 @@ import { NetworkComponentType } from '~/types/network'
 
 let bedrockClient: BedrockRuntimeClient | null = null
 
+// Release the AWS SDK client on HMR to avoid leaked HTTP connection pools
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    bedrockClient = null
+  })
+}
+
 function getBedrockClient(): BedrockRuntimeClient {
   if (!bedrockClient) {
     const config = useRuntimeConfig()

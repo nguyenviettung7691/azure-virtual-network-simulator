@@ -19,14 +19,18 @@
           </AccordionHeader>
           <AccordionContent>
             <div v-if="diagramStore.nodes.length === 0" class="empty-section">No components added yet</div>
-            <div v-else class="component-list">
-              <div v-for="node in diagramStore.nodes" :key="node.id" class="component-row">
-                <Icon :icon="getIcon(node.data.type)" :style="{ color: getColor(node.data.type) }" class="comp-icon" />
-                <div class="comp-details">
-                  <span class="comp-name">{{ node.data.name }}</span>
-                  <span class="comp-type">{{ getLabel(node.data.type) }}</span>
+            <div v-else class="component-groups">
+              <div v-for="group in groupedComponents" :key="group.type" class="component-group">
+                <div class="group-header">
+                  <Icon :icon="getIcon(group.type)" :style="{ color: getColor(group.type) }" class="group-type-icon" />
+                  <span class="group-label">{{ getLabel(group.type) }}</span>
+                  <span class="group-count">{{ group.nodes.length }}</span>
                 </div>
-                <Tag :value="getRegion(node.data)" size="small" class="comp-tag" />
+                <div class="component-list">
+                  <div v-for="node in group.nodes" :key="node.id" class="component-row">
+                    <span class="comp-name">{{ node.data.name }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </AccordionContent>
@@ -41,11 +45,23 @@
           </AccordionHeader>
           <AccordionContent>
             <div v-if="diagramStore.edges.length === 0" class="empty-section">No connections defined</div>
-            <div v-else class="edge-list">
-              <div v-for="edge in diagramStore.edges" :key="(edge as any).id" class="edge-row">
-                <Icon icon="mdi:arrow-right-thin" class="edge-arrow" />
-                <span class="edge-label">{{ getNodeName((edge as any).source) }} → {{ getNodeName((edge as any).target) }}</span>
-              </div>
+            <div v-else class="conn-table-wrap">
+              <table class="conn-table">
+                <thead>
+                  <tr>
+                    <th>Source</th>
+                    <th>Target</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="group in groupedConnections" :key="group.targetId">
+                    <tr v-for="(edge, i) in group.edges" :key="edge.id">
+                      <td class="conn-source-cell">{{ getNodeName(edge.source) }}</td>
+                      <td :rowspan="i === 0 ? group.edges.length : undefined" v-if="i === 0" class="conn-target-cell">{{ group.targetName }}</td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
             </div>
           </AccordionContent>
         </AccordionPanel>
@@ -60,24 +76,24 @@
           <AccordionContent>
             <div class="security-summary">
               <div class="security-row">
-                <Icon icon="mdi:shield-lock" class="sec-icon" />
-                <span>NSGs: {{ nsgCount }}</span>
+                <span class="sec-label">NSGs</span>
+                <Tag :value="String(nsgCount)" severity="info" />
               </div>
               <div class="security-row">
-                <Icon icon="mdi:wall-fire" class="sec-icon" />
-                <span>Firewalls: {{ firewallCount }}</span>
+                <span class="sec-label">Firewalls</span>
+                <Tag :value="String(firewallCount)" severity="info" />
               </div>
               <div class="security-row">
-                <Icon icon="mdi:account-group" class="sec-icon" />
-                <span>ASGs: {{ asgCount }}</span>
+                <span class="sec-label">ASGs</span>
+                <Tag :value="String(asgCount)" severity="info" />
               </div>
               <div class="security-row" v-if="unsecuredSubnets.length > 0">
                 <Icon icon="mdi:alert" class="sec-icon warn" />
-                <span class="warn-text">{{ unsecuredSubnets.length }} subnet(s) without NSG</span>
+                <span class="sec-label warn-text">{{ unsecuredSubnets.length }} subnet(s) without NSG</span>
               </div>
               <div class="security-row" v-else-if="diagramStore.nodes.length > 0">
                 <Icon icon="mdi:check-circle" class="sec-icon ok" />
-                <span class="ok-text">All subnets protected</span>
+                <span class="sec-label ok-text">All subnets protected</span>
               </div>
             </div>
           </AccordionContent>
@@ -135,12 +151,35 @@ function toggle() { isCollapsed.value = !isCollapsed.value }
 function getIcon(type: NetworkComponentType) { return getComponentIcon(type) }
 function getLabel(type: NetworkComponentType) { return getComponentLabel(type) }
 function getColor(type: NetworkComponentType) { return getComponentColor(type) }
-function getRegion(data: any) { return data.region || data.defaultRegion || '' }
 
 function getNodeName(id: string) {
   const node = diagramStore.nodes.find(n => n.id === id)
   return node?.data?.name || id.substring(0, 8)
 }
+
+const groupedComponents = computed(() => {
+  const map = new Map<string, typeof diagramStore.nodes>()
+  for (const node of diagramStore.nodes) {
+    const type = node.data.type as string
+    if (!map.has(type)) map.set(type, [])
+    map.get(type)!.push(node)
+  }
+  return [...map.entries()].map(([type, nodes]) => ({ type: type as NetworkComponentType, nodes }))
+})
+
+const groupedConnections = computed(() => {
+  const map = new Map<string, any[]>()
+  for (const edge of diagramStore.edges as any[]) {
+    const target = edge.target as string
+    if (!map.has(target)) map.set(target, [])
+    map.get(target)!.push(edge)
+  }
+  return [...map.entries()].map(([targetId, edges]) => ({
+    targetId,
+    targetName: getNodeName(targetId),
+    edges,
+  }))
+})
 
 const nsgCount = computed(() => diagramStore.nodes.filter(n => n.data?.type === NetworkComponentType.NSG).length)
 const firewallCount = computed(() => diagramStore.nodes.filter(n => n.data?.type === NetworkComponentType.FIREWALL).length)
@@ -200,14 +239,14 @@ const unsecuredSubnets = computed(() => {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-color-secondary);
 }
 
-.panel-icon { font-size: 1rem; color: var(--primary-color); }
+.panel-icon { font-size: 1.1rem; color: var(--primary-color); }
 
 .panel-body {
   flex: 1;
@@ -218,84 +257,187 @@ const unsecuredSubnets = computed(() => {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
 .empty-section {
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   color: var(--text-color-secondary);
   padding: 0.5rem 0;
   font-style: italic;
 }
 
-.component-list, .edge-list {
+.edge-list {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
 }
 
-.component-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0;
-  border-bottom: 1px solid var(--surface-border);
-}
-
-.comp-icon { font-size: 1rem; flex-shrink: 0; }
-
-.comp-details {
-  flex: 1;
+.component-groups {
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
+}
+
+.component-group {
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
   overflow: hidden;
 }
 
-.comp-name {
-  font-size: 0.78rem;
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--surface-section);
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.group-type-icon { font-size: 1rem; flex-shrink: 0; }
+
+.conn-role-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 3px;
+  padding: 0.1rem 0.35rem;
+  flex-shrink: 0;
+}
+
+.target-badge {
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.source-badge {
+  background: var(--surface-border);
+  color: var(--text-color-secondary);
+}
+
+.conn-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.conn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.conn-table thead tr {
+  background: var(--surface-section);
+}
+
+.conn-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-color-secondary);
+  padding: 0.35rem 0.5rem;
+  border-bottom: 2px solid var(--surface-border);
+}
+
+.conn-table td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--surface-border);
+  vertical-align: top;
+  color: var(--text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+  white-space: nowrap;
+}
+
+.conn-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.conn-table tbody tr:nth-child(even) .conn-source-cell {
+  background: var(--surface-hover);
+}
+
+.conn-target-cell {
   font-weight: 600;
+  color: var(--text-color) !important;
+  border-left: 2px solid var(--primary-color);
+  background: var(--surface-ground);
+  vertical-align: top;
+}
+
+.conn-source-cell {
+  color: var(--text-color-secondary);
+}
+
+.group-label {
+  flex: 1;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.comp-type {
-  font-size: 0.68rem;
+.group-count {
+  font-size: 0.72rem;
+  font-weight: 600;
   color: var(--text-color-secondary);
+  background: var(--surface-border);
+  border-radius: 10px;
+  padding: 0.05rem 0.4rem;
+  flex-shrink: 0;
 }
 
-.comp-tag { font-size: 0.6rem; }
-
-.edge-row {
+.component-row {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  font-size: 0.75rem;
-  padding: 0.2rem 0;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--surface-border);
 }
 
-.edge-arrow { color: var(--primary-color); }
+.component-row:last-child {
+  border-bottom: none;
+}
+
+.comp-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-color-secondary);
+}
 
 .security-summary, .perf-summary {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
 .security-row, .perf-row {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   justify-content: space-between;
-  font-size: 0.78rem;
+  font-size: 0.88rem;
 }
 
-.sec-icon { font-size: 0.9rem; color: var(--text-color-secondary); }
+.sec-icon { font-size: 1.1rem; color: var(--text-color-secondary); flex-shrink: 0; }
 .sec-icon.warn { color: var(--yellow-500); }
 .sec-icon.ok { color: var(--green-500); }
+
+.sec-label { flex: 1; color: var(--text-color-secondary); }
 
 .warn-text { color: var(--yellow-600); }
 .ok-text { color: var(--green-600); }
 
-.perf-label { color: var(--text-color-secondary); }
+.perf-label { flex: 1; color: var(--text-color-secondary); }
 </style>

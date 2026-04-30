@@ -10,16 +10,28 @@
 
     <div v-if="!isCollapsed" class="panel-body">
       <div class="panel-actions">
-        <Button icon="pi pi-plus" label="Add Test" size="small" @click="testsStore.openAddTestModal()" />
-        <Button
-          icon="pi pi-play"
-          label="Run All"
-          size="small"
-          severity="secondary"
-          :loading="testsStore.isRunning"
-          :disabled="testsStore.tests.length === 0"
-          @click="runAll"
-        />
+        <Button icon="pi pi-plus" label="Add Test" size="small" class="add-test-btn" @click="testsStore.openAddTestModal()" />
+        <div class="action-row">
+          <Button
+            icon="pi pi-play"
+            label="Run All"
+            size="small"
+            severity="secondary"
+            class="half-btn"
+            :loading="testsStore.isRunning"
+            :disabled="testsStore.tests.length === 0"
+            @click="runAll"
+          />
+          <Button
+            icon="pi pi-trash"
+            label="Delete All"
+            size="small"
+            severity="danger"
+            class="half-btn"
+            :disabled="testsStore.tests.length === 0"
+            @click="deleteAllTests"
+          />
+        </div>
       </div>
 
       <div class="test-summary" v-if="testsStore.tests.length > 0">
@@ -114,15 +126,33 @@ function removeTest(id: string) {
   diagramStore.confirmAction('Remove this test?', () => testsStore.removeTest(id))
 }
 
-// Auto-run tests on diagram changes
+function deleteAllTests() {
+  diagramStore.confirmAction(
+    'This will permanently delete all network tests. Are you sure?',
+    () => testsStore.clearAllTests()
+  )
+}
+
+// Auto-run tests on diagram changes — debounced to avoid concurrent run accumulation
+let _autoRunTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   () => [diagramStore.nodes.length, diagramStore.edges.length],
   () => {
-    if (testsStore.autoRunEnabled && testsStore.tests.length > 0) {
-      testsStore.runAllTests(diagramStore.nodes, diagramStore.edges)
-    }
+    if (_autoRunTimer) clearTimeout(_autoRunTimer)
+    _autoRunTimer = setTimeout(() => {
+      _autoRunTimer = null
+      if (testsStore.autoRunEnabled && testsStore.tests.length > 0 && !testsStore.isRunning) {
+        testsStore.runAllTests(diagramStore.nodes, diagramStore.edges)
+      }
+    }, 500)
   }
 )
+onUnmounted(() => {
+  if (_autoRunTimer) {
+    clearTimeout(_autoRunTimer)
+    _autoRunTimer = null
+  }
+})
 </script>
 
 <style scoped>
@@ -180,13 +210,30 @@ watch(
 
 .panel-actions {
   display: flex;
+  flex-direction: column;
   gap: 0.4rem;
+}
+
+.add-test-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.action-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.half-btn {
+  flex: 1;
+  justify-content: center;
 }
 
 .test-summary {
   display: flex;
   gap: 0.3rem;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 .empty-state {
@@ -206,17 +253,23 @@ watch(
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.6rem;
 }
 
 .test-item {
   background: var(--surface-ground);
   border: 1px solid var(--surface-border);
+  border-left: 3px solid var(--primary-color);
   border-radius: 6px;
-  padding: 0.5rem;
+  padding: 0.55rem 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
+  transition: box-shadow 0.15s ease;
+}
+
+.test-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .test-header-row {
