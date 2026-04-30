@@ -244,10 +244,13 @@ function reflowSubnetContainers(
       cursorY = bottom + CHILD_GAP
     })
 
+    const bottomY = groups.length
+      ? cursorY - CHILD_GAP
+      : parentRect.y + SUBNET_HEADER_H + CHILD_PADDING_Y
     parentRect.w = Math.max(SUBNET_MIN_WIDTH, maxRight - parentRect.x + CHILD_PADDING_X)
     parentRect.h = Math.max(
       SUBNET_MIN_HEIGHT,
-      (groups.length ? cursorY - CHILD_GAP : parentRect.y + SUBNET_HEADER_H + CHILD_PADDING_Y) - parentRect.y + CHILD_PADDING_Y
+      bottomY - parentRect.y + CHILD_PADDING_Y
     )
   })
 }
@@ -299,16 +302,18 @@ function placeSubnetGroup(
   startY: number,
   absPos: Map<string, Rect>
 ) {
-  const nicRect = group.nicId ? absPos.get(group.nicId) : undefined
+  const nicId = group.nicId
+  const nicRect = nicId ? absPos.get(nicId) : undefined
   const memberRects = group.memberIds
     .map(id => ({ id, rect: absPos.get(id) }))
     .filter((entry): entry is { id: string; rect: Rect } => isValidRect(entry.rect))
+  const nicOffset = nicRect ? nicRect.w + ATTACHMENT_GAP_X : 0
 
   let memberY = startY
   let maxMemberWidth = 0
 
   memberRects.forEach(({ id, rect }) => {
-    absPos.set(id, { ...rect, x: startX + (nicRect ? nicRect.w + ATTACHMENT_GAP_X : 0), y: memberY })
+    absPos.set(id, { ...rect, x: startX + nicOffset, y: memberY })
     memberY += rect.h + ATTACHMENT_GAP_Y
     maxMemberWidth = Math.max(maxMemberWidth, rect.w)
   })
@@ -316,19 +321,20 @@ function placeSubnetGroup(
   let nicBottom = startY
   let nicRight = startX
 
-  if (nicRect && group.nicId) {
+  if (nicId && nicRect) {
     // Keep the NIC vertically centered against its attached resources.
-    const memberColumnHeight = memberRects.length
-      ? memberY - startY - ATTACHMENT_GAP_Y
-      : nicRect.h
-    const nicY = startY + Math.max(0, (memberColumnHeight - nicRect.h) / 2)
-    absPos.set(group.nicId, { ...nicRect, x: startX, y: nicY })
+    let nicY = startY
+    if (memberRects.length > 0) {
+      const memberColumnHeight = memberY - startY - ATTACHMENT_GAP_Y
+      nicY = startY + Math.max(0, (memberColumnHeight - nicRect.h) / 2)
+    }
+    absPos.set(nicId, { ...nicRect, x: startX, y: nicY })
     nicBottom = nicY + nicRect.h
     nicRight = startX + nicRect.w
   }
 
   const membersRight = memberRects.length
-    ? startX + (nicRect ? nicRect.w + ATTACHMENT_GAP_X : 0) + maxMemberWidth
+    ? startX + nicOffset + maxMemberWidth
     : nicRight
   const membersBottom = memberRects.length ? memberY - ATTACHMENT_GAP_Y : nicBottom
 
@@ -370,7 +376,7 @@ function reflowVnetContainers(
     const attachmentRowHeight = attachmentIds.reduce((max, id) => Math.max(max, absPos.get(id)?.h || NODE_HEIGHT), 0)
     const subnetStartY = headerStartY + (attachmentIds.length ? attachmentRowHeight + CHILD_GAP : 0)
 
-    const subnetColumns = subnetIds.length <= 1 ? 1 : Math.min(MAX_SUBNET_COLUMNS, subnetIds.length)
+    const subnetColumns = Math.min(MAX_SUBNET_COLUMNS, Math.max(1, subnetIds.length))
     let maxRight = parentRect.x + VNET_MIN_WIDTH - CHILD_PADDING_X
     let maxBottom = parentRect.y + VNET_MIN_HEIGHT - CHILD_PADDING_Y
 
@@ -396,16 +402,16 @@ function reflowVnetContainers(
       const orderedAttachments = attachmentIds
         .map(id => ({
           id,
-          anchor: resolveAttachmentAnchorX(id, nodeById, subnetCenters, maps.nicToSubnet)
-            ?? parentRect.x + CHILD_PADDING_X,
+          anchor: resolveAttachmentAnchorX(id, nodeById, subnetCenters, maps.nicToSubnet),
         }))
-        .sort((a, b) => a.anchor - b.anchor)
+        .sort((a, b) => (a.anchor ?? 0) - (b.anchor ?? 0))
 
       let nextX = parentRect.x + CHILD_PADDING_X
       orderedAttachments.forEach(({ id, anchor }) => {
         const rect = absPos.get(id)
         if (!rect) return
-        const centeredX = anchor - rect.w / 2
+        const defaultAnchorX = parentRect.x + CHILD_PADDING_X
+        const centeredX = (anchor ?? defaultAnchorX) - rect.w / 2
         const x = Math.max(nextX, centeredX)
         const y = headerStartY
         absPos.set(id, { ...rect, x, y })
