@@ -166,13 +166,13 @@ onMounted(() => {
         nextTick(() => setViewport({ x: 0, y: 0, zoom: 1 }))
       })
     }
-     if (name === 'autoLayout') {
-       after(() => nextTick(() => {
-         setNodes([...diagramStore.nodes] as any)
-         setEdges([...diagramStore.edges] as any)
-         nextTick(() => fitView())
-       }))
-     }
+    if (name === 'autoLayout') {
+      after(() => nextTick(() => {
+        setNodes([...diagramStore.nodes] as any)
+        setEdges([...diagramStore.edges] as any)
+        nextTick(() => fitView())
+      }))
+    }
     if (name === 'loadDiagram') {
       after(() => nextTick(() => {
         setNodes([...diagramStore.nodes] as any)

@@ -206,6 +206,14 @@ function collectAttachedSubnetIds(data: NodeData, nicToSubnet: Map<string, strin
   return result
 }
 
+function isValidRect(rect: Rect | undefined): rect is Rect {
+  return !!rect
+    && Number.isFinite(rect.x)
+    && Number.isFinite(rect.y)
+    && Number.isFinite(rect.w)
+    && Number.isFinite(rect.h)
+}
+
 function reflowSubnetContainers(
   nodes: DiagramNode[],
   absPos: Map<string, Rect>,
@@ -294,13 +302,7 @@ function placeSubnetGroup(
   const nicRect = group.nicId ? absPos.get(group.nicId) : undefined
   const memberRects = group.memberIds
     .map(id => ({ id, rect: absPos.get(id) }))
-    .filter((entry): entry is { id: string; rect: Rect } => (
-      !!entry.rect
-      && Number.isFinite(entry.rect.x)
-      && Number.isFinite(entry.rect.y)
-      && Number.isFinite(entry.rect.w)
-      && Number.isFinite(entry.rect.h)
-    ))
+    .filter((entry): entry is { id: string; rect: Rect } => isValidRect(entry.rect))
 
   let memberY = startY
   let maxMemberWidth = 0
@@ -314,13 +316,13 @@ function placeSubnetGroup(
   let nicBottom = startY
   let nicRight = startX
 
-  if (nicRect) {
+  if (nicRect && group.nicId) {
     // Keep the NIC vertically centered against its attached resources.
     const memberColumnHeight = memberRects.length
       ? memberY - startY - ATTACHMENT_GAP_Y
       : nicRect.h
     const nicY = startY + Math.max(0, (memberColumnHeight - nicRect.h) / 2)
-    absPos.set(group.nicId!, { ...nicRect, x: startX, y: nicY })
+    absPos.set(group.nicId, { ...nicRect, x: startX, y: nicY })
     nicBottom = nicY + nicRect.h
     nicRight = startX + nicRect.w
   }
