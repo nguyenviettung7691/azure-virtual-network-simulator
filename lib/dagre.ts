@@ -15,6 +15,7 @@ const CHILD_PADDING_Y = 20
 const CHILD_GAP = 24
 const ATTACHMENT_GAP_X = 18
 const ATTACHMENT_GAP_Y = 14
+const MAX_SUBNET_COLUMNS = 3
 
 const SUBNET_HOSTED = new Set<NetworkComponentType>([
   NetworkComponentType.VM,
@@ -249,16 +250,22 @@ function buildSubnetGroups(childIds: string[], nodeById: Map<string, DiagramNode
     const type = (nodeById.get(id)?.data as NodeData | undefined)?.type
     return type !== undefined && type !== NetworkComponentType.NETWORK_IC
   })
+  const nicToHosts = new Map<string, string[]>()
+
+  hostIds.forEach(hostId => {
+    const data = nodeById.get(hostId)?.data as NodeData | undefined
+    data?.nicIds?.forEach((nicId: string) => {
+      const current = nicToHosts.get(nicId) || []
+      current.push(hostId)
+      nicToHosts.set(nicId, current)
+    })
+  })
 
   const usedHosts = new Set<string>()
   const groups: Array<{ nicId?: string; memberIds: string[] }> = []
 
   nicIds.forEach(nicId => {
-    const attachedHosts = hostIds.filter(hostId => {
-      if (usedHosts.has(hostId)) return false
-      const data = nodeById.get(hostId)?.data as NodeData | undefined
-      return !!data?.nicIds?.includes(nicId)
-    })
+    const attachedHosts = (nicToHosts.get(nicId) || []).filter(hostId => !usedHosts.has(hostId))
 
     if (attachedHosts.length > 0) {
       attachedHosts.forEach(id => usedHosts.add(id))
@@ -287,7 +294,13 @@ function placeSubnetGroup(
   const nicRect = group.nicId ? absPos.get(group.nicId) : undefined
   const memberRects = group.memberIds
     .map(id => ({ id, rect: absPos.get(id) }))
-    .filter((entry): entry is { id: string; rect: Rect } => !!entry.rect)
+    .filter((entry): entry is { id: string; rect: Rect } => (
+      !!entry.rect
+      && Number.isFinite(entry.rect.x)
+      && Number.isFinite(entry.rect.y)
+      && Number.isFinite(entry.rect.w)
+      && Number.isFinite(entry.rect.h)
+    ))
 
   let memberY = startY
   let maxMemberWidth = 0
@@ -302,6 +315,7 @@ function placeSubnetGroup(
   let nicRight = startX
 
   if (nicRect) {
+    // Keep the NIC vertically centered against its attached resources.
     const memberColumnHeight = memberRects.length
       ? memberY - startY - ATTACHMENT_GAP_Y
       : nicRect.h
@@ -354,7 +368,7 @@ function reflowVnetContainers(
     const attachmentRowHeight = attachmentIds.reduce((max, id) => Math.max(max, absPos.get(id)?.h || NODE_HEIGHT), 0)
     const subnetStartY = headerStartY + (attachmentIds.length ? attachmentRowHeight + CHILD_GAP : 0)
 
-    const subnetColumns = subnetIds.length <= 1 ? 1 : Math.min(3, subnetIds.length)
+    const subnetColumns = subnetIds.length <= 1 ? 1 : Math.min(MAX_SUBNET_COLUMNS, subnetIds.length)
     let maxRight = parentRect.x + VNET_MIN_WIDTH - CHILD_PADDING_X
     let maxBottom = parentRect.y + VNET_MIN_HEIGHT - CHILD_PADDING_Y
 
