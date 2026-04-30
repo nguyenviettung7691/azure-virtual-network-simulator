@@ -1,0 +1,151 @@
+/* ============================================================
+   Diagram Canvas
+   ============================================================ */
+.diagram-canvas-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.vnet-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.canvas-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 10;
+}
+
+.canvas-empty-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.canvas-empty-state .empty-icon {
+  font-size: 56px;
+  color: var(--border);
+}
+
+.canvas-empty-state .empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.canvas-empty-state .empty-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.canvas-empty-state .empty-quick-start {
+  display: flex;
+  gap: 8px;
+  pointer-events: all;
+  margin-top: 8px;
+}
+
+/* ============================================================
+   Shared Diagram Node Base
+   ============================================================ */
+.diagram-node {
+  cursor: grab;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.diagram-node:active {
+  cursor: grabbing;
+}
+
+/* ============================================================
+   Generic Node (compact card)
+   ============================================================ */
+.generic-node {
+  min-width: 180px;
+  max-width: 220px;
+}
+
+.generic-node-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background-color: var(--surface, #ffffff);
+  border: 2px solid #cccccc;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.generic-node.selected .generic-node-content {
+  box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.35), 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.generic-node-content:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.generic-node-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.generic-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.generic-node-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.generic-node-type {
+  font-size: 10px;
+  color: var(--text-muted, #605e5c);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.generic-node-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #323130);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.generic-node-detail {
+  font-size: 11px;
+  color: var(--text-muted, #605e5c);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
