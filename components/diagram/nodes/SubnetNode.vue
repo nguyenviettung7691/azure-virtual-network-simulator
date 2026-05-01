@@ -2,7 +2,6 @@
   <div
     class="subnet-node diagram-node"
     :class="{ selected }"
-    :style="{ width: `${width || 300}px`, height: `${height || 200}px` }"
     @dblclick="onDblClick"
   >
     <Handle type="source" :position="Position.Right" />
@@ -40,8 +39,6 @@ interface Props {
   id: string
   data: SubnetComponent
   selected?: boolean
-  width?: number
-  height?: number
 }
 
 const props = defineProps<Props>()
@@ -54,6 +51,9 @@ function onDblClick() {
 
 <style scoped>
 .subnet-node {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   background-color: rgba(80, 167, 240, 0.04);
   border: 2px dashed #50a7f0;
   border-radius: 8px;

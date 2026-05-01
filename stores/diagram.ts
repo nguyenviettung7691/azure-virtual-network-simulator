@@ -1,16 +1,41 @@
 import { defineStore } from 'pinia'
-import type { DiagramNode, DiagramEdge, DiagramState } from '~/types/diagram'
-import type { AnyNetworkComponent } from '~/types/network'
+import {
+  BASE_NODE_HEIGHT,
+  BASE_NODE_WIDTH,
+  INTERNET_NODE_HEIGHT,
+  INTERNET_NODE_WIDTH,
+  SUBNET_MIN_HEIGHT,
+  SUBNET_MIN_WIDTH,
+  VNET_MIN_HEIGHT,
+  VNET_MIN_WIDTH,
+} from '~/lib/layout'
+import type {
+  AnimationTerminalState,
+  AnimationVisualState,
+  DiagramAnimationSession,
+  DiagramNode,
+  DiagramEdge,
+  DiagramState,
+  DiagramViewMode,
+} from '~/types/diagram'
+import type { AnyNetworkComponent, InternetComponent } from '~/types/network'
 import { NetworkComponentType } from '~/types/network'
 import { applyDagreLayout } from '~/lib/dagre'
+import { INTERNET_SOURCE_ID } from '~/types/test'
 
 // DiagramEdge extends a union type (Edge from @vue-flow/core), so we use this
 // minimal intersection type to safely access common edge properties.
 type EdgeBase = { id: string; source: string; target: string }
 
+const PUBLIC_INTERNET_NAME = 'Public Internet'
+const DEFAULT_ANIMATION_SEGMENT_MS = 1600
+
 interface DiagramStoreState {
   nodes: DiagramNode[]
   edges: DiagramEdge[]
+  viewMode: DiagramViewMode
+  animationSession: DiagramAnimationSession | null
+  animationRunId: number
   selectedNodeId: string | null
   isDirty: boolean
   viewport: { x: number; y: number; zoom: number }
@@ -28,6 +53,9 @@ export const useDiagramStore = defineStore('diagram', {
   state: (): DiagramStoreState => ({
     nodes: [],
     edges: [],
+    viewMode: 'infrastructure',
+    animationSession: null,
+    animationRunId: 0,
     selectedNodeId: null,
     isDirty: false,
     viewport: { x: 0, y: 0, zoom: 1 },
@@ -59,23 +87,20 @@ export const useDiagramStore = defineStore('diagram', {
 
   actions: {
     addNode(component: AnyNetworkComponent, position?: { x: number; y: number }) {
-      const node: DiagramNode = {
-        id: component.id,
-        type: getNodeType(component.type),
-        position: position || getDefaultPosition(this.nodes.length),
-        data: component,
-        width: getNodeWidth(component.type),
-        height: getNodeHeight(component.type),
-      }
+      const node = createDiagramNode(
+        component,
+        position || getInitialNodePosition(component.type, this.nodes)
+      )
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore – DiagramNode extends a deeply generic vue-flow type; TS depth limit hit
-      this.nodes = [...this.nodes, node]
+      this.nodes = syncSystemManagedNodes([...this.nodes, node])
       this.isDirty = true
     },
 
     updateNode(id: string, updates: Partial<AnyNetworkComponent>) {
       const idx = this.nodes.findIndex(n => n.id === id)
       if (idx === -1) return
+      if (isPublicInternetComponent(this.nodes[idx].data)) return
       const updatedComponent = { ...this.nodes[idx].data, ...updates } as AnyNetworkComponent
       this.nodes[idx] = { ...this.nodes[idx], data: updatedComponent }
       this.nodes = [...this.nodes]
@@ -83,21 +108,24 @@ export const useDiagramStore = defineStore('diagram', {
     },
 
     removeNode(id: string) {
-      this.nodes = this.nodes.filter(n => n.id !== id)
+      if (id === INTERNET_SOURCE_ID) return
+      this.nodes = syncSystemManagedNodes(this.nodes.filter(n => n.id !== id))
       this.edges = (this.edges as unknown as EdgeBase[]).filter(
         e => e.source !== id && e.target !== id
       ) as unknown as DiagramEdge[]
       if (this.selectedNodeId === id) this.selectedNodeId = null
+      if (this.selectedNodeId && !this.nodes.some(n => n.id === this.selectedNodeId)) this.selectedNodeId = null
       this.isDirty = true
     },
 
     addEdge(edge: DiagramEdge) {
-      const e = edge as unknown as EdgeBase
+      const normalizedEdge = normalizeDiagramEdge(edge)
+      const e = normalizedEdge as unknown as EdgeBase
       const exists = (this.edges as unknown as EdgeBase[]).some(
         ex => ex.source === e.source && ex.target === e.target
       )
       if (!exists) {
-        this.edges = [...this.edges, edge]
+        this.edges = [...this.edges, normalizedEdge]
         this.isDirty = true
       }
     },
@@ -105,7 +133,7 @@ export const useDiagramStore = defineStore('diagram', {
     updateEdge(id: string, updates: Partial<DiagramEdge>) {
       const idx = (this.edges as unknown as EdgeBase[]).findIndex(e => e.id === id)
       if (idx === -1) return
-      this.edges[idx] = { ...this.edges[idx], ...updates }
+      this.edges[idx] = normalizeDiagramEdge({ ...this.edges[idx], ...updates } as DiagramEdge)
       this.edges = [...this.edges]
       this.isDirty = true
     },
@@ -120,14 +148,16 @@ export const useDiagramStore = defineStore('diagram', {
     },
 
     loadDiagram(state: DiagramState) {
-      this.nodes = state.nodes
-      this.edges = state.edges
+      this.stopAnimation()
+      this.nodes = syncSystemManagedNodes(state.nodes)
+      this.edges = state.edges.map(edge => normalizeDiagramEdge(edge as DiagramEdge))
       this.viewport = state.viewport
       this.isDirty = false
       this.selectedNodeId = null
     },
 
     resetDiagram() {
+      this.stopAnimation()
       this.nodes = []
       this.edges = []
       this.selectedNodeId = null
@@ -136,6 +166,7 @@ export const useDiagramStore = defineStore('diagram', {
     },
 
     autoLayout() {
+      if (this.viewMode === 'animation') return
       if (this.nodes.length === 0) return
       try {
         const newNodes = applyDagreLayout([...this.nodes], [...this.edges])
@@ -158,12 +189,14 @@ export const useDiagramStore = defineStore('diagram', {
     },
 
     openAddComponentModal(type: NetworkComponentType) {
+      if (type === NetworkComponentType.INTERNET) return
       this.addingComponentType = type
       this.editingComponent = null
       this.showComponentModal = true
     },
 
     openEditComponentModal(component: AnyNetworkComponent) {
+      if (isPublicInternetComponent(component)) return
       this.editingComponent = { ...component } as AnyNetworkComponent
       this.addingComponentType = null
       this.showComponentModal = true
@@ -201,8 +234,153 @@ export const useDiagramStore = defineStore('diagram', {
     setViewport(viewport: { x: number; y: number; zoom: number }) {
       this.viewport = viewport
     },
+
+    async playConnectionAnimation(payload: {
+      testId: string
+      path: string[]
+      resultState: AnimationTerminalState
+      segmentDurationMs?: number
+    }) {
+      const path = payload.path
+        .filter(Boolean)
+        .map(resolveAnimationPathNodeId)
+      if (path.length < 2) {
+        this.stopAnimation()
+        return false
+      }
+
+      const runId = this.animationRunId + 1
+      const segmentDurationMs = payload.segmentDurationMs ?? DEFAULT_ANIMATION_SEGMENT_MS
+      const session = createAnimationSession(payload.testId, path, payload.resultState, segmentDurationMs)
+
+      this.animationRunId = runId
+      this.viewMode = 'animation'
+      this.animationSession = cloneAnimationSession(session)
+
+      for (let index = 0; index < path.length - 1; index += 1) {
+        if (this.animationRunId !== runId || !this.animationSession) return false
+
+        const sourceId = path[index]
+        const targetId = path[index + 1]
+        const edgeId = createAnimationEdgeId(sourceId, targetId, index)
+
+        session.activeEdgeId = edgeId
+        session.travelerVisible = true
+        session.nodeStates[sourceId] = index === 0 ? 'active' : session.terminalState
+        session.nodeStates[targetId] = 'active'
+        session.edgeStates[edgeId] = 'active'
+        session.overlayEdges = buildAnimationOverlayEdges(session)
+        this.animationSession = cloneAnimationSession(session)
+
+        await wait(segmentDurationMs)
+
+        if (this.animationRunId !== runId || !this.animationSession) return false
+
+        session.activeEdgeId = null
+        session.travelerVisible = false
+        session.nodeStates[sourceId] = session.terminalState
+        session.nodeStates[targetId] = session.terminalState
+        session.edgeStates[edgeId] = session.terminalState
+        session.overlayEdges = buildAnimationOverlayEdges(session)
+        this.animationSession = cloneAnimationSession(session)
+      }
+
+      if (this.animationRunId !== runId || !this.animationSession) return false
+
+      session.isRunning = false
+      session.travelerVisible = false
+      session.activeEdgeId = null
+      session.overlayEdges = buildAnimationOverlayEdges(session)
+      this.animationSession = cloneAnimationSession(session)
+
+      return true
+    },
+
+    stopAnimation() {
+      this.animationRunId += 1
+      this.viewMode = 'infrastructure'
+      this.animationSession = null
+    },
   },
 })
+
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function createAnimationSession(
+  testId: string,
+  path: string[],
+  terminalState: AnimationTerminalState,
+  segmentDurationMs: number,
+): DiagramAnimationSession {
+  const nodeStates: Record<string, AnimationVisualState> = {}
+  const edgeStates: Record<string, AnimationVisualState> = {}
+
+  path.forEach((nodeId, index) => {
+    nodeStates[nodeId] = index === 0 ? 'active' : 'pending'
+    if (index < path.length - 1) {
+      const edgeId = createAnimationEdgeId(nodeId, path[index + 1], index)
+      edgeStates[edgeId] = 'pending'
+    }
+  })
+
+  const session: DiagramAnimationSession = {
+    activeTestId: testId,
+    path,
+    overlayEdges: [],
+    nodeStates,
+    edgeStates,
+    activeEdgeId: null,
+    travelerVisible: false,
+    segmentDurationMs,
+    terminalState,
+    isRunning: true,
+  }
+
+  session.overlayEdges = buildAnimationOverlayEdges(session)
+  return session
+}
+
+function buildAnimationOverlayEdges(session: DiagramAnimationSession): DiagramEdge[] {
+  return session.path.slice(0, -1).map((sourceId, index) => {
+    const targetId = session.path[index + 1]
+    const edgeId = createAnimationEdgeId(sourceId, targetId, index)
+    const state = session.edgeStates[edgeId] || 'pending'
+
+    return {
+      id: edgeId,
+      source: sourceId,
+      target: targetId,
+      type: 'animation-edge',
+      selectable: false,
+      updatable: false,
+      data: {
+        state,
+        isActive: session.activeEdgeId === edgeId,
+        travelerVisible: session.travelerVisible && session.activeEdgeId === edgeId,
+        durationMs: session.segmentDurationMs,
+      },
+    } as DiagramEdge
+  })
+}
+
+function cloneAnimationSession(session: DiagramAnimationSession): DiagramAnimationSession {
+  return {
+    ...session,
+    overlayEdges: session.overlayEdges.map(edge => ({ ...edge })),
+    nodeStates: { ...session.nodeStates },
+    edgeStates: { ...session.edgeStates },
+  }
+}
+
+function createAnimationEdgeId(sourceId: string, targetId: string, index: number): string {
+  return `animation-edge-${index}-${sourceId}-${targetId}`
+}
+
+function resolveAnimationPathNodeId(nodeId: string): string {
+  return nodeId === 'Internet' ? INTERNET_SOURCE_ID : nodeId
+}
 
 function getNodeType(componentType: NetworkComponentType): string {
   const typeMap: Partial<Record<NetworkComponentType, string>> = {
@@ -233,25 +411,102 @@ function getNodeType(componentType: NetworkComponentType): string {
     [NetworkComponentType.BASTION]: 'vpn-gateway-node',
     [NetworkComponentType.PRIVATE_ENDPOINT]: 'network-ic-node',
     [NetworkComponentType.SERVICE_ENDPOINT]: 'network-ic-node',
+    [NetworkComponentType.INTERNET]: 'internet-node',
   }
   return typeMap[componentType] || 'compute-node'
 }
 
+function normalizeDiagramEdge(edge: DiagramEdge): DiagramEdge {
+  return {
+    ...edge,
+    selectable: false,
+    updatable: false,
+  } as DiagramEdge
+}
+
 function getNodeWidth(type: NetworkComponentType): number {
-  if (type === NetworkComponentType.VNET) return 400
-  if (type === NetworkComponentType.SUBNET) return 300
-  return 180
+  if (type === NetworkComponentType.VNET) return VNET_MIN_WIDTH
+  if (type === NetworkComponentType.SUBNET) return SUBNET_MIN_WIDTH
+  if (type === NetworkComponentType.INTERNET) return INTERNET_NODE_WIDTH
+  return BASE_NODE_WIDTH
 }
 
 function getNodeHeight(type: NetworkComponentType): number {
-  if (type === NetworkComponentType.VNET) return 300
-  if (type === NetworkComponentType.SUBNET) return 200
-  return 80
+  if (type === NetworkComponentType.VNET) return VNET_MIN_HEIGHT
+  if (type === NetworkComponentType.SUBNET) return SUBNET_MIN_HEIGHT
+  if (type === NetworkComponentType.INTERNET) return INTERNET_NODE_HEIGHT
+  return BASE_NODE_HEIGHT
 }
 
 function getDefaultPosition(index: number): { x: number; y: number } {
   const cols = 4
   const col = index % cols
   const row = Math.floor(index / cols)
-  return { x: 100 + col * 220, y: 100 + row * 120 }
+  return { x: 100 + col * 220, y: 180 + row * 120 }
+}
+
+function getInitialNodePosition(type: NetworkComponentType, nodes: DiagramNode[]): { x: number; y: number } {
+  if (type === NetworkComponentType.INTERNET) return getPublicInternetDefaultPosition()
+  return getDefaultPosition(getUserManagedNodeCount(nodes))
+}
+
+function getPublicInternetDefaultPosition(): { x: number; y: number } {
+  return { x: 100, y: 40 }
+}
+
+function getUserManagedNodeCount(nodes: DiagramNode[]): number {
+  return nodes.filter(node => !isPublicInternetComponent(node.data)).length
+}
+
+function isPublicInternetComponent(component: AnyNetworkComponent | Partial<AnyNetworkComponent> | null | undefined): component is InternetComponent {
+  return component?.type === NetworkComponentType.INTERNET
+}
+
+function createPublicInternetComponent(existing?: Partial<InternetComponent>): InternetComponent {
+  return {
+    id: INTERNET_SOURCE_ID,
+    name: PUBLIC_INTERNET_NAME,
+    type: NetworkComponentType.INTERNET,
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    description: existing?.description,
+    tags: existing?.tags,
+    systemManaged: true,
+  }
+}
+
+function createDiagramNode(component: AnyNetworkComponent, position: { x: number; y: number }): DiagramNode {
+  return {
+    id: component.id,
+    type: getNodeType(component.type),
+    position,
+    data: component,
+    width: getNodeWidth(component.type),
+    height: getNodeHeight(component.type),
+  }
+}
+
+function normalizePublicInternetNode(node?: DiagramNode): DiagramNode {
+  const internetData = isPublicInternetComponent(node?.data)
+    ? createPublicInternetComponent(node.data)
+    : createPublicInternetComponent()
+
+  return {
+    ...node,
+    id: INTERNET_SOURCE_ID,
+    type: getNodeType(NetworkComponentType.INTERNET),
+    position: node?.position || getPublicInternetDefaultPosition(),
+    data: internetData,
+    width: getNodeWidth(NetworkComponentType.INTERNET),
+    height: getNodeHeight(NetworkComponentType.INTERNET),
+    parentNode: undefined,
+    extent: undefined,
+  } as DiagramNode
+}
+
+function syncSystemManagedNodes(nodes: DiagramNode[]): DiagramNode[] {
+  const userNodes = nodes.filter(node => !isPublicInternetComponent(node.data))
+  if (userNodes.length === 0) return userNodes
+
+  const existingInternet = nodes.find(node => isPublicInternetComponent(node.data))
+  return [normalizePublicInternetNode(existingInternet), ...userNodes]
 }

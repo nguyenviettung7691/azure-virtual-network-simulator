@@ -30,20 +30,21 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 
 ## Features
 
-- **Drag-and-drop canvas** — place and connect 27 Azure networking components on an interactive Vue Flow canvas.
-- **Component forms** — single-click any component (when canvas is unlocked) to open its property edit form, or configure via the right side panel.
-- **Network Summary panel** — the right-hand panel shows a live summary of the diagram. The Components section groups nodes by their component type; the Connectivity section renders a two-column table ("Target" / "Source") where each row is a connection and target cells span multiple rows when a target has more than one source.
-- **Load sample** — one-click button on the empty canvas state that loads a pre-built VNet diagram (1 VNet, 3 NSGs, 3 Subnets, 3 NICs, 4 VMs with realistic security rules, region "southeastasia" for VNet 1) plus 4 pre-configured connection tests; all existing tests are replaced so the panel always reflects the sample. The sample only adds attachment edges (for example NSG→Subnet/NIC and NIC→VM); containment is derived from component metadata and auto-layout.
+- **Drag-and-drop canvas** — place and arrange 27 Azure networking components on an interactive Vue Flow canvas. When the diagram contains at least one user-added component, a single system-managed **Public Internet** node is also shown automatically. Attachment arrows are rendered automatically from component relationships; users do not manually draw, reconnect, or delete edges from the canvas UI.
+- **Component forms** — single-click any user-managed component (when canvas is unlocked) to open its property edit form, or configure via the right side panel. The system-managed **Public Internet** node is read-only and does not open a form.
+- **Network Summary panel** — the right-hand panel shows a live summary of the diagram. The Components section groups nodes by their component type, with a count badge (PrimeVue `Tag severity="info"`) on each group header. The Connectivity section renders a two-column table ("Source" / "Target") where each row is a connection; target cells span multiple rows (`rowspan`) when a target has more than one source; rows are visually grouped per target using alternating group backgrounds (`.conn-group-alt`) and a bold separator border between groups (`.conn-group-first`); the table also includes containment edges synthesised from `node.parentNode` so all topology relationships are visible. Both Source and Target cells display a small coloured component-type icon (with a tooltip showing the full type label) before the component name.
+- **Load sample** — one-click button on the empty canvas state that loads a pre-built VNet diagram (1 VNet, 3 NSGs, 3 Subnets, 3 NICs, 4 VMs with realistic security rules, region "southeastasia" for VNet 1) plus 4 pre-configured connection tests; all existing tests are replaced so the panel always reflects the sample. The sample only adds attachment edges (for example NSG→Subnet/NIC and NIC→VM); containment is derived from component metadata and auto-layout, which expands the VNet to enclose all three Subnets, keeps subnet-hosted workloads inside their Subnet, keeps the main canvas in sync with the minimap for nested container bounds, and places the NSGs outside the VNet aligned to the Subnets or NICs they protect. Those rendered edges stay read-only in the canvas UI.
 - **Reset diagram** — removes all components from the canvas; an optional "Also reset all network tests" checkbox in the confirm dialog lets you clear the test panel at the same time.
-- **Delete All tests** — a "Delete All" button in the Network Tests panel removes every test at once after a confirm dialog. The panel uses a full-width "Add Test" block button and half-width "Run All" / "Delete All" buttons on the row below; test status summary tags (Pass / Fail / Pending) are center-aligned; each test card has a left-accent border for visual separation.
-- **Auto layout** — on-demand Dagre-powered automatic graph layout with visual containment and attachment-aware grouping: Subnets stay inside their VNet, subnet-hosted resources stay inside their Subnet, NIC-attached workloads are grouped beside their NICs, and VNet-attached policy components (such as NSGs) are positioned above the subnets they protect. Only attachment edges remain visible after layout; containment relationships are expressed by the nested node hierarchy instead of arrows.
-- **Lock / Unlock interactions** — toggle canvas between read-only pan/zoom mode (Locked, highlighted button) and fully interactive edit mode (Unlocked). In unlocked mode, hovering over a component name shows a pointer cursor and clicking it opens the edit form.
+- **Delete All tests** — a "Delete All" button in the Network Tests panel removes every test at once after a confirm dialog. The panel uses a full-width "Add Test" block button and half-width "Run All" (green, `severity="success"`) / "Delete All" buttons on the row below; test status summary tags (Pass / Fail / Pending) are center-aligned. Each test card has a left-accent border; Row 1 shows the type icon and test name (with a separator border below); Row 2 shows the result status `<Tag>` (uppercase, left) and the per-test Run / Run animation / Edit / Delete action buttons (right, with Run animation shown for connection tests only). After a result is available, a compact inline flowchart appears below the result message showing the full physical traversal path: connection tests render every hop node ID resolved to its component name and icon (e.g. Internet → VNet → Subnet → SubnetNSG → NIC → NIC NSG → VM for a passing test); for a passing test the final target node is highlighted in green with a `mdi:check-circle` badge, while for a failing test the path stops at the blocking NSG, which is shown with a red `mdi:close-circle` badge; load-balance tests show source → LB → backend VMs; security tests show NSG count → Subnet count; DNS tests show DNS Client → zone name → resolved IP.
+- **Connection flow animation** — any connection test can switch the canvas from the default **Infrastructure** view into **Animation** mode by using the per-test Run animation action. The selected test is rerun first, then the canvas renders only that directed traversal path as animated edges, including synthesized containment hops that are normally expressed via nesting rather than visible arrows. A moving paper-plane travels from source to target at a steady pace; after each hop resolves, the traversed node and edge keep pass / fail / warning styling, and the traveler disappears when the run completes. A fixed, top-centered **Exit animation** button returns the canvas to Infrastructure mode and restores the normal read-only edge view.
+- **Auto layout** — on-demand Dagre-powered automatic graph layout with visual containment and attachment-aware grouping: the system-managed **Public Internet** node is positioned in a dedicated top row above the rest of the topology; Subnets stay inside their VNet and resize from their packed child bounds; subnet-hosted resources stay inside their Subnet; NIC-attached workloads are grouped beside their NIC instead of dropping underneath it; and policy resources such as NSGs, ASGs, and UDRs are positioned outside the VNet near the Subnets or NICs they protect, using staggered outside-VNet lanes when anchors are dense so edge overlap is reduced as a best effort. Reserved top clearance keeps child nodes away from the VNet and Subnet header text. Only attachment edges remain visible after layout, and those arrows are system-rendered and read-only; containment relationships are expressed by the nested node hierarchy instead of arrows.
+- **Lock / Unlock interactions** — toggle canvas between read-only pan/zoom mode (Locked, highlighted button) and node-edit mode (Unlocked). In unlocked mode, users can drag/select nodes, hovering over a component name shows a pointer cursor, and clicking it opens the edit form. Edge creation and edge editing remain disabled in both modes.
 - **Fit Content / Fit View** — two distinct viewport actions: Fit Content pans and zooms the viewport to show all nodes; Fit View resets the viewport to the default 1:1 zoom at the origin.
 - **Export** — save diagrams as PNG, SVG, PDF, draw.io (`.drawio`), or Visio (`.vsdx`).
 - **Import** — load existing diagrams from `.drawio`, `.xml`, or `.vsdx` files.
 - **Saved setups** — authenticated users can persist diagrams and thumbnails to Amazon S3 and reload them at any time.
 - **AI challenges** — Amazon Bedrock generates time-boxed networking challenges at four difficulty levels; the app evaluates your diagram against the challenge conditions in real time.
-- **Dark / light mode** — respects the OS preference or can be overridden manually.
+- **Dark / light mode** — respects the OS preference or can be overridden manually. Styling is driven by a shared token layer: app-owned CSS variables in `assets/css/main.css` cover layout, sizing, and base colors, while PrimeVue Aura provides semantic tokens for component surfaces and text.
 
 ---
 
@@ -53,6 +54,7 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 |---|---|
 | Framework | Nuxt 3 (SPA, SSR disabled) |
 | UI component library | PrimeVue 4 (Aura preset via `@primevue/themes`) |
+| Styling & theming | App-owned CSS tokens in `assets/css/main.css` plus PrimeVue Aura semantic tokens from `assets/primevue-theme.ts` |
 | Icons | PrimeIcons 7 (`primeicons`) for `pi pi-*` UI icons; Iconify + `@iconify-json/mdi` for diagram/canvas icons via `@iconify/vue` |
 | State management | Pinia |
 | Diagram engine | Vue Flow (`@vue-flow/core`) + `@vue-flow/controls` + `@vue-flow/background` + `@vue-flow/minimap` |
@@ -67,11 +69,13 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 | AWS AI | @aws-sdk/client-bedrock-runtime |
 | Language | TypeScript 5 |
 
+When auditing or refactoring styles, treat both token sources as valid. `assets/css/main.css` owns the app's layout and base-color variables and mirrors PrimeVue semantic tokens with fallback aliases so component styles keep resolving even before the runtime theme layer is applied.
+
 ---
 
 ## Azure Network Components
 
-The simulator supports the following 27 component types:
+The simulator supports the following 27 user-managed Azure component types, plus one system-managed canvas entity that appears automatically on non-empty diagrams:
 
 | Category | Components |
 |---|---|
@@ -85,6 +89,7 @@ The simulator supports the following 27 component types:
 | Storage | Storage Account, Blob Storage, Managed Disk |
 | Identity & secrets | Managed Identity, Key Vault |
 | Endpoints | Service Endpoint, Private Endpoint |
+| System-managed canvas entity | Public Internet |
 
 ---
 
@@ -335,7 +340,7 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 │   ├── primevue-theme.ts    # PrimeVue Aura theme config (preset + darkModeSelector)
 │   └── css/                 # Global and diagram-specific styles
 ├── components/
-│   ├── diagram/             # Canvas, custom nodes, and edge components (Vue Flow)
+│   ├── diagram/             # Canvas, custom nodes, and edge components (Vue Flow, including connection-test animation mode)
 │   ├── forms/               # Per-component property forms (one per NetworkComponentType)
 │   ├── layout/              # AppHeader, LeftPanel, RightPanel, BottomToolbar
 │   ├── modals/              # Auth, settings, saved setups, challenge, confirm dialogs
@@ -360,7 +365,7 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 | Composable | Responsibility |
 |---|---|
 | `useAuth` | Exposes auth state and actions from the auth Pinia store |
-| `useDiagram` | CRUD operations for nodes and edges on the diagram canvas |
+| `useDiagram` | CRUD operations for nodes plus programmatic management of system-rendered edges and the temporary animation-mode overlay |
 | `useAI` | Triggers Bedrock challenge generation via the challenges store |
 | `useS3` | Save, load, and delete diagram setups to/from S3 and local cache |
 | `useExport` | Exports the canvas to PNG, SVG, PDF, draw.io, or VSDX |

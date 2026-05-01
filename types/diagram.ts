@@ -10,6 +10,25 @@ export interface DiagramEdge extends Edge {
   animated?: boolean
 }
 
+export type DiagramViewMode = 'infrastructure' | 'animation'
+
+export type AnimationVisualState = 'pending' | 'active' | 'pass' | 'fail' | 'warning'
+
+export type AnimationTerminalState = 'pass' | 'fail' | 'warning'
+
+export interface DiagramAnimationSession {
+  activeTestId: string
+  path: string[]
+  overlayEdges: DiagramEdge[]
+  nodeStates: Record<string, AnimationVisualState>
+  edgeStates: Record<string, AnimationVisualState>
+  activeEdgeId: string | null
+  travelerVisible: boolean
+  segmentDurationMs: number
+  terminalState: AnimationTerminalState
+  isRunning: boolean
+}
+
 export enum EdgeType {
   DEFAULT = 'network-edge',
   ANIMATED = 'animated-edge',

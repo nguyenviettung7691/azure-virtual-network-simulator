@@ -27,15 +27,6 @@
         {{ label }}
       </textPath>
     </text>
-    <!-- Wider invisible hit area for easier clicking -->
-    <path
-      :d="path"
-      fill="none"
-      stroke="transparent"
-      stroke-width="20"
-      style="cursor: pointer"
-      @click="emit('click', { edge: props })"
-    />
   </g>
 </template>
 
@@ -59,12 +50,8 @@ interface NetworkEdgeProps extends EdgeProps {
 }
 
 const props = defineProps<NetworkEdgeProps>()
-const emit = defineEmits(['click'])
 
-const edgeColor = computed(() => {
-  if (props.selected) return '#0078d4'
-  return props.data.color || '#999999'
-})
+const edgeColor = computed(() => props.data.color || '#999999')
 
 const path = computed(() => {
   const [edgePath] = getBezierPath({
@@ -80,7 +67,7 @@ const path = computed(() => {
 
 const edgeStyle = computed(() => ({
   stroke: edgeColor.value,
-  strokeWidth: props.selected ? 2.5 : 1.5,
+  strokeWidth: 1.5,
   strokeDasharray: props.data.animated ? '5,5' : undefined,
   animation: props.data.animated ? 'dashdraw 0.5s linear infinite' : undefined,
   ...(props.style || {}),

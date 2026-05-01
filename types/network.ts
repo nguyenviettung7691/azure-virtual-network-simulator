@@ -26,6 +26,7 @@ export enum NetworkComponentType {
   PRIVATE_ENDPOINT = 'PRIVATE_ENDPOINT',
   FIREWALL = 'FIREWALL',
   BASTION = 'BASTION',
+  INTERNET = 'INTERNET',
 }
 
 export interface NetworkComponent {
@@ -36,6 +37,11 @@ export interface NetworkComponent {
   tags?: Record<string, string>
   createdAt: string
   parentId?: string
+}
+
+export interface InternetComponent extends NetworkComponent {
+  type: NetworkComponentType.INTERNET
+  systemManaged: true
 }
 
 export interface VNetComponent extends NetworkComponent {
@@ -409,6 +415,7 @@ export type AnyNetworkComponent =
   | PrivateEndpointComponent
   | FirewallComponent
   | BastionComponent
+  | InternetComponent
 
 export const COMPONENT_COLORS: Record<NetworkComponentType, string> = {
   [NetworkComponentType.VNET]: '#0078d4',
@@ -438,6 +445,7 @@ export const COMPONENT_COLORS: Record<NetworkComponentType, string> = {
   [NetworkComponentType.PRIVATE_ENDPOINT]: '#005a9e',
   [NetworkComponentType.FIREWALL]: '#d13438',
   [NetworkComponentType.BASTION]: '#004578',
+  [NetworkComponentType.INTERNET]: '#0f6cbd',
 }
 
 export const COMPONENT_ICONS: Record<NetworkComponentType, string> = {
@@ -468,6 +476,7 @@ export const COMPONENT_ICONS: Record<NetworkComponentType, string> = {
   [NetworkComponentType.PRIVATE_ENDPOINT]: 'mdi:shield-lock-outline',
   [NetworkComponentType.FIREWALL]: 'mdi:wall-fire',
   [NetworkComponentType.BASTION]: 'mdi:castle',
+  [NetworkComponentType.INTERNET]: 'mdi:web',
 }
 
 export function getComponentColor(type: NetworkComponentType): string {
@@ -507,6 +516,7 @@ export function getComponentLabel(type: NetworkComponentType): string {
     [NetworkComponentType.PRIVATE_ENDPOINT]: 'Private Endpoint',
     [NetworkComponentType.FIREWALL]: 'Azure Firewall',
     [NetworkComponentType.BASTION]: 'Azure Bastion',
+    [NetworkComponentType.INTERNET]: 'Public Internet',
   }
   return labels[type] || type
 }

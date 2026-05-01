@@ -22,6 +22,20 @@
   z-index: 10;
 }
 
+.animation-mode-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 16;
+}
+
+.animation-mode-banner :deep(.p-button) {
+  min-width: 176px;
+  justify-content: center;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+}
+
 .canvas-empty-state {
   position: absolute;
   top: 50%;
@@ -177,4 +191,75 @@
 .diagram-canvas-wrapper.is-interactive .generic-node-name,
 .diagram-canvas-wrapper.is-interactive .node-name {
   cursor: pointer;
+}
+
+/* ============================================================
+   Animation Mode
+   ============================================================ */
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node {
+  transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--idle {
+  opacity: 0.24;
+  filter: saturate(0.55);
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--pending {
+  opacity: 0.62;
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--active {
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--pass,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--fail,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--warning {
+  opacity: 1;
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--active .generic-node-content {
+  box-shadow: 0 0 0 3px rgba(15, 108, 189, 0.25), 0 14px 24px rgba(15, 108, 189, 0.18);
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--pass .generic-node-content {
+  box-shadow: 0 0 0 3px rgba(16, 124, 16, 0.22), 0 12px 22px rgba(16, 124, 16, 0.16);
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--fail .generic-node-content {
+  box-shadow: 0 0 0 3px rgba(209, 52, 56, 0.22), 0 12px 22px rgba(209, 52, 56, 0.14);
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--warning .generic-node-content {
+  box-shadow: 0 0 0 3px rgba(193, 156, 0, 0.22), 0 12px 22px rgba(193, 156, 0, 0.14);
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--active .vnet-node,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--active .subnet-node,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--active .internet-shell {
+  box-shadow: 0 0 0 3px rgba(15, 108, 189, 0.2), 0 16px 30px rgba(15, 108, 189, 0.2);
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--pass .vnet-node,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--pass .subnet-node,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--pass .internet-shell {
+  border-color: #107c10 !important;
+  box-shadow: 0 0 0 3px rgba(16, 124, 16, 0.2), 0 16px 30px rgba(16, 124, 16, 0.18);
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--fail .vnet-node,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--fail .subnet-node,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--fail .internet-shell {
+  border-color: #d13438 !important;
+  box-shadow: 0 0 0 3px rgba(209, 52, 56, 0.18), 0 16px 30px rgba(209, 52, 56, 0.16);
+}
+
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--warning .vnet-node,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--warning .subnet-node,
+.diagram-canvas-wrapper.is-animation-mode .vue-flow__node.animation-node--warning .internet-shell {
+  border-color: #c19c00 !important;
+  box-shadow: 0 0 0 3px rgba(193, 156, 0, 0.18), 0 16px 30px rgba(193, 156, 0, 0.14);
 }
