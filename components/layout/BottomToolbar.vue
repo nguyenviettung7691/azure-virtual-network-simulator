@@ -20,15 +20,22 @@
     <Divider layout="vertical" />
 
     <div class="toolbar-group">
-      <Button
-        v-tooltip.top="'Save current setup to cloud'"
-        icon="pi pi-save"
-        text
-        size="small"
-        label="Save Setup"
-        :loading="isSaving"
-        @click="onSaveSetup"
-      />
+      <span class="save-button-wrap">
+        <Button
+          v-tooltip.top="'Save current setup to cloud'"
+          icon="pi pi-save"
+          text
+          size="small"
+          label="Save Setup"
+          :loading="isSaving"
+          @click="onSaveSetup"
+        />
+        <span
+          v-if="diagramStore.isDirty"
+          class="save-button-badge"
+          aria-hidden="true"
+        />
+      </span>
     </div>
 
     <Divider layout="vertical" />
@@ -62,11 +69,11 @@
     <div class="toolbar-spacer" />
 
     <div class="toolbar-status">
+      <span v-if="diagramStore.isDirty" class="unsaved-indicator">● Unsaved</span>
       <span class="status-text">
         <Icon icon="mdi:vector-polygon" class="status-icon" />
         {{ diagramStore.nodeCount }} nodes · {{ diagramStore.edgeCount }} edges
       </span>
-      <span v-if="diagramStore.isDirty" class="unsaved-indicator">● Unsaved</span>
     </div>
   </footer>
 
@@ -189,7 +196,7 @@ function onReset() {
   align-items: center;
   gap: 0.5rem;
   padding: 0 0.75rem;
-  height: var(--bottom-toolbar-height, 44px);
+  height: var(--bottom-toolbar-height);
   background: var(--surface-card);
   border-top: 1px solid var(--surface-border);
   box-shadow: 0 -1px 4px rgba(0,0,0,0.06);
@@ -201,6 +208,23 @@ function onReset() {
   display: flex;
   align-items: center;
   gap: 0.15rem;
+}
+
+.save-button-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.save-button-badge {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--warning);
+  box-shadow: 0 0 0 2px var(--surface-card);
+  pointer-events: none;
 }
 
 .group-label {
@@ -229,7 +253,7 @@ function onReset() {
 }
 
 .unsaved-indicator {
-  color: var(--yellow-500);
+  color: var(--warning);
   font-weight: 600;
 }
 

@@ -146,8 +146,8 @@ function openSetups() {
   align-items: center;
   gap: 0.5rem;
   padding: 0 0.75rem;
-  height: var(--header-height, 84px);
-  min-height: var(--header-height, 84px);
+  height: var(--header-height);
+  min-height: var(--header-height);
   background: var(--surface-card);
   border-bottom: 1px solid var(--surface-border);
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);

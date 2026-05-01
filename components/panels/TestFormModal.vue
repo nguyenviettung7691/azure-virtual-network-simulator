@@ -134,14 +134,18 @@ const TARGET_TYPES_BY_TEST: Record<string, NetworkComponentType[]> = {
   ],
 }
 
+const visibleTestNodes = computed(() =>
+  diagramStore.nodes.filter(node => node.data.type !== NetworkComponentType.INTERNET)
+)
+
 const allNodeOptions = computed(() =>
-  diagramStore.nodes.map(n => ({ label: `${n.data.name} (${n.data.type})`, value: n.id }))
+  visibleTestNodes.value.map(n => ({ label: `${n.data.name} (${n.data.type})`, value: n.id }))
 )
 
 const sourceOptions = computed(() => {
   const allowedTypes = SOURCE_TYPES_BY_TEST[form.value.type]
   const nodeOpts = allowedTypes
-    ? diagramStore.nodes
+    ? visibleTestNodes.value
         .filter(n => allowedTypes.includes(n.data.type))
         .map(n => ({ label: `${n.data.name} (${n.data.type})`, value: n.id }))
     : allNodeOptions.value
@@ -154,13 +158,13 @@ const sourceOptions = computed(() => {
 const targetOptions = computed(() => {
   const allowedTypes = TARGET_TYPES_BY_TEST[form.value.type]
   if (!allowedTypes) return allNodeOptions.value
-  return diagramStore.nodes
+  return visibleTestNodes.value
     .filter(n => allowedTypes.includes(n.data.type))
     .map(n => ({ label: `${n.data.name} (${n.data.type})`, value: n.id }))
 })
 
 const dnsOptions = computed(() =>
-  diagramStore.nodes.filter(n => n.data.type === NetworkComponentType.DNS_ZONE)
+  visibleTestNodes.value.filter(n => n.data.type === NetworkComponentType.DNS_ZONE)
     .map(n => ({ label: n.data.name, value: n.id }))
 )
 

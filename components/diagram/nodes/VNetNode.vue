@@ -2,7 +2,6 @@
   <div
     class="vnet-node diagram-node"
     :class="{ selected }"
-    :style="{ width: `${nodeWidth}px`, height: `${nodeHeight}px` }"
     @dblclick="onDblClick"
   >
     <Handle type="source" :position="Position.Right" />
@@ -44,17 +43,10 @@ interface Props {
   id: string
   data: VNetComponent
   selected?: boolean
-  /** Node width passed by Vue Flow (set in diagram store) */
-  width?: number
-  /** Node height passed by Vue Flow (set in diagram store) */
-  height?: number
 }
 
 const props = defineProps<Props>()
 const diagramStore = useDiagramStore()
-
-const nodeWidth = computed(() => props.width || 400)
-const nodeHeight = computed(() => props.height || 300)
 
 function onDblClick() {
   diagramStore.openEditComponentModal(props.data)
@@ -63,6 +55,9 @@ function onDblClick() {
 
 <style scoped>
 .vnet-node {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   background-color: rgba(0, 120, 212, 0.05);
   border: 2px solid #0078d4;
   border-radius: 8px;
@@ -102,7 +97,7 @@ function onDblClick() {
 
 .node-label {
   font-size: 10px;
-  color: #605e5c;
+  color: var(--text-muted, #605e5c);
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -118,8 +113,8 @@ function onDblClick() {
 
 .node-region {
   font-size: 10px;
-  color: #605e5c;
-  background-color: rgba(0, 120, 212, 0.1);
+  color: var(--text, #323130);
+  background-color: rgba(0, 120, 212, 0.18);
   padding: 2px 6px;
   border-radius: 10px;
   white-space: nowrap;
@@ -138,12 +133,12 @@ function onDblClick() {
 }
 
 .prop-label {
-  color: #605e5c;
+  color: var(--text-muted, #605e5c);
   flex-shrink: 0;
 }
 
 .prop-value {
-  color: #323130;
+  color: var(--text, #323130);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;

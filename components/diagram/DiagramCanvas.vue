@@ -1,10 +1,19 @@
 <template>
-    <div class="diagram-canvas-wrapper" :class="{ 'is-interactive': isInteractive }" ref="canvasWrapper">
+    <div
+      class="diagram-canvas-wrapper"
+      :class="{ 'is-interactive': isInteractive, 'is-animation-mode': isAnimationMode }"
+      ref="canvasWrapper"
+    >
     <VueFlow
       v-model:nodes="nodes"
       v-model:edges="edges"
       :node-types="nodeTypes"
       :edge-types="edgeTypes"
+      :nodes-draggable="nodesDraggable"
+      :elements-selectable="elementsSelectable"
+      :nodes-connectable="false"
+      :edges-updatable="false"
+      :connect-on-click="false"
       :default-viewport="{ zoom: 1, x: 0, y: 0 }"
       :min-zoom="0.1"
       :max-zoom="4"
@@ -16,7 +25,6 @@
       @edge-click="onEdgeClick"
       @pane-click="onPaneClick"
       @node-double-click="onNodeDblClick"
-      @connect="onConnect"
       @nodes-change="onNodesChange"
       @edges-change="onEdgesChange"
       @viewport-change="onViewportChange"
@@ -42,7 +50,7 @@
           <ControlButton
             v-tooltip.right="isInteractive ? 'Lock Interactions' : 'Unlock Interactions'"
             :class="{ 'control-locked': !isInteractive }"
-            @click="setInteractive(!isInteractive)"
+            @click="toggleInteractive()"
           >
             <Icon :icon="isInteractive ? 'mdi:lock-open-outline' : 'mdi:lock-outline'" style="width:22px;height:22px" />
           </ControlButton>
@@ -59,7 +67,7 @@
     </VueFlow>
 
     <!-- Empty state — lives outside VueFlow so it never inherits the pane grab cursor -->
-    <div v-if="nodes.length === 0" class="canvas-empty-state">
+    <div v-if="diagramStore.nodes.length === 0" class="canvas-empty-state">
       <Icon icon="mdi:draw" class="empty-icon" />
       <p class="empty-title">Start building your Azure network</p>
       <p class="empty-subtitle">Click component icons in the toolbar above to add components</p>
@@ -84,11 +92,24 @@
       </div>
     </div>
 
+    <div v-if="isAnimationMode" class="animation-mode-banner">
+      <Button
+        label="Exit animation"
+        severity="secondary"
+        @click="exitAnimation"
+      >
+        <template #icon>
+          <Icon icon="mdi:close-circle-outline" class="p-button-icon p-button-icon-left" />
+        </template>
+      </Button>
+    </div>
+
     <!-- Canvas toolbar overlay -->
     <div class="canvas-toolbar">
       <Button
         v-tooltip.bottom="'Auto Layout'"
         severity="secondary"
+        :disabled="isAnimationMode"
         @click="onAutoLayout"
       >
         <template #icon>
@@ -98,6 +119,7 @@
       <Button
         v-tooltip.bottom="snapToGrid ? 'Disable snap' : 'Snap to grid'"
         :severity="snapToGrid ? 'primary' : 'secondary'"
+        :disabled="isAnimationMode"
         @click="snapToGrid = !snapToGrid"
       >
         <template #icon>
@@ -144,16 +166,23 @@ import VnetPeeringNode from './nodes/VnetPeeringNode.vue'
 import ComputeNode from './nodes/ComputeNode.vue'
 import StorageNode from './nodes/StorageNode.vue'
 import IdentityNode from './nodes/IdentityNode.vue'
+import InternetNode from './nodes/InternetNode.vue'
 import NetworkICNode from './nodes/NetworkICNode.vue'
 import NetworkEdge from './edges/NetworkEdge.vue'
+import AnimationEdge from './edges/AnimationEdge.vue'
 
 const diagramStore = useDiagramStore()
 const testsStore = useTestsStore()
-const { fitView, zoomIn, zoomOut, setInteractive, setNodes, setEdges, setViewport, nodesDraggable, nodesConnectable, elementsSelectable } = useVueFlow()
-const isInteractive = computed(() => nodesDraggable.value || nodesConnectable.value || elementsSelectable.value)
+const { fitView, zoomIn, zoomOut, setNodes, setEdges, setViewport, nodesDraggable, elementsSelectable } = useVueFlow()
+const isInteractive = computed(() => nodesDraggable.value || elementsSelectable.value)
+const isAnimationMode = computed(() => diagramStore.viewMode === 'animation')
 
 const canvasWrapper = ref<HTMLElement | null>(null)
 const snapToGrid = ref(false)
+const restoreInteractiveAfterAnimation = ref(false)
+
+nodesDraggable.value = false
+elementsSelectable.value = false
 
 // Sync Vue Flow's internal node/edge state whenever Pinia store actions that
 // bypass Vue Flow's own v-model update path (reset, autoLayout, loadDiagram).
@@ -168,14 +197,13 @@ onMounted(() => {
     }
     if (name === 'autoLayout') {
       after(() => nextTick(() => {
-        setNodes([...diagramStore.nodes] as any)
+        syncRenderedGraph()
         nextTick(() => fitView())
       }))
     }
     if (name === 'loadDiagram') {
       after(() => nextTick(() => {
-        setNodes([...diagramStore.nodes] as any)
-        setEdges([...diagramStore.edges] as any)
+        syncRenderedGraph()
         nextTick(() => fitView())
       }))
     }
@@ -183,16 +211,27 @@ onMounted(() => {
   onUnmounted(unsub)
 })
 
-import type { DiagramEdge } from '~/types/diagram'
+import type { DiagramAnimationSession, DiagramEdge, DiagramNode } from '~/types/diagram'
 
 const nodes = computed({
-  get: () => diagramStore.nodes,
-  set: (val) => { diagramStore.nodes = val as any },
+  get: () => {
+    if (!diagramStore.animationSession || !isAnimationMode.value) return diagramStore.nodes
+    return diagramStore.nodes.map(node => decorateAnimationNode(node, diagramStore.animationSession))
+  },
+  set: (val) => {
+    if (isAnimationMode.value) return
+    diagramStore.nodes = val as any
+  },
 })
 
 const edges = computed({
-  get: () => diagramStore.edges as any[],
-  set: (val) => { diagramStore.edges = val as any },
+  get: () => (isAnimationMode.value && diagramStore.animationSession
+    ? diagramStore.animationSession.overlayEdges as any[]
+    : diagramStore.edges as any[]),
+  set: (val) => {
+    if (isAnimationMode.value) return
+    diagramStore.edges = val as any
+  },
 })
 
 const nodeTypes: NodeTypesObject = {
@@ -211,16 +250,38 @@ const nodeTypes: NodeTypesObject = {
   'compute-node': markRaw(ComputeNode) as any,
   'storage-node': markRaw(StorageNode) as any,
   'identity-node': markRaw(IdentityNode) as any,
+  'internet-node': markRaw(InternetNode) as any,
   'network-ic-node': markRaw(NetworkICNode) as any,
 }
 
 const edgeTypes: EdgeTypesObject = {
   'network-edge': markRaw(NetworkEdge) as any,
+  'animation-edge': markRaw(AnimationEdge) as any,
 }
+
+watch(isAnimationMode, (next, prev) => {
+  if (next) {
+    restoreInteractiveAfterAnimation.value = isInteractive.value
+    nodesDraggable.value = false
+    elementsSelectable.value = false
+  } else if (prev) {
+    nodesDraggable.value = restoreInteractiveAfterAnimation.value
+    elementsSelectable.value = restoreInteractiveAfterAnimation.value
+  }
+
+  nextTick(() => syncRenderedGraph())
+})
+
+watch(
+  () => diagramStore.animationSession,
+  () => nextTick(() => syncRenderedGraph()),
+  { deep: true },
+)
 
 function onNodeClick({ node }: any) {
   if (!isInteractive.value) return  // Locked — ignore all node interactions
   diagramStore.setSelectedNode(node.id)
+  if (node.data?.type === NetworkComponentType.INTERNET) return
   diagramStore.openEditComponentModal(node.data)
 }
 
@@ -234,20 +295,6 @@ function onEdgeClick(_payload: any) {
 
 function onPaneClick() {
   diagramStore.setSelectedNode(null)
-}
-
-function onConnect(params: any) {
-  const edgeId = `edge-${params.source}-${params.target}-${Date.now()}`
-  diagramStore.addEdge({
-    id: edgeId,
-    source: params.source,
-    target: params.target,
-    sourceHandle: params.sourceHandle,
-    targetHandle: params.targetHandle,
-    type: 'network-edge',
-    label: '',
-    data: { color: '#0078d4' },
-  } as DiagramEdge)
 }
 
 function onNodesChange(_changes: any[]) {
@@ -264,6 +311,17 @@ function onViewportChange(viewport: any) {
 
 function onAutoLayout() {
   diagramStore.autoLayout()
+}
+
+function toggleInteractive() {
+  if (isAnimationMode.value) return
+  const next = !isInteractive.value
+  nodesDraggable.value = next
+  elementsSelectable.value = next
+}
+
+function exitAnimation() {
+  diagramStore.stopAnimation()
 }
 
 function getNodeColor(node: any): string {
@@ -479,7 +537,7 @@ function loadSampleDiagram() {
     createdAt: now,
   } as any, { x: 880, y: 810 })
 
-  // Edges (containment edges Subnet→VNet are omitted — expressed via parentNode after auto-layout)
+  // Edges (containment is expressed by parentNode after auto-layout; only attachment edges are drawn)
   const makeEdge = (source: string, target: string): DiagramEdge => ({
     id: `edge-${source}-${target}`,
     source,
@@ -500,12 +558,6 @@ function loadSampleDiagram() {
   diagramStore.addEdge(makeEdge(nic1Id, vm1Id))
   diagramStore.addEdge(makeEdge(nic2Id, vm2Id))
   diagramStore.addEdge(makeEdge(nic3Id, vm3Id))
-  // VMs → Subnets
-  diagramStore.addEdge(makeEdge(vm1Id, subnet1Id))
-  diagramStore.addEdge(makeEdge(vm2Id, subnet1Id))
-  diagramStore.addEdge(makeEdge(vm3Id, subnet3Id))
-  diagramStore.addEdge(makeEdge(vm4Id, subnet2Id))
-
   // Pre-built connection tests: Public Internet → each VM on port 80
   // Replace any existing tests so the sample always starts fresh.
   testsStore.clearAllTests()
@@ -523,5 +575,28 @@ function loadSampleDiagram() {
   // Apply auto-layout so containers visually wrap their children;
   // the $onAction handler for autoLayout will sync Vue Flow and call fitView().
   nextTick(() => diagramStore.autoLayout())
+}
+
+function syncRenderedGraph() {
+  setNodes([...nodes.value] as any)
+  setEdges([...edges.value] as any)
+}
+
+function decorateAnimationNode(node: DiagramNode, session: DiagramAnimationSession): DiagramNode {
+  const stateClass = session.nodeStates[node.id]
+    ? `animation-node animation-node--${session.nodeStates[node.id]}`
+    : 'animation-node animation-node--idle'
+
+  return {
+    ...node,
+    class: mergeNodeClass((node as any).class, stateClass),
+    selected: false,
+  }
+}
+
+function mergeNodeClass(currentClass: unknown, nextClass: string): string {
+  return [typeof currentClass === 'string' ? currentClass : '', nextClass]
+    .filter(Boolean)
+    .join(' ')
 }
 </script>

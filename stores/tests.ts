@@ -3,6 +3,14 @@ import type { NetworkTest, TestResult, TestType, TestStatus, TestCondition } fro
 import { INTERNET_SOURCE_ID } from '~/types/test'
 import { NetworkComponentType } from '~/types/network'
 
+type DiagramEntity = {
+  id: string
+  parentNode?: string
+  data?: Record<string, any>
+}
+
+type RelationshipGraph = Map<string, Set<string>>
+
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
 }
@@ -70,7 +78,7 @@ export const useTestsStore = defineStore('tests', {
 
     async runTest(testId: string, nodes: any[], edges: any[]) {
       const test = this.tests.find(t => t.id === testId)
-      if (!test) return
+      if (!test) return null
 
       this.updateTest(testId, {
         status: 'running' as TestStatus,
@@ -85,6 +93,8 @@ export const useTestsStore = defineStore('tests', {
         result,
         runAt: new Date().toISOString(),
       })
+
+      return result
     },
 
     async runAllTests(nodes: any[], edges: any[]) {
@@ -165,7 +175,7 @@ function simulateConnectionTest(test: NetworkTest, nodes: any[], edges: any[], t
     }
   }
 
-  const path = findPath(sourceNode.id, targetNode.id, nodes, edges)
+  const path = findConnectionPath(sourceNode.id, targetNode.id, nodes, edges)
   if (!path || path.length === 0) {
     return {
       status: 'warning',
@@ -176,7 +186,9 @@ function simulateConnectionTest(test: NetworkTest, nodes: any[], edges: any[], t
 
   const nsgBlocking = checkNsgBlocking(path, nodes, test.condition)
   if (nsgBlocking) {
-    return { status: 'fail', message: `Connection blocked by NSG: ${nsgBlocking}`, timestamp, path }
+    const blockingId = findBlockingNsgId(path, nodes, test.condition)
+    const truncatedPath = blockingId !== null ? path.slice(0, path.indexOf(blockingId) + 1) : path
+    return { status: 'fail', message: `Connection blocked by NSG: ${nsgBlocking}`, timestamp, path: truncatedPath }
   }
 
   return {
@@ -187,6 +199,66 @@ function simulateConnectionTest(test: NetworkTest, nodes: any[], edges: any[], t
     hopCount: path.length,
     latencyMs: Math.floor(Math.random() * 5) + 1,
   }
+}
+
+/**
+ * Build the physical inbound traversal path: Internet → VNet → Subnet → SubnetNSG? → NIC? → NICNSG? → VM?
+ * Stops at blockingNsgId (inclusive) for failed connections; includes target VM for passing connections.
+ */
+function buildInternetTraversalPath(targetNode: any, blockingNsgId: string | null, nodes: any[]): string[] {
+  const d = targetNode.data as any
+  const path: string[] = ['Internet']
+
+  // Resolve subnet: directly from component or via first NIC
+  let subnetId: string | undefined = d.subnetId
+  if (!subnetId && d.nicIds?.length) {
+    const firstNic = nodes.find((n: any) => n.id === d.nicIds[0])
+    subnetId = firstNic?.data?.subnetId
+  }
+  const subnetNode = subnetId ? nodes.find((n: any) => n.id === subnetId) : undefined
+
+  // VNet
+  if (subnetNode) {
+    const vnetId: string | undefined = subnetNode.data?.vnetId || subnetNode.parentNode
+    if (vnetId && nodes.find((n: any) => n.id === vnetId)) path.push(vnetId)
+  }
+
+  // Subnet
+  if (subnetNode) {
+    path.push(subnetNode.id)
+    // Subnet NSG
+    const subnetNsgId: string | undefined = subnetNode.data?.nsgId
+    if (subnetNsgId) {
+      path.push(subnetNsgId)
+      if (subnetNsgId === blockingNsgId) return path
+    }
+  }
+
+  // NICs and their NSGs (physical traversal order)
+  if (d.nicIds?.length) {
+    for (const nicId of d.nicIds as string[]) {
+      const nicNode = nodes.find((n: any) => n.id === nicId)
+      if (!nicNode) continue
+      path.push(nicId)
+      const nicNsgId: string | undefined = nicNode.data?.nsgId
+      if (nicNsgId) {
+        path.push(nicNsgId)
+        if (nicNsgId === blockingNsgId) return path
+      }
+    }
+  }
+
+  // Direct component NSG (rare — handles components with nsgId on the node itself)
+  const vmNsgId: string | undefined = d.nsgId
+  if (vmNsgId) {
+    path.push(vmNsgId)
+    if (vmNsgId === blockingNsgId) return path
+  }
+
+  // Target component — only included when traffic was allowed
+  if (blockingNsgId === null) path.push(targetNode.id)
+
+  return path
 }
 
 function simulateInternetConnectionTest(test: NetworkTest, nodes: any[], timestamp: string): TestResult {
@@ -200,7 +272,7 @@ function simulateInternetConnectionTest(test: NetworkTest, nodes: any[], timesta
   const d = targetNode.data as any
   const portStr = port ? String(port) : undefined
 
-  // Collect NSGs that apply to this target: NIC NSGs and Subnet NSG
+  // Collect NSGs in evaluation order: NIC NSGs → component NSG → Subnet NSG
   const applicableNsgs: any[] = []
 
   if (d.nicIds?.length) {
@@ -227,45 +299,61 @@ function simulateInternetConnectionTest(test: NetworkTest, nodes: any[], timesta
   }
 
   if (applicableNsgs.length === 0) {
+    const traversalPath = buildInternetTraversalPath(targetNode, null, nodes)
     return {
       status: 'warning',
       message: `No NSGs found protecting ${d.name}. Inbound port ${port ?? 'any'} traffic from Internet is unrestricted.`,
+      path: traversalPath,
       timestamp,
     }
   }
 
-  // Check rules from highest-priority (lowest priority number) first
+  // Find the first matching NSG rule (highest-priority = lowest number first)
+  let matchedNsg: any = null
+  let matchedRule: any = null
+
   for (const nsg of applicableNsgs) {
     const rules = (nsg.data?.securityRules || []).slice().sort((a: any, b: any) => a.priority - b.priority)
     for (const rule of rules) {
       if (rule.direction !== 'Inbound') continue
       const portMatches = !portStr || rule.destinationPortRange === '*' || rule.destinationPortRange === portStr
       if (!portMatches) continue
-      if (rule.access === 'Deny') {
-        return {
-          status: 'fail',
-          message: `Connection from Internet to ${d.name}:${port} blocked by NSG "${nsg.data.name}" rule "${rule.name}"`,
-          path: ['Internet', `NSG: ${nsg.data.name}`, d.name],
-          timestamp,
-        }
+      if (rule.access === 'Deny' || rule.access === 'Allow') {
+        matchedNsg = nsg
+        matchedRule = rule
+        break
       }
-      if (rule.access === 'Allow') {
-        return {
-          status: 'pass',
-          message: `Connection from Internet to ${d.name}:${port} is allowed by NSG "${nsg.data.name}" rule "${rule.name}"`,
-          path: ['Internet', d.name],
-          hopCount: 3,
-          latencyMs: Math.floor(Math.random() * 20) + 5,
-          timestamp,
-        }
-      }
+    }
+    if (matchedNsg) break
+  }
+
+  if (!matchedNsg || !matchedRule) {
+    // No matching rule — default Azure deny
+    return {
+      status: 'fail',
+      message: `No matching Allow rule found on NSGs for ${d.name}:${port}. Traffic blocked by default deny.`,
+      timestamp,
     }
   }
 
-  // No matching rule found — default Azure deny
+  const blockingNsgId = matchedRule.access === 'Deny' ? (matchedNsg.id as string) : null
+  const traversalPath = buildInternetTraversalPath(targetNode, blockingNsgId, nodes)
+
+  if (matchedRule.access === 'Deny') {
+    return {
+      status: 'fail',
+      message: `Connection from Internet to ${d.name}:${port} blocked by NSG "${matchedNsg.data.name}" rule "${matchedRule.name}"`,
+      path: traversalPath,
+      timestamp,
+    }
+  }
+
   return {
-    status: 'fail',
-    message: `No matching Allow rule found on NSGs for ${d.name}:${port}. Traffic blocked by default deny.`,
+    status: 'pass',
+    message: `Connection from Internet to ${d.name}:${port} is allowed by NSG "${matchedNsg.data.name}" rule "${matchedRule.name}"`,
+    path: traversalPath,
+    hopCount: traversalPath.length,
+    latencyMs: Math.floor(Math.random() * 20) + 5,
     timestamp,
   }
 }
@@ -397,7 +485,8 @@ function simulateDnsTest(test: NetworkTest, nodes: any[], edges: any[], timestam
   }
 }
 
-function findPath(sourceId: string, targetId: string, nodes: any[], edges: any[]): string[] {
+function findConnectionPath(sourceId: string, targetId: string, nodes: DiagramEntity[], edges: any[]): string[] {
+  const relationships = buildRelationshipGraph(nodes, edges)
   const visited = new Set<string>()
   const queue: string[][] = [[sourceId]]
 
@@ -408,9 +497,7 @@ function findPath(sourceId: string, targetId: string, nodes: any[], edges: any[]
     if (visited.has(current)) continue
     visited.add(current)
 
-    const neighbors = edges
-      .filter((e: any) => e.source === current || e.target === current)
-      .map((e: any) => e.source === current ? e.target : e.source)
+    const neighbors = [...(relationships.get(current) || [])]
       .filter((id: string) => !visited.has(id))
 
     for (const neighbor of neighbors) {
@@ -419,6 +506,130 @@ function findPath(sourceId: string, targetId: string, nodes: any[], edges: any[]
   }
 
   return []
+}
+
+function buildRelationshipGraph(nodes: DiagramEntity[], edges: any[]): RelationshipGraph {
+  const graph: RelationshipGraph = new Map()
+  const nodeIds = new Set(nodes.map(node => node.id))
+
+  const connect = (left?: string | null, right?: string | null) => {
+    if (!left || !right || left === right) return
+    if (!nodeIds.has(left) || !nodeIds.has(right)) return
+
+    if (!graph.has(left)) graph.set(left, new Set())
+    if (!graph.has(right)) graph.set(right, new Set())
+
+    graph.get(left)!.add(right)
+    graph.get(right)!.add(left)
+  }
+
+  for (const node of nodes) {
+    if (!graph.has(node.id)) graph.set(node.id, new Set())
+  }
+
+  edges.forEach((edge: any) => connect(edge.source, edge.target))
+
+  nodes.forEach((node) => {
+    const data = node.data || {}
+    const parentLink = getParentRelationship(node)
+    if (parentLink) connect(node.id, parentLink)
+
+    if (Array.isArray(data.nicIds)) {
+      data.nicIds.forEach((nicId: string) => connect(node.id, nicId))
+    }
+
+    if (Array.isArray(data.subnetIds)) {
+      data.subnetIds.forEach((subnetId: string) => connect(node.id, subnetId))
+    }
+
+    if (Array.isArray(data.asgIds)) {
+      data.asgIds.forEach((asgId: string) => connect(node.id, asgId))
+    }
+
+    if (Array.isArray(data.publicIpIds)) {
+      data.publicIpIds.forEach((publicIpId: string) => connect(node.id, publicIpId))
+    }
+
+    if (Array.isArray(data.vnetLinks)) {
+      data.vnetLinks.forEach((vnetId: string) => connect(node.id, vnetId))
+    }
+
+    if (Array.isArray(data.virtualNetworkRules)) {
+      data.virtualNetworkRules.forEach((resourceId: string) => connect(node.id, resourceId))
+    }
+
+    if (Array.isArray(data.backendPools)) {
+      data.backendPools.forEach((backendPool: any) => {
+        if (typeof backendPool === 'string') connect(node.id, backendPool)
+        if (Array.isArray(backendPool?.nicIds)) {
+          backendPool.nicIds.forEach((nicId: string) => connect(node.id, nicId))
+        }
+      })
+    }
+
+    if (Array.isArray(data.frontendIpConfigs)) {
+      data.frontendIpConfigs.forEach((frontend: any) => {
+        connect(node.id, frontend?.subnetId)
+        connect(node.id, frontend?.publicIpId)
+      })
+    }
+
+    connect(node.id, data.subnetId)
+    connect(node.id, data.vnetId)
+    connect(node.id, data.nsgId)
+    connect(node.id, data.routeTableId)
+    connect(node.id, data.publicIpId)
+    connect(node.id, data.frontendIpId)
+    connect(node.id, data.gatewayIpId)
+    connect(node.id, data.associatedTo)
+    connect(node.id, data.localVnetId)
+    connect(node.id, data.remoteVnetId)
+    connect(node.id, data.storageAccountId)
+    connect(node.id, data.privateLinkServiceId)
+    connect(node.id, data.dnsZoneGroupId)
+    connect(node.id, data.attachedToVmId)
+    connect(node.id, data.assignedToId)
+    connect(node.id, data.vnetIntegrationSubnetId)
+  })
+
+  return graph
+}
+
+function getParentRelationship(node: DiagramEntity): string | undefined {
+  const data = node.data || {}
+
+  if (data.type === NetworkComponentType.SUBNET && data.vnetId) return data.vnetId
+  if (data.type === NetworkComponentType.FIREWALL && data.vnetId) return data.vnetId
+  if (data.type === NetworkComponentType.APP_SERVICE && data.vnetIntegrationSubnetId) return data.vnetIntegrationSubnetId
+  if (data.type === NetworkComponentType.FUNCTIONS && data.vnetIntegrationSubnetId) return data.vnetIntegrationSubnetId
+
+  if (data.type === NetworkComponentType.VM && Array.isArray(data.nicIds) && data.nicIds.length > 0) return undefined
+
+  if (data.subnetId) return data.subnetId
+
+  return node.parentNode
+}
+
+function findBlockingNsgId(path: string[], nodes: any[], condition: TestCondition): string | null {
+  for (const nodeId of path) {
+    const node = nodes.find((n: any) => n.id === nodeId)
+    if (node?.data?.type === NetworkComponentType.NSG) {
+      const rules = node.data.securityRules || []
+      for (const rule of rules) {
+        if (rule.access === 'Deny' && rule.direction === 'Inbound') {
+          if (condition.port &&
+              rule.destinationPortRange !== '*' &&
+              rule.destinationPortRange === String(condition.port)) {
+            return nodeId
+          }
+          if (rule.destinationPortRange === '*' && rule.priority >= 4000) {
+            return nodeId
+          }
+        }
+      }
+    }
+  }
+  return null
 }
 
 function checkNsgBlocking(path: string[], nodes: any[], condition: TestCondition): string | null {

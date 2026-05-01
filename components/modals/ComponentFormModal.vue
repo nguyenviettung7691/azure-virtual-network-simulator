@@ -50,7 +50,7 @@ watch(() => diagramStore.showComponentModal, (visible) => {
   }
 })
 
-const formMap: Record<NetworkComponentType, any> = {
+const formMap: Partial<Record<NetworkComponentType, any>> = {
   [NetworkComponentType.VNET]: resolveComponent('VNetForm'),
   [NetworkComponentType.SUBNET]: resolveComponent('SubnetForm'),
   [NetworkComponentType.NSG]: resolveComponent('NsgForm'),
@@ -84,6 +84,10 @@ const activeForm = computed(() => currentType.value ? formMap[currentType.value]
 
 function onSubmit() {
   const data = formData.value as AnyNetworkComponent
+  if (data.type === NetworkComponentType.INTERNET) {
+    diagramStore.closeComponentModal()
+    return
+  }
   if (!data.name?.trim()) return
   if (isEditing.value) {
     diagramStore.updateNode(data.id, data)
@@ -95,6 +99,10 @@ function onSubmit() {
 
 function onDelete() {
   if (!diagramStore.editingComponent) return
+  if (diagramStore.editingComponent.type === NetworkComponentType.INTERNET) {
+    diagramStore.closeComponentModal()
+    return
+  }
   diagramStore.confirmAction(
     `Remove "${diagramStore.editingComponent.name}" from the diagram?`,
     () => {
