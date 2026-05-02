@@ -160,6 +160,7 @@ export interface AppGatewayComponent extends NetworkComponent {
   enableHttp2?: boolean
   enableWaf?: boolean
   wafMode?: 'Detection' | 'Prevention'
+  frontendType: 'Public' | 'Internal'
   frontendIpId?: string
   subnetId?: string
   backendPools?: string[]
@@ -276,6 +277,7 @@ export interface AksComponent extends NetworkComponent {
   subnetId?: string
   enableRbac?: boolean
   enablePrivateCluster?: boolean
+  apiServerAccess: 'Public' | 'Private'
 }
 
 export interface AppServiceComponent extends NetworkComponent {

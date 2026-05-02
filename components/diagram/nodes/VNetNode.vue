@@ -8,6 +8,8 @@
     <Handle type="target" :position="Position.Left" />
     <Handle type="source" :position="Position.Bottom" id="bottom" />
     <Handle type="target" :position="Position.Top" id="top" />
+    <Handle type="source" :position="Position.Top" id="top-source" />
+    <Handle type="target" :position="Position.Bottom" id="bottom-target" />
 
     <div class="node-header vnet-header">
       <Icon icon="mdi:network" class="node-icon" />

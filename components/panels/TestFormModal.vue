@@ -29,16 +29,16 @@
           <label>Port (optional)</label>
           <InputNumber v-model="form.condition.port" :min="1" :max="65535" placeholder="e.g. 443" class="w-full" />
         </div>
-        <div v-if="form.type === 'loadbalance'" class="field">
-          <label>Connection Count</label>
-          <InputNumber v-model="form.condition.connectionCount" :min="1" :max="10000" placeholder="1000" class="w-full" />
-        </div>
       </template>
 
       <template v-if="form.type === 'dns'">
         <div class="field">
           <label>DNS Zone</label>
           <Select v-model="form.condition.targetId" :options="dnsOptions" option-label="label" option-value="value" class="w-full" placeholder="Select DNS zone" />
+        </div>
+        <div class="field">
+          <label>Hostname (optional)</label>
+          <InputText v-model="form.condition.hostname" placeholder="e.g. vm1.sample.internal" class="w-full" />
         </div>
       </template>
 
@@ -65,18 +65,20 @@ const testsStore = useTestsStore()
 const diagramStore = useDiagramStore()
 
 const formError = ref('')
+const isInitializingForm = ref(false)
 
 const defaultForm = () => ({
   name: '',
   type: 'connection' as string,
   description: '',
-  condition: { sourceId: '', targetId: '', port: undefined as number | undefined, connectionCount: 100 },
+  condition: { sourceId: '', targetId: '', port: undefined as number | undefined, hostname: '' },
 })
 
 const form = ref(defaultForm())
 
 watch(() => testsStore.showTestFormModal, (v) => {
   if (v) {
+    isInitializingForm.value = true
     if (testsStore.editingTest) {
       form.value = {
         name: testsStore.editingTest.name,
@@ -88,19 +90,22 @@ watch(() => testsStore.showTestFormModal, (v) => {
       form.value = defaultForm()
     }
     formError.value = ''
+    nextTick(() => { isInitializingForm.value = false })
   }
 })
 
 // Reset source/target selections when test type changes to avoid stale cross-type values
 watch(() => form.value.type, () => {
+  if (isInitializingForm.value) return
   form.value.condition.sourceId = ''
   form.value.condition.targetId = ''
+  form.value.condition.port = undefined
+  form.value.condition.hostname = ''
 })
 
 const testTypes = [
   { label: 'Connection Test', value: 'connection' },
   { label: 'Load Balance Test', value: 'loadbalance' },
-  { label: 'Security Test', value: 'security' },
   { label: 'DNS Resolution Test', value: 'dns' },
 ]
 
@@ -175,6 +180,10 @@ function submit() {
   if (form.value.type === 'connection' || form.value.type === 'loadbalance') {
     if (!form.value.condition.sourceId) { formError.value = 'Source component is required'; return }
     if (!form.value.condition.targetId) { formError.value = 'Target component is required'; return }
+  }
+
+  if (form.value.type === 'dns' && !form.value.condition.targetId) {
+    formError.value = 'DNS zone is required'; return
   }
 
   if (testsStore.editingTest) {

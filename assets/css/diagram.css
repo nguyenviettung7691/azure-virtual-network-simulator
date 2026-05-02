@@ -1,4 +1,23 @@
 /* ============================================================
+   Global Edge Animations
+   These keyframes are referenced by inline styles on SVG path elements
+   rendered inside AnimationEdge.vue and NetworkEdge.vue, so they must be
+   in a global stylesheet rather than a scoped component style block.
+   ============================================================ */
+
+/* Marching-dashes flow for active animation-mode edges */
+@keyframes animationEdgePulse {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -20; }
+}
+
+/* Marching-dashes flow for NetworkEdge animated (attachment) edges */
+@keyframes dashdraw {
+  from { stroke-dashoffset: 10; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* ============================================================
    Diagram Canvas
    ============================================================ */
 .diagram-canvas-wrapper {

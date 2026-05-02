@@ -13,7 +13,7 @@ export const SUBNET_HEADER_HEIGHT = 82
 
 export const CHILD_PADDING_X = 24
 export const CHILD_PADDING_Y = 20
-export const CHILD_GAP = 24
-export const ATTACHMENT_GAP_X = 18
-export const ATTACHMENT_GAP_Y = 14
+export const CHILD_GAP = 32
+export const ATTACHMENT_GAP_X = CHILD_GAP
+export const ATTACHMENT_GAP_Y = CHILD_GAP
 export const MAX_SUBNET_COLUMNS = 3

@@ -12,15 +12,24 @@ export const useTests = () => {
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
+  // Auto-run tests only when the diagram is explicitly loaded or imported
+  watch(
+    () => diagramStore.diagramLoadId,
+    async (newVal, oldVal) => {
+      if (newVal === oldVal || newVal === 0) return
+      if (testsStore.autoRunEnabled && testsStore.tests.length > 0 && !testsStore.isRunning) {
+        await runAllTests()
+      }
+    }
+  )
+
+  // Challenge evaluation still reacts to structural diagram changes
   watch(
     () => [diagramStore.nodes.length, diagramStore.edges.length],
-    async () => {
+    () => {
       if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(async () => {
+      debounceTimer = setTimeout(() => {
         debounceTimer = null
-        if (testsStore.autoRunEnabled && testsStore.tests.length > 0 && !testsStore.isRunning) {
-          await runAllTests()
-        }
         const challengesStore = useChallengesStore()
         if (challengesStore.currentChallenge) {
           challengesStore.evaluateCompletion(diagramStore.nodes, diagramStore.edges)

@@ -22,13 +22,108 @@ import type { AnyNetworkComponent, InternetComponent } from '~/types/network'
 import { NetworkComponentType } from '~/types/network'
 import { applyDagreLayout } from '~/lib/dagre'
 import { INTERNET_SOURCE_ID } from '~/types/test'
+import { Position } from '@vue-flow/core'
 
 // DiagramEdge extends a union type (Edge from @vue-flow/core), so we use this
 // minimal intersection type to safely access common edge properties.
 type EdgeBase = { id: string; source: string; target: string }
+type EdgeLayer = 'system-managed' | 'public-facing' | 'vnet' | 'private'
 
 const PUBLIC_INTERNET_NAME = 'Public Internet'
 const DEFAULT_ANIMATION_SEGMENT_MS = 1600
+const EDGE_BOTTOM_SOURCE_HANDLE_ID = 'bottom'
+const EDGE_TOP_TARGET_HANDLE_ID = 'top'
+const EDGE_TOP_SOURCE_HANDLE_ID = 'top-source'
+const EDGE_BOTTOM_TARGET_HANDLE_ID = 'bottom-target'
+const EDGE_LAYER_ORDER: Record<EdgeLayer, number> = {
+  'system-managed': 0,
+  'public-facing': 1,
+  vnet: 2,
+  private: 3,
+}
+
+/**
+ * Classifies an Azure component into one of the 4 diagram layers.
+ * Some components are config-driven and may belong to different layers
+ * depending on their configuration properties.
+ *
+ * Layers (from top to bottom in auto-layout):
+ * - system-managed: Public Internet node (system-injected)
+ * - public-facing: Internet-edge services (Public IP, Public DNS, VPN Gateway, Bastion, etc.)
+ * - vnet: VNet fabric and workloads (VNets, Subnets, NICs, VMs, etc.)
+ * - private: Backend PaaS resources (Storage, Key Vault, Managed Identity, etc.)
+ */
+export function getComponentLayer(type: NetworkComponentType, componentData?: any): EdgeLayer {
+  if (type === NetworkComponentType.INTERNET) return 'system-managed'
+
+  // Public-facing always
+  if ([
+    NetworkComponentType.VPN_GATEWAY,
+    NetworkComponentType.BASTION,
+  ].includes(type)) return 'public-facing'
+
+  // IP_ADDRESS: Always public-facing (all public IPs in this diagram model)
+  if (type === NetworkComponentType.IP_ADDRESS) return 'public-facing'
+
+  // DNS_ZONE: Config-driven by zoneType
+  if (type === NetworkComponentType.DNS_ZONE) {
+    return componentData?.zoneType === 'Private' ? 'private' : 'public-facing'
+  }
+
+  // APP_GATEWAY: Config-driven by frontendType
+  if (type === NetworkComponentType.APP_GATEWAY) {
+    return componentData?.frontendType === 'Internal' ? 'vnet' : 'public-facing'
+  }
+
+  // LOAD_BALANCER: Config-driven by loadBalancerType
+  if (type === NetworkComponentType.LOAD_BALANCER) {
+    return componentData?.loadBalancerType === 'Internal' ? 'vnet' : 'public-facing'
+  }
+
+  // APP_SERVICE: Public by default, private if VNet-integrated or has Private Endpoint
+  if (type === NetworkComponentType.APP_SERVICE) {
+    if (componentData?.vnetIntegrationSubnetId) return 'vnet'
+    return 'public-facing'
+  }
+
+  // FUNCTIONS: Public by default, private if VNet-integrated or has Private Endpoint
+  if (type === NetworkComponentType.FUNCTIONS) {
+    if (componentData?.enablePrivateEndpoint || componentData?.vnetIntegrationSubnetId) return 'vnet'
+    return 'public-facing'
+  }
+
+  // AKS: Node pools always in VNet; API server can be public or private but classified as vnet
+  if (type === NetworkComponentType.AKS) return 'vnet'
+
+  // Private / Internal always
+  if ([
+    NetworkComponentType.STORAGE_ACCOUNT,
+    NetworkComponentType.BLOB_STORAGE,
+    NetworkComponentType.MANAGED_DISK,
+    NetworkComponentType.KEY_VAULT,
+    NetworkComponentType.MANAGED_IDENTITY,
+  ].includes(type)) return 'private'
+
+  // VNet-managed always
+  if ([
+    NetworkComponentType.VNET,
+    NetworkComponentType.SUBNET,
+    NetworkComponentType.VNET_PEERING,
+    NetworkComponentType.NETWORK_IC,
+    NetworkComponentType.NSG,
+    NetworkComponentType.ASG,
+    NetworkComponentType.FIREWALL,
+    NetworkComponentType.UDR,
+    NetworkComponentType.NVA,
+    NetworkComponentType.VM,
+    NetworkComponentType.VMSS,
+    NetworkComponentType.SERVICE_ENDPOINT,
+    NetworkComponentType.PRIVATE_ENDPOINT,
+  ].includes(type)) return 'vnet'
+
+  // Fallback (should not reach here if all types are covered)
+  return 'vnet'
+}
 
 interface DiagramStoreState {
   nodes: DiagramNode[]
@@ -36,6 +131,7 @@ interface DiagramStoreState {
   viewMode: DiagramViewMode
   animationSession: DiagramAnimationSession | null
   animationRunId: number
+  diagramLoadId: number
   selectedNodeId: string | null
   isDirty: boolean
   viewport: { x: number; y: number; zoom: number }
@@ -56,6 +152,7 @@ export const useDiagramStore = defineStore('diagram', {
     viewMode: 'infrastructure',
     animationSession: null,
     animationRunId: 0,
+    diagramLoadId: 0,
     selectedNodeId: null,
     isDirty: false,
     viewport: { x: 0, y: 0, zoom: 1 },
@@ -119,7 +216,7 @@ export const useDiagramStore = defineStore('diagram', {
     },
 
     addEdge(edge: DiagramEdge) {
-      const normalizedEdge = normalizeDiagramEdge(edge)
+      const normalizedEdge = normalizeDiagramEdge(edge, buildNodeLookup(this.nodes), true)
       const e = normalizedEdge as unknown as EdgeBase
       const exists = (this.edges as unknown as EdgeBase[]).some(
         ex => ex.source === e.source && ex.target === e.target
@@ -133,7 +230,11 @@ export const useDiagramStore = defineStore('diagram', {
     updateEdge(id: string, updates: Partial<DiagramEdge>) {
       const idx = (this.edges as unknown as EdgeBase[]).findIndex(e => e.id === id)
       if (idx === -1) return
-      this.edges[idx] = normalizeDiagramEdge({ ...this.edges[idx], ...updates } as DiagramEdge)
+      this.edges[idx] = normalizeDiagramEdge(
+        { ...this.edges[idx], ...updates } as DiagramEdge,
+        buildNodeLookup(this.nodes),
+        true,
+      )
       this.edges = [...this.edges]
       this.isDirty = true
     },
@@ -150,10 +251,12 @@ export const useDiagramStore = defineStore('diagram', {
     loadDiagram(state: DiagramState) {
       this.stopAnimation()
       this.nodes = syncSystemManagedNodes(state.nodes)
-      this.edges = state.edges.map(edge => normalizeDiagramEdge(edge as DiagramEdge))
+      const nodeLookup = buildNodeLookup(this.nodes)
+      this.edges = state.edges.map(edge => normalizeDiagramEdge(edge as DiagramEdge, nodeLookup, true))
       this.viewport = state.viewport
       this.isDirty = false
       this.selectedNodeId = null
+      this.diagramLoadId++
     },
 
     resetDiagram() {
@@ -182,7 +285,9 @@ export const useDiagramStore = defineStore('diagram', {
           return parentMap.get(e.source) !== e.target && parentMap.get(e.target) !== e.source
         })
         this.nodes = newNodes
-        this.edges = filteredEdges as unknown as DiagramEdge[]
+        const nodeLookup = buildNodeLookup(newNodes)
+        this.edges = filteredEdges
+          .map(edge => normalizeDiagramEdge(edge as unknown as DiagramEdge, nodeLookup, true)) as unknown as DiagramEdge[]
       } catch (err) {
         console.error('[autoLayout] dagre layout failed:', err)
       }
@@ -251,7 +356,7 @@ export const useDiagramStore = defineStore('diagram', {
 
       const runId = this.animationRunId + 1
       const segmentDurationMs = payload.segmentDurationMs ?? DEFAULT_ANIMATION_SEGMENT_MS
-      const session = createAnimationSession(payload.testId, path, payload.resultState, segmentDurationMs)
+      const session = createAnimationSession(payload.testId, path, payload.resultState, segmentDurationMs, this.nodes)
 
       this.animationRunId = runId
       this.viewMode = 'animation'
@@ -269,7 +374,7 @@ export const useDiagramStore = defineStore('diagram', {
         session.nodeStates[sourceId] = index === 0 ? 'active' : session.terminalState
         session.nodeStates[targetId] = 'active'
         session.edgeStates[edgeId] = 'active'
-        session.overlayEdges = buildAnimationOverlayEdges(session)
+        session.overlayEdges = buildAnimationOverlayEdges(session, this.nodes)
         this.animationSession = cloneAnimationSession(session)
 
         await wait(segmentDurationMs)
@@ -281,7 +386,7 @@ export const useDiagramStore = defineStore('diagram', {
         session.nodeStates[sourceId] = session.terminalState
         session.nodeStates[targetId] = session.terminalState
         session.edgeStates[edgeId] = session.terminalState
-        session.overlayEdges = buildAnimationOverlayEdges(session)
+        session.overlayEdges = buildAnimationOverlayEdges(session, this.nodes)
         this.animationSession = cloneAnimationSession(session)
       }
 
@@ -290,8 +395,107 @@ export const useDiagramStore = defineStore('diagram', {
       session.isRunning = false
       session.travelerVisible = false
       session.activeEdgeId = null
-      session.overlayEdges = buildAnimationOverlayEdges(session)
+      session.overlayEdges = buildAnimationOverlayEdges(session, this.nodes)
       this.animationSession = cloneAnimationSession(session)
+
+      return true
+    },
+
+    /**
+     * Animate multiple path segments simultaneously — each [source, target] pair gets its
+     * own traveling paper-plane at the same time. Used for LB → backend-VM fan-out after
+     * the source → LB segment has already completed via playConnectionAnimation.
+     */
+    async playParallelSegments(payload: {
+      testId: string
+      segments: Array<[string, string]>
+      resultState: AnimationTerminalState
+      segmentDurationMs?: number
+    }): Promise<boolean> {
+      const segments = payload.segments
+        .map(([s, t]) => [resolveAnimationPathNodeId(s), resolveAnimationPathNodeId(t)] as [string, string])
+        .filter(([s, t]) => s && t)
+
+      if (segments.length === 0) return false
+
+      const runId = this.animationRunId + 1
+      const segmentDurationMs = payload.segmentDurationMs ?? DEFAULT_ANIMATION_SEGMENT_MS
+
+      const allNodeIds = [...new Set(segments.flat())]
+      const nodeStates: Record<string, AnimationVisualState> = {}
+      const edgeStates: Record<string, AnimationVisualState> = {}
+      const nodeLookup = buildNodeLookup(this.nodes)
+      allNodeIds.forEach(id => { nodeStates[id] = 'active' })
+
+      const overlayEdges: DiagramEdge[] = segments.map(([s, t], i) => {
+        const edgeId = createAnimationEdgeId(s, t, i)
+        const routed = resolveEdgeRoutingPositions(s, t, nodeLookup)
+        edgeStates[edgeId] = 'active'
+        return {
+          id: edgeId,
+          source: s,
+          target: t,
+          ...routed,
+          type: 'animation-edge',
+          selectable: false,
+          updatable: false,
+          data: {
+            state: 'active' as const,
+            isActive: true,
+            travelerVisible: true,
+            durationMs: segmentDurationMs,
+          },
+        } as DiagramEdge
+      })
+
+      this.animationRunId = runId
+      this.viewMode = 'animation'
+      this.animationSession = {
+        activeTestId: payload.testId,
+        path: allNodeIds,
+        overlayEdges,
+        nodeStates,
+        edgeStates,
+        activeEdgeId: null,
+        travelerVisible: true,
+        segmentDurationMs,
+        terminalState: payload.resultState,
+        isRunning: true,
+      }
+
+      await wait(segmentDurationMs)
+
+      if (this.animationRunId !== runId || !this.animationSession) return false
+
+      allNodeIds.forEach(id => { if (this.animationSession) this.animationSession.nodeStates[id] = payload.resultState })
+
+      const finalEdges: DiagramEdge[] = segments.map(([s, t], i) => {
+        const routed = resolveEdgeRoutingPositions(s, t, nodeLookup)
+        return {
+          id: createAnimationEdgeId(s, t, i),
+          source: s,
+          target: t,
+          ...routed,
+          type: 'animation-edge',
+          selectable: false,
+          updatable: false,
+          data: {
+            state: payload.resultState,
+            isActive: false,
+            travelerVisible: false,
+            durationMs: segmentDurationMs,
+          },
+        } as DiagramEdge
+      })
+
+      this.animationSession = {
+        ...this.animationSession,
+        nodeStates: { ...this.animationSession.nodeStates },
+        edgeStates: { ...this.animationSession.edgeStates },
+        overlayEdges: finalEdges,
+        isRunning: false,
+        travelerVisible: false,
+      }
 
       return true
     },
@@ -300,6 +504,10 @@ export const useDiagramStore = defineStore('diagram', {
       this.animationRunId += 1
       this.viewMode = 'infrastructure'
       this.animationSession = null
+    },
+
+    notifyDiagramLoaded() {
+      this.diagramLoadId++
     },
   },
 })
@@ -313,6 +521,7 @@ function createAnimationSession(
   path: string[],
   terminalState: AnimationTerminalState,
   segmentDurationMs: number,
+  nodes: DiagramNode[],
 ): DiagramAnimationSession {
   const nodeStates: Record<string, AnimationVisualState> = {}
   const edgeStates: Record<string, AnimationVisualState> = {}
@@ -338,20 +547,23 @@ function createAnimationSession(
     isRunning: true,
   }
 
-  session.overlayEdges = buildAnimationOverlayEdges(session)
+  session.overlayEdges = buildAnimationOverlayEdges(session, nodes)
   return session
 }
 
-function buildAnimationOverlayEdges(session: DiagramAnimationSession): DiagramEdge[] {
+function buildAnimationOverlayEdges(session: DiagramAnimationSession, nodes: DiagramNode[]): DiagramEdge[] {
+  const nodeLookup = buildNodeLookup(nodes)
   return session.path.slice(0, -1).map((sourceId, index) => {
     const targetId = session.path[index + 1]
     const edgeId = createAnimationEdgeId(sourceId, targetId, index)
     const state = session.edgeStates[edgeId] || 'pending'
+    const routed = resolveEdgeRoutingPositions(sourceId, targetId, nodeLookup)
 
     return {
       id: edgeId,
       source: sourceId,
       target: targetId,
+      ...routed,
       type: 'animation-edge',
       selectable: false,
       updatable: false,
@@ -379,7 +591,7 @@ function createAnimationEdgeId(sourceId: string, targetId: string, index: number
 }
 
 function resolveAnimationPathNodeId(nodeId: string): string {
-  return nodeId === 'Internet' ? INTERNET_SOURCE_ID : nodeId
+  return (nodeId === 'Internet' || nodeId === 'DNS Client') ? INTERNET_SOURCE_ID : nodeId
 }
 
 function getNodeType(componentType: NetworkComponentType): string {
@@ -407,21 +619,85 @@ function getNodeType(componentType: NetworkComponentType): string {
     [NetworkComponentType.MANAGED_IDENTITY]: 'identity-node',
     [NetworkComponentType.KEY_VAULT]: 'identity-node',
     [NetworkComponentType.NETWORK_IC]: 'network-ic-node',
-    [NetworkComponentType.FIREWALL]: 'nsg-node',
-    [NetworkComponentType.BASTION]: 'vpn-gateway-node',
-    [NetworkComponentType.PRIVATE_ENDPOINT]: 'network-ic-node',
-    [NetworkComponentType.SERVICE_ENDPOINT]: 'network-ic-node',
+    [NetworkComponentType.FIREWALL]: 'compute-node',
+    [NetworkComponentType.BASTION]: 'compute-node',
+    [NetworkComponentType.PRIVATE_ENDPOINT]: 'compute-node',
+    [NetworkComponentType.SERVICE_ENDPOINT]: 'compute-node',
     [NetworkComponentType.INTERNET]: 'internet-node',
   }
   return typeMap[componentType] || 'compute-node'
 }
 
-function normalizeDiagramEdge(edge: DiagramEdge): DiagramEdge {
+function normalizeDiagramEdge(
+  edge: DiagramEdge,
+  nodeLookup?: Map<string, DiagramNode>,
+  enforceFlowRouting = false,
+): DiagramEdge {
+  const edgeBase = edge as unknown as EdgeBase
+  const routed = enforceFlowRouting
+    ? resolveEdgeRoutingPositions(edgeBase.source, edgeBase.target, nodeLookup)
+    : {}
+
   return {
     ...edge,
+    ...routed,
     selectable: false,
     updatable: false,
   } as DiagramEdge
+}
+
+function buildNodeLookup(nodes: DiagramNode[]): Map<string, DiagramNode> {
+  return new Map((nodes || []).map(node => [node.id, node]))
+}
+
+function resolveEdgeRoutingPositions(
+  sourceId: string,
+  targetId: string,
+  nodeLookup?: Map<string, DiagramNode>,
+): {
+  sourcePosition: Position
+  targetPosition: Position
+  sourceHandle?: string
+  targetHandle?: string
+} {
+  const sourceNode = nodeLookup?.get(sourceId)
+  const targetNode = nodeLookup?.get(targetId)
+
+  const sourceLayer = classifyNodeLayer(sourceNode)
+  const targetLayer = classifyNodeLayer(targetNode)
+
+  const sourceRank = sourceLayer ? EDGE_LAYER_ORDER[sourceLayer] : null
+  const targetRank = targetLayer ? EDGE_LAYER_ORDER[targetLayer] : null
+
+  if (sourceRank !== null && targetRank !== null && sourceRank !== targetRank) {
+    if (sourceRank < targetRank) {
+      return {
+        sourcePosition: Position.Bottom,
+        targetPosition: Position.Top,
+        sourceHandle: EDGE_BOTTOM_SOURCE_HANDLE_ID,
+        targetHandle: EDGE_TOP_TARGET_HANDLE_ID,
+      }
+    }
+    return {
+      sourcePosition: Position.Top,
+      targetPosition: Position.Bottom,
+      sourceHandle: EDGE_TOP_SOURCE_HANDLE_ID,
+      targetHandle: EDGE_BOTTOM_TARGET_HANDLE_ID,
+    }
+  }
+
+  return {
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
+    sourceHandle: undefined,
+    targetHandle: undefined,
+  }
+}
+
+function classifyNodeLayer(node?: DiagramNode): EdgeLayer | null {
+  const data = node?.data as AnyNetworkComponent | undefined
+  if (!data) return null
+  return getComponentLayer(data.type, data)
 }
 
 function getNodeWidth(type: NetworkComponentType): number {

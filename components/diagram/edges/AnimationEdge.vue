@@ -41,7 +41,7 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { BaseEdge, EdgeLabelRenderer, getBezierPath } from '@vue-flow/core'
+import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from '@vue-flow/core'
 import type { EdgeProps } from '@vue-flow/core'
 
 interface AnimationEdgeData {
@@ -95,13 +95,14 @@ const travelerIconColor = computed(() => {
 })
 
 const path = computed(() => {
-  const [edgePath] = getBezierPath({
+  const [edgePath] = getSmoothStepPath({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
     sourcePosition: props.sourcePosition,
     targetX: props.targetX,
     targetY: props.targetY,
     targetPosition: props.targetPosition,
+    borderRadius: 12,
   })
 
   return edgePath
@@ -110,8 +111,11 @@ const path = computed(() => {
 const edgeStyle = computed(() => ({
   stroke: edgeColor.value,
   strokeWidth: edgeState.value === 'active' ? 3 : 2.5,
-  strokeDasharray: edgeState.value === 'pending' ? '8 7' : edgeState.value === 'active' ? '10 5' : undefined,
-  animation: edgeState.value === 'active' ? 'animationEdgePulse 0.75s linear infinite' : undefined,
+  // Pending segments use marching dashes; active segment uses flowing dashes driven by
+  // @keyframes animationEdgePulse defined globally in diagram.css.
+  strokeDasharray: edgeState.value === 'pending' ? '8 7' : edgeState.value === 'active' ? '12 8' : undefined,
+  strokeDashoffset: edgeState.value === 'active' ? 0 : undefined,
+  animation: edgeState.value === 'active' ? 'animationEdgePulse 0.5s linear infinite' : undefined,
   filter: edgeState.value === 'active' ? `drop-shadow(0 0 8px ${edgeColor.value}66)` : undefined,
 }))
 
@@ -237,9 +241,5 @@ function stopTravelerAnimation() {
   filter: drop-shadow(0 2px 10px rgba(193, 156, 0, 0.3));
 }
 
-@keyframes animationEdgePulse {
-  to {
-    stroke-dashoffset: -30;
-  }
-}
+/* animationEdgePulse is defined globally in assets/css/diagram.css */
 </style>

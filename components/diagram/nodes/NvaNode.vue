@@ -8,6 +8,8 @@
     <Handle type="target" :position="Position.Left" />
     <Handle type="source" :position="Position.Bottom" id="bottom" />
     <Handle type="target" :position="Position.Top" id="top" />
+    <Handle type="source" :position="Position.Top" id="top-source" />
+    <Handle type="target" :position="Position.Bottom" id="bottom-target" />
     <div class="generic-node-content" :style="{ borderColor: '#6b4226' }">
       <div class="generic-node-icon-wrap" :style="{ backgroundColor: '#6b422620' }">
         <Icon icon="mdi:router-network" :style="{ color: '#6b4226' }" class="generic-icon" />

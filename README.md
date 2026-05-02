@@ -15,6 +15,11 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
   - [Environment Variables](#environment-variables)
   - [Running Locally](#running-locally)
   - [Building for Production](#building-for-production)
+- [Deployment](#deployment)
+  - [Primary: AWS Amplify Hosting](#primary-aws-amplify-hosting)
+  - [Alternative: CloudFront + S3](#alternative-cloudfront--s3)
+  - [Environment Strategy](#environment-strategy)
+  - [Rollback](#rollback)
 - [AWS Services Integration](#aws-services-integration)
   - [Amazon Cognito](#amazon-cognito)
   - [Amazon S3](#amazon-s3)
@@ -30,21 +35,20 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 
 ## Features
 
-- **Drag-and-drop canvas** — place and arrange 27 Azure networking components on an interactive Vue Flow canvas. When the diagram contains at least one user-added component, a single system-managed **Public Internet** node is also shown automatically. Attachment arrows are rendered automatically from component relationships; users do not manually draw, reconnect, or delete edges from the canvas UI.
-- **Component forms** — single-click any user-managed component (when canvas is unlocked) to open its property edit form, or configure via the right side panel. The system-managed **Public Internet** node is read-only and does not open a form.
-- **Network Summary panel** — the right-hand panel shows a live summary of the diagram. The Components section groups nodes by their component type, with a count badge (PrimeVue `Tag severity="info"`) on each group header. The Connectivity section renders a two-column table ("Source" / "Target") where each row is a connection; target cells span multiple rows (`rowspan`) when a target has more than one source; rows are visually grouped per target using alternating group backgrounds (`.conn-group-alt`) and a bold separator border between groups (`.conn-group-first`); the table also includes containment edges synthesised from `node.parentNode` so all topology relationships are visible. Both Source and Target cells display a small coloured component-type icon (with a tooltip showing the full type label) before the component name.
-- **Load sample** — one-click button on the empty canvas state that loads a pre-built VNet diagram (1 VNet, 3 NSGs, 3 Subnets, 3 NICs, 4 VMs with realistic security rules, region "southeastasia" for VNet 1) plus 4 pre-configured connection tests; all existing tests are replaced so the panel always reflects the sample. The sample only adds attachment edges (for example NSG→Subnet/NIC and NIC→VM); containment is derived from component metadata and auto-layout, which expands the VNet to enclose all three Subnets, keeps subnet-hosted workloads inside their Subnet, keeps the main canvas in sync with the minimap for nested container bounds, and places the NSGs outside the VNet aligned to the Subnets or NICs they protect. Those rendered edges stay read-only in the canvas UI.
-- **Reset diagram** — removes all components from the canvas; an optional "Also reset all network tests" checkbox in the confirm dialog lets you clear the test panel at the same time.
-- **Delete All tests** — a "Delete All" button in the Network Tests panel removes every test at once after a confirm dialog. The panel uses a full-width "Add Test" block button and half-width "Run All" (green, `severity="success"`) / "Delete All" buttons on the row below; test status summary tags (Pass / Fail / Pending) are center-aligned. Each test card has a left-accent border; Row 1 shows the type icon and test name (with a separator border below); Row 2 shows the result status `<Tag>` (uppercase, left) and the per-test Run / Run animation / Edit / Delete action buttons (right, with Run animation shown for connection tests only). After a result is available, a compact inline flowchart appears below the result message showing the full physical traversal path: connection tests render every hop node ID resolved to its component name and icon (e.g. Internet → VNet → Subnet → SubnetNSG → NIC → NIC NSG → VM for a passing test); for a passing test the final target node is highlighted in green with a `mdi:check-circle` badge, while for a failing test the path stops at the blocking NSG, which is shown with a red `mdi:close-circle` badge; load-balance tests show source → LB → backend VMs; security tests show NSG count → Subnet count; DNS tests show DNS Client → zone name → resolved IP.
-- **Connection flow animation** — any connection test can switch the canvas from the default **Infrastructure** view into **Animation** mode by using the per-test Run animation action. The selected test is rerun first, then the canvas renders only that directed traversal path as animated edges, including synthesized containment hops that are normally expressed via nesting rather than visible arrows. A moving paper-plane travels from source to target at a steady pace; after each hop resolves, the traversed node and edge keep pass / fail / warning styling, and the traveler disappears when the run completes. A fixed, top-centered **Exit animation** button returns the canvas to Infrastructure mode and restores the normal read-only edge view.
-- **Auto layout** — on-demand Dagre-powered automatic graph layout with visual containment and attachment-aware grouping: the system-managed **Public Internet** node is positioned in a dedicated top row above the rest of the topology; Subnets stay inside their VNet and resize from their packed child bounds; subnet-hosted resources stay inside their Subnet; NIC-attached workloads are grouped beside their NIC instead of dropping underneath it; and policy resources such as NSGs, ASGs, and UDRs are positioned outside the VNet near the Subnets or NICs they protect, using staggered outside-VNet lanes when anchors are dense so edge overlap is reduced as a best effort. Reserved top clearance keeps child nodes away from the VNet and Subnet header text. Only attachment edges remain visible after layout, and those arrows are system-rendered and read-only; containment relationships are expressed by the nested node hierarchy instead of arrows.
-- **Lock / Unlock interactions** — toggle canvas between read-only pan/zoom mode (Locked, highlighted button) and node-edit mode (Unlocked). In unlocked mode, users can drag/select nodes, hovering over a component name shows a pointer cursor, and clicking it opens the edit form. Edge creation and edge editing remain disabled in both modes.
-- **Fit Content / Fit View** — two distinct viewport actions: Fit Content pans and zooms the viewport to show all nodes; Fit View resets the viewport to the default 1:1 zoom at the origin.
-- **Export** — save diagrams as PNG, SVG, PDF, draw.io (`.drawio`), or Visio (`.vsdx`).
-- **Import** — load existing diagrams from `.drawio`, `.xml`, or `.vsdx` files.
-- **Saved setups** — authenticated users can persist diagrams and thumbnails to Amazon S3 and reload them at any time.
-- **AI challenges** — Amazon Bedrock generates time-boxed networking challenges at four difficulty levels; the app evaluates your diagram against the challenge conditions in real time.
-- **Dark / light mode** — respects the OS preference or can be overridden manually. Styling is driven by a shared token layer: app-owned CSS variables in `assets/css/main.css` cover layout, sizing, and base colors, while PrimeVue Aura provides semantic tokens for component surfaces and text.
+- **Interactive Canvas** — A drag-and-drop interface for arranging Azure networking components. Attachment lines and system nodes (like Public Internet) are rendered automatically based on your topology.
+- **Component Configuration** — Click any component to instantly edit its properties and metadata via a dedicated configuration form. 
+- **Real-Time Network Summary** — A live dashboard that groups your architecture by component type with collapsible sections. At panel level, only **Components** is expanded by default; Components and Connectivity groups inside those sections default to collapsed for faster scanning on large diagrams. Security and Performance count badges dynamically reflect live audit findings: green (no issues), yellow (warning), red (critical).
+- **Smart Auto-Layout** — One-click graph layout that runs a three-step pipeline: Kahn topological prerequisite sorting, hierarchical placement for clear left-to-right data flow, and orthogonal right-angle edge routing. Public-facing root nodes are placed in a dedicated near-top lane above policy nodes, root VNets are kept below top lanes, root VNet-managed nodes get their own post-VNet band, and private root infrastructure is placed in compact bottom rows. Root VNet spacing is normalized with deterministic minimum gaps on every run so repeated manual Auto-Layout passes do not overlap VNets. VNet Peering is parented to its Local VNet.
+- **Network Testing & Validation** — Create and run connection, load-balancing, and DNS tests. Review results via detailed status summaries and step-by-step physical traversal paths with color-coded last-node indicators: green (pass), red (fail), yellow (warning). The test summary row includes Pass, Fail, and Warning counts, with Total shown on a second centered line.
+- **Security & Performance Audits** — The Network Summary panel continuously audits your diagram for NSG coverage gaps, permissive inbound rules, missing health probes, and other best-practice issues — no test required.
+- **Connection Flow Animations** — Visualize your connection tests in action. Switch to Animation Mode to see a paper-plane traveler follow the exact hop-by-hop path for connection tests, fan out **simultaneously** from the load balancer to every backend VM for load-balancer tests (at the same per-hop pace used by the other test types), and trace the DNS resolution chain for DNS tests. Active edges display animated marching dashes and a glow effect.
+- **High-Contrast Diagram Edges** — In Architecture mode, all connection edges render in a theme-aware contrast color (`black` in light mode, `white` in dark mode) for clearer separation from component border colors.
+- **AI Architecture Challenges** — Test your networking skills with time-boxed, dynamically generated challenges powered by Amazon Bedrock, featuring real-time evaluation of your diagram.
+- **Cloud Saves** — Authenticated users can securely save, manage, and reload their diagrams and thumbnails using Amazon S3.
+- **Import & Export** — Load existing layouts (`.drawio`, `.xml`, `.vsdx`) or export your finished architectures to PNG, SVG, PDF, draw.io, or Visio formats.
+- **Quick Sample + Full Sample** — Start fast with a compact Quick Sample, or load a Full Sample that includes every supported Azure component type and a broader test suite to showcase end-to-end simulator features.
+- **Canvas Controls** — Lock the canvas to safely pan and zoom without accidental edits, easily fit the entire topology to your screen, or clear the board to start fresh. The Minimap is interactive: drag inside it to pan and use wheel-scroll on it to zoom.
+- **Dark / Light Mode** — Native support for both themes, respecting your system OS preferences or manual overrides.
 
 ---
 
@@ -90,6 +94,86 @@ The simulator supports the following 27 user-managed Azure component types, plus
 | Identity & secrets | Managed Identity, Key Vault |
 | Endpoints | Service Endpoint, Private Endpoint |
 | System-managed canvas entity | Public Internet |
+
+---
+
+## Sample Setups
+
+Two built-in setup buttons are available in the empty canvas quick-start state:
+
+- **Quick Sample**
+  - Seeds a focused, production-style baseline topology (VNet, Subnets, NSGs, NICs, VMs, Public IP, Load Balancer, DNS Zone).
+  - Includes starter tests (Internet connectivity checks, load-balancer validation, and DNS resolution).
+- **Full Sample**
+  - Starts from the Quick Sample baseline, then expands it into a full-feature showcase.
+  - Adds the remaining supported Azure component types (ASG, UDR, VPN Gateway, Application Gateway, NVA, VMSS, AKS, App Service, Functions, Storage Account, Blob Storage, Managed Disk, Managed Identity, Key Vault, Service Endpoint, Private Endpoint, Firewall, Bastion, VNet Peering, plus a second VNet/Subnet for peering context).
+  - Adds extra tests for the new topology sections (Application Gateway load-balancing, private-endpoint connectivity, Bastion inbound access, and additional DNS resolution).
+
+Implementation plan for the Full Sample (high level):
+
+1. Reuse the existing Quick Sample builder as the deterministic foundation.
+2. Append one representative node for each remaining supported component type.
+3. Add only attachment edges (not containment edges) so Auto-Layout continues to own parent/child nesting via `parentNode`.
+4. Seed additional tests that exercise newly introduced paths and services.
+5. Run one `autoLayout()` pass and a single `notifyDiagramLoaded()` event so test auto-run behavior stays consistent.
+
+---
+
+## Auto-Layout Pipeline (Simple View)
+
+Each Auto-Layout run executes these steps in order:
+
+1. **Prerequisite ordering (Kahn's Algorithm)**
+  - A BFS-based topological pass repeatedly picks nodes with zero incoming dependencies.
+  - This produces a deterministic dependency order (for example, load balancer before backend VM).
+2. **Hierarchical placement (Sugiyama via Dagre)**
+  - The graph is ranked left-to-right so traffic flow is easy to read from entry to backend systems.
+  - A shared 32 px inter-node gap is applied during placement/reflow so edge arrowheads remain clearly visible between adjacent nodes.
+3. **Semantic reflow passes** (in order):
+  - **`reflowSubnetContainers`** — pack workloads inside Subnets.
+  - **`reflowVnetContainers`** — pack Subnets inside VNets.
+  - **`compactRootVnetSpacing`** — normalize spacing between multiple root VNets with deterministic minimum X/Y gaps to prevent overlap across repeated runs, including strict row-to-row Y normalization when a rerun drifts a row upward.
+  - **`reflowOutsideVnetPolicies`** — place NSG/ASG/UDR above VNets.
+  - **`reflowPublicFacingNodes`** — place root public-facing nodes in a dedicated lane above policy nodes.
+  - **`enforceRootVnetTopBandClearance`** — push root VNets (and their descendants) below top lanes so VNets never overlap policy/public-facing rows.
+  - **`reflowRootVnetManagedNodes`** — place root VNet-layer non-container nodes below VNet content to preserve layer ordering.
+  - **`reflowRootInfrastructureNodes`** — place root private-layer nodes (Storage, Identity, etc.) in compact rows below the main diagram.
+  - **`reflowVnetPeeringNodes`** — reposition only unparented VNet Peering nodes; parented nodes keep Local-VNet containment placement.
+  - **`positionPublicInternetNodes`** — place the Public Internet node above everything.
+  - **`normalizeAbsolutePositions`** — shift all positions so the diagram starts at the canvas origin.
+4. **Orthogonal routing + edge side policy**
+  - Edges render as right-angle paths.
+  - Edge-side attachment is layer-aware across the four vertical bands: `System-Managed` -> `Public-Facing` -> `VNet` -> `Private`.
+  - Higher -> lower layer: source exits from `Bottom`, target enters at `Top`.
+  - Same layer OR ambiguous layer classification: source exits `Right`, target enters `Left`.
+  - Lower -> higher layer: source exits from `Top`, target enters at `Bottom`.
+  - Resolution is semantic-first by layer classification; same-layer and ambiguous cases intentionally stay horizontal.
+
+### Layer Classification
+
+The auto-layout algorithm classifies Azure components into four **semantic layers** to determine routing behavior and positioning:
+
+| Layer | Purpose | Components |
+|---|---|---|
+| **System-Managed** | Internal canvas entity | Public Internet node (auto-injected) |
+| **Public-Facing** | Internet edge; receives/exposes traffic outside | Public IP Address, VPN Gateway, Public DNS Zone, Bastion, Public Load Balancer, Public App Gateway, public App Service, Azure Functions |
+| **VNet-Managed** | Network fabric; deployed inside or tightly integrated with VNet | VNet, Subnet, VNet Peering, NIC, NSG, ASG, Firewall, UDR, NVA, VM, VMSS, AKS, Internal Load Balancer, Internal App Gateway, Service Endpoint, Private Endpoint |
+| **Private / Internal** | Backend PaaS resources; accessed privately | Storage Account, Blob Storage, Managed Disk, Key Vault, Managed Identity, Private DNS Zone |
+
+**Config-Driven Layer Assignment:**
+
+Some components can belong to different layers depending on their configuration:
+
+| Component | Public-Facing | VNet-Managed | Private |
+|---|---|---|---|
+| **App Gateway** | `frontendType === 'Public'` | `frontendType === 'Internal'` | — |
+| **Load Balancer** | `loadBalancerType === 'Public'` | `loadBalancerType === 'Internal'` | — |
+| **App Service** | No VNet integration + No Private Endpoint | VNet-integrated or Private Endpoint enabled | — |
+| **Azure Functions** | No VNet integration + No Private Endpoint | VNet-integrated or Private Endpoint enabled | — |
+| **AKS** | (node pools always VNet-managed; API server can be public or private) | Primary classification | — |
+| **DNS Zone** | `zoneType === 'Public'` | — | `zoneType === 'Private'` |
+
+If cyclic dependencies exist, unresolved nodes are appended deterministically so Auto-Layout still completes.
 
 ---
 
@@ -158,6 +242,71 @@ npm run preview
 # Or generate a fully static output
 npm run generate
 ```
+
+---
+
+## Deployment
+
+This project is a client-side Nuxt SPA (`ssr: false`). For production hosting, use static deployment with CDN edge caching.
+
+### Primary: AWS Amplify Hosting
+
+Use Amplify Hosting as the default deployment path for this repository.
+
+1. Connect the GitHub repository in **AWS Amplify -> Hosting**.
+2. Select the target branch (`main` for production, optional `develop` for staging).
+3. Configure build settings:
+
+```yaml
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        - npm run generate
+  artifacts:
+    baseDirectory: .output/public
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+```
+
+4. Add all required `NUXT_PUBLIC_*` variables in Amplify environment variables.
+5. Add SPA rewrite rule so client-side routes resolve to `index.html`:
+   - Source: `/<*>`
+   - Target: `/index.html`
+   - Type: `200 (Rewrite)`
+6. Attach a custom domain (Route 53 or external DNS) and enable HTTPS.
+
+### Alternative: CloudFront + S3
+
+Use this when you want finer control over CDN behavior or separate infra ownership.
+
+1. Build static output with `npm run generate`.
+2. Upload `.output/public` contents to an S3 bucket used as static origin.
+3. Serve through CloudFront (enable compression and HTTPS).
+4. Configure SPA fallback so unknown routes return `index.html` (custom error response for `403`/`404` -> `/index.html`, response code `200`).
+5. Invalidate `index.html` on each release.
+
+### Environment Strategy
+
+Use isolated AWS resources per environment (`dev`, `staging`, `production`) for Cognito, S3, Bedrock region config, and MongoDB endpoint/API key.
+
+Important behavior for this app:
+
+- All `NUXT_PUBLIC_*` values are embedded at build time.
+- Runtime changes in Amplify/CloudFront do not change app config until you rebuild and redeploy.
+- Do not put private credentials in `NUXT_PUBLIC_*`.
+
+### Rollback
+
+- **Amplify Hosting:** Redeploy a previous successful build from the Amplify console.
+- **CloudFront + S3:** Restore a previous artifact set (or S3 object versions), then invalidate `index.html`.
 
 ---
 

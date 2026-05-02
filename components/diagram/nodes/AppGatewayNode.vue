@@ -8,6 +8,8 @@
     <Handle type="target" :position="Position.Left" />
     <Handle type="source" :position="Position.Bottom" id="bottom" />
     <Handle type="target" :position="Position.Top" id="top" />
+    <Handle type="source" :position="Position.Top" id="top-source" />
+    <Handle type="target" :position="Position.Bottom" id="bottom-target" />
     <div class="generic-node-content" :style="{ borderColor: '#0063b1' }">
       <div class="generic-node-icon-wrap" :style="{ backgroundColor: '#0063b120' }">
         <Icon icon="mdi:application" :style="{ color: '#0063b1' }" class="generic-icon" />

@@ -43,8 +43,12 @@ const OUTSIDE_VNET_POLICY = new Set<NetworkComponentType>([
 const ROOT_MARGIN = 40
 const OUTSIDE_POLICY_GAP_X = 24
 const OUTSIDE_POLICY_GAP_Y = 32
+const ROOT_VNET_GAP_X = CHILD_GAP
+const ROOT_VNET_GAP_Y = CHILD_GAP
+const ROOT_VNET_ROW_TOLERANCE_Y = 140
 
 type NodeData = DiagramNode['data'] & Record<string, any>
+type LayoutLayer = 'system-managed' | 'public-facing' | 'vnet' | 'private'
 type Rect = { x: number; y: number; w: number; h: number }
 type Maps = {
   subnetToVnet: Map<string, string>
@@ -106,6 +110,10 @@ export function applyDagreLayout(nodes: DiagramNode[], edges: DiagramEdge[]): Di
     g.setEdge(edge.source, edge.target)
   })
 
+  // Mathematical prerequisite stage: run Kahn topological sort first so we have a
+  // deterministic, dependency-aware processing order before pixel placement.
+  const prerequisiteOrder = topoSortKahn(nodes, g)
+
   dagre.layout(g)
 
   const absPos = new Map<string, Rect>()
@@ -120,10 +128,16 @@ export function applyDagreLayout(nodes: DiagramNode[], edges: DiagramEdge[]): Di
     })
   })
 
-  const sorted = topoSort(nodes, g)
+  const sorted = prerequisiteOrder
   reflowSubnetContainers(sorted, absPos, g, nodeById)
   reflowVnetContainers(sorted, absPos, g, nodeById)
+  compactRootVnetSpacing(sorted, absPos, g)
   reflowOutsideVnetPolicies(sorted, absPos, nodeById, maps)
+  reflowPublicFacingNodes(sorted, absPos, g)
+  enforceRootVnetTopBandClearance(sorted, absPos, g)
+  reflowRootVnetManagedNodes(sorted, absPos, g)
+  reflowRootInfrastructureNodes(sorted, absPos, g)
+  reflowVnetPeeringNodes(sorted, absPos, g)
   positionPublicInternetNodes(sorted, absPos)
   normalizeAbsolutePositions(absPos)
 
@@ -185,6 +199,7 @@ function buildRelationshipMaps(nodes: DiagramNode[]): Maps {
 
 function resolveParentId(data: NodeData, maps: Maps): string | undefined {
   if (data.type === NetworkComponentType.SUBNET) return data.vnetId
+  if (data.type === NetworkComponentType.VNET_PEERING) return data.localVnetId || data.parentId
   if (data.type === NetworkComponentType.NETWORK_IC) return data.subnetId
   if (OUTSIDE_VNET_POLICY.has(data.type)) return undefined
   if (data.type === NetworkComponentType.FIREWALL) return data.vnetId
@@ -619,6 +634,452 @@ function reflowOutsideVnetPolicies(
   })
 }
 
+/**
+ * Dagre can spread disconnected root clusters far apart. In large seeded diagrams (for example
+ * Full Sample with 2 VNets), this can leave excessive whitespace between VNets. Compact root-level
+ * VNet cluster spacing in both X and Y while preserving each VNet subtree's internal geometry.
+ */
+function compactRootVnetSpacing(
+  nodes: DiagramNode[],
+  absPos: Map<string, Rect>,
+  g: dagre.graphlib.Graph,
+) {
+  const rootVnetIds = sortIdsByLayout(
+    nodes
+      .filter(node => (node.data as NodeData).type === NetworkComponentType.VNET)
+      .filter(node => !(g.parent(node.id) as string | undefined))
+      .map(node => node.id),
+    absPos
+  )
+
+  if (rootVnetIds.length < 2) return
+
+  const rows: string[][] = []
+  rootVnetIds.forEach(id => {
+    const rect = absPos.get(id)
+    if (!rect) return
+
+    const activeRow = rows.at(-1)
+    if (!activeRow) {
+      rows.push([id])
+      return
+    }
+
+    const firstInRowRect = absPos.get(activeRow[0])
+    if (!firstInRowRect || Math.abs(rect.y - firstInRowRect.y) > ROOT_VNET_ROW_TOLERANCE_Y) {
+      rows.push([id])
+      return
+    }
+
+    activeRow.push(id)
+  })
+
+  // Stage 1: compact each row horizontally to the uniform node gap rhythm.
+  rows.forEach(row => {
+    const rowIds = sortIdsByLayout(row, absPos)
+    let previousId: string | null = null
+
+    rowIds.forEach(currentId => {
+      if (!previousId) {
+        previousId = currentId
+        return
+      }
+
+      const previousRect = absPos.get(previousId)
+      const currentRect = absPos.get(currentId)
+      if (!previousRect || !currentRect) {
+        previousId = currentId
+        return
+      }
+
+      const desiredX = previousRect.x + previousRect.w + ROOT_VNET_GAP_X
+      const dx = desiredX - currentRect.x
+      // Always normalize root VNet spacing to a deterministic gap so repeated
+      // manual auto-layout runs cannot leave VNets overlapped.
+      if (Math.abs(dx) > 0.5) {
+        absPos.set(currentId, { ...currentRect, x: desiredX })
+        shiftDescendants(currentId, dx, 0, absPos, g)
+      }
+
+      previousId = currentId
+    })
+  })
+
+  // Stage 2: compact row-to-row spacing vertically to avoid large Dagre gaps.
+  let previousRowBottom: number | null = null
+  rows.forEach(row => {
+    const rowRects = row
+      .map(id => absPos.get(id))
+      .filter((rect): rect is Rect => isValidRect(rect))
+
+    if (rowRects.length === 0) return
+
+    const rowTop = rowRects.reduce((min, rect) => Math.min(min, rect.y), Number.POSITIVE_INFINITY)
+    const rowBottom = rowRects.reduce((max, rect) => Math.max(max, rect.y + rect.h), Number.NEGATIVE_INFINITY)
+
+    if (previousRowBottom !== null) {
+      const desiredTop = previousRowBottom + ROOT_VNET_GAP_Y
+      // Normalize rows to an exact deterministic rhythm in both directions:
+      // pull up rows with too much gap and push down rows that drift upward.
+      const dy = desiredTop - rowTop
+      if (Math.abs(dy) > 0.5) {
+        row.forEach(vnetId => {
+          const rect = absPos.get(vnetId)
+          if (!rect) return
+          absPos.set(vnetId, { ...rect, y: rect.y + dy })
+          shiftDescendants(vnetId, 0, dy, absPos, g)
+        })
+      }
+    }
+
+    const refreshedRowRects = row
+      .map(id => absPos.get(id))
+      .filter((rect): rect is Rect => isValidRect(rect))
+    if (refreshedRowRects.length > 0) {
+      previousRowBottom = refreshedRowRects
+        .reduce((max, rect) => Math.max(max, rect.y + rect.h), Number.NEGATIVE_INFINITY)
+    }
+  })
+}
+
+/**
+ * Place root-level infrastructure nodes (IP addresses, load balancers, DNS zones, VNet
+ * peerings, storage, identity, etc.) that are not VNets, Subnets, policy nodes (NSG/ASG/UDR),
+ * or the Public Internet node.  These nodes often receive no Dagre positioning context
+ * because cross-cluster edges are filtered from the layout pass, so without an explicit
+ * reflow they end up arbitrarily far from the main graph.
+ *
+ * The pass places these nodes in compact rows just below the main non-internet content,
+ * wrapping at the content's X extent so they stay visually close to the diagram.
+ */
+function reflowRootInfrastructureNodes(
+  nodes: DiagramNode[],
+  absPos: Map<string, Rect>,
+  g: dagre.graphlib.Graph,
+) {
+  // A "root infrastructure" node has no Dagre-assigned parent and is not a special type
+  // already handled by another reflow pass.
+  const orphanNodes = nodes.filter(node => {
+    const d = node.data as NodeData
+    const assignedParent = g.parent(node.id) as string | undefined
+    if (assignedParent) return false  // already nested
+    if (d.type === NetworkComponentType.INTERNET) return false  // handled by positionPublicInternetNodes
+    if (d.type === NetworkComponentType.VNET) return false     // container
+    if (d.type === NetworkComponentType.SUBNET) return false   // container
+    if (OUTSIDE_VNET_POLICY.has(d.type)) return false          // handled by reflowOutsideVnetPolicies
+    if (d.type === NetworkComponentType.VNET_PEERING) return false  // handled by reflowVnetPeeringNodes
+    if (classifyLayoutLayer(d) !== 'private') return false          // private-layer only
+    return true
+  })
+
+  if (orphanNodes.length === 0) return
+
+  // Compute the bounding box of all already-positioned non-internet content
+  const contentRects = nodes
+    .filter(node => {
+      const d = node.data as NodeData
+      return d.type !== NetworkComponentType.INTERNET
+        && d.type !== NetworkComponentType.VNET_PEERING
+        && !orphanNodes.some(o => o.id === node.id)
+    })
+    .map(node => absPos.get(node.id))
+    .filter(isValidRect)
+
+  if (contentRects.length === 0) return
+
+  const contentMinX = contentRects.reduce((min, r) => Math.min(min, r.x), Number.POSITIVE_INFINITY)
+  const contentMaxX = contentRects.reduce((max, r) => Math.max(max, r.x + r.w), Number.NEGATIVE_INFINITY)
+  const contentMaxY = contentRects.reduce((max, r) => Math.max(max, r.y + r.h), Number.NEGATIVE_INFINITY)
+
+  const ROW_GAP_BELOW = 40  // gap between main content and first orphan row
+  const NODE_GAP = CHILD_GAP
+
+  const maxRowWidth = Math.max(contentMaxX - contentMinX, BASE_NODE_WIDTH)
+  let cursorX = contentMinX
+  let cursorY = contentMaxY + ROW_GAP_BELOW
+  let rowHeight = 0
+
+  orphanNodes.forEach((node, index) => {
+    const rect = absPos.get(node.id)
+    if (!rect) return
+
+    // Wrap to a new row when we would exceed the content width
+    if (index > 0 && cursorX + rect.w > contentMinX + maxRowWidth) {
+      cursorX = contentMinX
+      cursorY += rowHeight + NODE_GAP
+      rowHeight = 0
+    }
+
+    absPos.set(node.id, { ...rect, x: cursorX, y: cursorY })
+    rowHeight = Math.max(rowHeight, rect.h)
+    cursorX += rect.w + NODE_GAP
+  })
+}
+
+/**
+ * Returns true when a root-level node should be treated as "public-facing" and placed
+ * in the near-top band (below Internet, same band as NSG/ASG/UDR) rather than in the
+ * bottom orphan row.  All standalone IP_ADDRESS nodes qualify (private IPs are normally
+ * modelled as NIC properties, not as stand-alone nodes).  Load Balancers and DNS Zones
+ * qualify only when they are not explicitly marked as internal/private.
+ */
+function isPublicFacingNode(data: NodeData): boolean {
+  return classifyLayoutLayer(data) === 'public-facing'
+}
+
+function classifyLayoutLayer(data: NodeData): LayoutLayer {
+  if (data.type === NetworkComponentType.INTERNET) return 'system-managed'
+
+  if ([
+    NetworkComponentType.VPN_GATEWAY,
+    NetworkComponentType.BASTION,
+    NetworkComponentType.IP_ADDRESS,
+  ].includes(data.type)) return 'public-facing'
+
+  if (data.type === NetworkComponentType.DNS_ZONE) {
+    return data.zoneType === 'Private' ? 'private' : 'public-facing'
+  }
+
+  if (data.type === NetworkComponentType.APP_GATEWAY) {
+    return data.frontendType === 'Internal' ? 'vnet' : 'public-facing'
+  }
+
+  if (data.type === NetworkComponentType.LOAD_BALANCER) {
+    return data.loadBalancerType === 'Internal' ? 'vnet' : 'public-facing'
+  }
+
+  if (data.type === NetworkComponentType.APP_SERVICE) {
+    return data.vnetIntegrationSubnetId || data.enablePrivateEndpoint ? 'vnet' : 'public-facing'
+  }
+
+  if (data.type === NetworkComponentType.FUNCTIONS) {
+    return data.vnetIntegrationSubnetId || data.enablePrivateEndpoint ? 'vnet' : 'public-facing'
+  }
+
+  if ([
+    NetworkComponentType.STORAGE_ACCOUNT,
+    NetworkComponentType.BLOB_STORAGE,
+    NetworkComponentType.MANAGED_DISK,
+    NetworkComponentType.KEY_VAULT,
+    NetworkComponentType.MANAGED_IDENTITY,
+  ].includes(data.type)) return 'private'
+
+  return 'vnet'
+}
+
+/**
+ * Place public-internet-facing root nodes (Public IP, Public LB, Public DNS Zone) in a
+ * compact row at the same vertical band as the OUTSIDE_VNET_POLICY nodes (NSG/ASG/UDR)
+ * — i.e. above the VNets.  If no policy nodes exist, the row is placed just above the
+ * top of all VNet rects.
+ */
+function reflowPublicFacingNodes(
+  nodes: DiagramNode[],
+  absPos: Map<string, Rect>,
+  g: dagre.graphlib.Graph,
+) {
+  const publicNodes = nodes.filter(node => {
+    const d = node.data as NodeData
+    if (!isPublicFacingNode(d)) return false
+    return !(g.parent(node.id) as string | undefined)
+  })
+  if (publicNodes.length === 0) return
+
+  // Determine the Y for this band: same as the top of already-placed policy nodes,
+  // or if none exist, just above the VNet top minus a gap.
+  const policyRects = nodes
+    .filter(n => OUTSIDE_VNET_POLICY.has((n.data as NodeData).type))
+    .map(n => absPos.get(n.id))
+    .filter(isValidRect)
+
+  const vnetRects = nodes
+    .filter(n => (n.data as NodeData).type === NetworkComponentType.VNET)
+    .map(n => absPos.get(n.id))
+    .filter(isValidRect)
+
+  if (vnetRects.length === 0 && policyRects.length === 0) return
+
+  const rowHeight = publicNodes.reduce((max, n) => {
+    const r = absPos.get(n.id)
+    return r ? Math.max(max, r.h) : max
+  }, BASE_NODE_HEIGHT)
+
+  const NODE_GAP = CHILD_GAP
+  let bandY: number
+  if (policyRects.length > 0) {
+    // Keep a dedicated lane above policy nodes so public-facing cards don't overlap/interfere.
+    const policyTopY = policyRects.reduce((min, r) => Math.min(min, r.y), Number.POSITIVE_INFINITY)
+    bandY = policyTopY - rowHeight - NODE_GAP
+  } else {
+    const vnetMinY = vnetRects.reduce((min, r) => Math.min(min, r.y), Number.POSITIVE_INFINITY)
+    bandY = vnetMinY - rowHeight - OUTSIDE_POLICY_GAP_Y
+  }
+
+  // Determine the horizontal span from all VNet/policy content
+  const allContentRects = [...vnetRects, ...policyRects]
+  const contentMinX = allContentRects.reduce((min, r) => Math.min(min, r.x), Number.POSITIVE_INFINITY)
+  const contentMaxX = allContentRects.reduce((max, r) => Math.max(max, r.x + r.w), Number.NEGATIVE_INFINITY)
+
+  // Sort left-to-right and pack into rows
+  const sorted = sortIdsByLayout(publicNodes.map(n => n.id), absPos)
+  const maxRowWidth = Math.max(contentMaxX - contentMinX, BASE_NODE_WIDTH)
+  let cursorX = contentMinX
+  let cursorY = bandY
+  let rowH = 0
+
+  sorted.forEach((id, index) => {
+    const rect = absPos.get(id)
+    if (!rect) return
+    if (index > 0 && cursorX + rect.w > contentMinX + maxRowWidth) {
+      cursorX = contentMinX
+      cursorY -= rowH + NODE_GAP  // wrap upward to avoid overlapping policy nodes
+      rowH = 0
+    }
+    absPos.set(id, { ...rect, x: cursorX, y: cursorY })
+    rowH = Math.max(rowH, rect.h)
+    cursorX += rect.w + NODE_GAP
+  })
+}
+
+/**
+ * After top-band passes (policy + public-facing), ensure root-level VNets always start
+ * below those lanes. This prevents manual auto-layout runs from lifting a VNet into the
+ * top layer and overlapping policy/public-facing nodes.
+ */
+function enforceRootVnetTopBandClearance(
+  nodes: DiagramNode[],
+  absPos: Map<string, Rect>,
+  g: dagre.graphlib.Graph,
+) {
+  const topBandRects = nodes
+    .filter(node => {
+      const d = node.data as NodeData
+      if (OUTSIDE_VNET_POLICY.has(d.type)) return true
+      return isPublicFacingNode(d) && !(g.parent(node.id) as string | undefined)
+    })
+    .map(node => absPos.get(node.id))
+    .filter(isValidRect)
+
+  if (topBandRects.length === 0) return
+
+  const rootVnetIds = nodes
+    .filter(node => (node.data as NodeData).type === NetworkComponentType.VNET)
+    .filter(node => !(g.parent(node.id) as string | undefined))
+    .map(node => node.id)
+
+  if (rootVnetIds.length === 0) return
+
+  const topBandBottom = topBandRects.reduce((max, rect) => Math.max(max, rect.y + rect.h), Number.NEGATIVE_INFINITY)
+  const minimumVnetTop = topBandBottom + OUTSIDE_POLICY_GAP_Y
+
+  rootVnetIds.forEach(vnetId => {
+    const rect = absPos.get(vnetId)
+    if (!rect) return
+    if (rect.y >= minimumVnetTop) return
+
+    const dy = minimumVnetTop - rect.y
+    absPos.set(vnetId, { ...rect, y: rect.y + dy })
+    shiftDescendants(vnetId, 0, dy, absPos, g)
+  })
+}
+
+function reflowRootVnetManagedNodes(
+  nodes: DiagramNode[],
+  absPos: Map<string, Rect>,
+  g: dagre.graphlib.Graph,
+) {
+  const vnetManagedRootNodes = nodes.filter(node => {
+    const d = node.data as NodeData
+    const assignedParent = g.parent(node.id) as string | undefined
+    if (assignedParent) return false
+    if (d.type === NetworkComponentType.INTERNET) return false
+    if (d.type === NetworkComponentType.VNET) return false
+    if (d.type === NetworkComponentType.SUBNET) return false
+    if (OUTSIDE_VNET_POLICY.has(d.type)) return false
+    if (d.type === NetworkComponentType.VNET_PEERING) return false
+    return classifyLayoutLayer(d) === 'vnet'
+  })
+
+  if (vnetManagedRootNodes.length === 0) return
+
+  const vnetRects = nodes
+    .filter(node => (node.data as NodeData).type === NetworkComponentType.VNET)
+    .map(node => absPos.get(node.id))
+    .filter(isValidRect)
+
+  if (vnetRects.length === 0) return
+
+  const spanMinX = vnetRects.reduce((min, r) => Math.min(min, r.x), Number.POSITIVE_INFINITY)
+  const spanMaxX = vnetRects.reduce((max, r) => Math.max(max, r.x + r.w), Number.NEGATIVE_INFINITY)
+  const startY = vnetRects.reduce((max, r) => Math.max(max, r.y + r.h), Number.NEGATIVE_INFINITY) + OUTSIDE_POLICY_GAP_Y
+
+  const sortedIds = sortIdsByLayout(vnetManagedRootNodes.map(node => node.id), absPos)
+  const maxRowWidth = Math.max(spanMaxX - spanMinX, BASE_NODE_WIDTH)
+  let cursorX = spanMinX
+  let cursorY = startY
+  let rowHeight = 0
+
+  sortedIds.forEach((id, index) => {
+    const rect = absPos.get(id)
+    if (!rect) return
+
+    if (index > 0 && cursorX + rect.w > spanMinX + maxRowWidth) {
+      cursorX = spanMinX
+      cursorY += rowHeight + CHILD_GAP
+      rowHeight = 0
+    }
+
+    absPos.set(id, { ...rect, x: cursorX, y: cursorY })
+    rowHeight = Math.max(rowHeight, rect.h)
+    cursorX += rect.w + CHILD_GAP
+  })
+}
+
+/**
+ * Position VNET_PEERING nodes visually between their two peered VNets.  After Dagre
+ * layout the peering node lands in an arbitrary root position; this pass moves it to
+ * the horizontal midpoint between the right edge of the left VNet and the left edge of
+ * the right VNet, vertically centred between the two VNets.  Falls back to leaving the
+ * node where reflowRootInfrastructureNodes placed it when either referenced VNet is
+ * missing from the diagram.
+ */
+function reflowVnetPeeringNodes(
+  nodes: DiagramNode[],
+  absPos: Map<string, Rect>,
+  g: dagre.graphlib.Graph,
+) {
+  nodes.forEach(node => {
+    const d = node.data as NodeData
+    if (d.type !== NetworkComponentType.VNET_PEERING) return
+
+    // Parented peering nodes are intentionally contained by the local VNet.
+    if (g.parent(node.id) as string | undefined) return
+
+    const localVnetId = d.localVnetId as string | undefined
+    const remoteVnetId = d.remoteVnetId as string | undefined
+    if (!localVnetId || !remoteVnetId) return
+
+    const localRect = absPos.get(localVnetId)
+    const remoteRect = absPos.get(remoteVnetId)
+    const peeringRect = absPos.get(node.id)
+    if (!isValidRect(localRect) || !isValidRect(remoteRect) || !isValidRect(peeringRect)) return
+
+    // Determine which VNet is to the left and which to the right.
+    const leftRect = localRect.x <= remoteRect.x ? localRect : remoteRect
+    const rightRect = localRect.x <= remoteRect.x ? remoteRect : localRect
+
+    // Horizontal: midpoint between right edge of left VNet and left edge of right VNet.
+    const midX = (leftRect.x + leftRect.w + rightRect.x) / 2
+    const targetX = midX - peeringRect.w / 2
+
+    // Vertical: average of the two VNet vertical centres.
+    const avgCenterY = (leftRect.y + leftRect.h / 2 + rightRect.y + rightRect.h / 2) / 2
+    const targetY = avgCenterY - peeringRect.h / 2
+
+    absPos.set(node.id, { ...peeringRect, x: targetX, y: targetY })
+  })
+}
+
 function positionPublicInternetNodes(nodes: DiagramNode[], absPos: Map<string, Rect>) {
   const internetEntries = sortIdsByLayout(
     nodes
@@ -700,19 +1161,65 @@ function resolveAttachmentAnchorX(
   return anchors.reduce((sum, value) => sum + value, 0) / anchors.length
 }
 
-function topoSort(nodes: DiagramNode[], g: dagre.graphlib.Graph): DiagramNode[] {
-  const result: DiagramNode[] = []
-  const visited = new Set<string>()
+function topoSortKahn(nodes: DiagramNode[], g: dagre.graphlib.Graph): DiagramNode[] {
+  const nodeIds = nodes.map(node => node.id)
+  const nodeById = new Map(nodes.map(node => [node.id, node]))
+  const adjacency = new Map<string, Set<string>>()
+  const indegree = new Map<string, number>()
 
-  function visit(id: string) {
-    if (visited.has(id)) return
-    const parentId = g.parent(id) as string | undefined
-    if (parentId && !visited.has(parentId)) visit(parentId)
-    visited.add(id)
-    const node = nodes.find(n => n.id === id)
-    if (node) result.push(node)
+  nodeIds.forEach(id => {
+    adjacency.set(id, new Set<string>())
+    indegree.set(id, 0)
+  })
+
+  const addEdge = (fromId: string, toId: string) => {
+    if (!adjacency.has(fromId) || !adjacency.has(toId)) return
+    const next = adjacency.get(fromId)
+    if (!next || next.has(toId)) return
+    next.add(toId)
+    indegree.set(toId, (indegree.get(toId) || 0) + 1)
   }
 
-  nodes.forEach(node => visit(node.id))
-  return result
+  // Keep directed attachment dependencies used by Dagre.
+  ;(g.edges() as Array<{ v: string; w: string }>).forEach(({ v, w }) => {
+    addEdge(v, w)
+  })
+
+  // Enforce parent-before-child precedence required by Vue Flow nesting.
+  nodeIds.forEach(id => {
+    const parentId = g.parent(id) as string | undefined
+    if (parentId) addEdge(parentId, id)
+  })
+
+  // Deterministic queue for reproducible layout ordering.
+  const queue = nodeIds
+    .filter(id => (indegree.get(id) || 0) === 0)
+    .sort((a, b) => a.localeCompare(b))
+
+  const orderedIds: string[] = []
+  while (queue.length > 0) {
+    const currentId = queue.shift()
+    if (!currentId) continue
+    orderedIds.push(currentId)
+
+    const neighbors = [...(adjacency.get(currentId) || [])].sort((a, b) => a.localeCompare(b))
+    neighbors.forEach(nextId => {
+      const nextDegree = (indegree.get(nextId) || 0) - 1
+      indegree.set(nextId, nextDegree)
+      if (nextDegree === 0) {
+        queue.push(nextId)
+        queue.sort((a, b) => a.localeCompare(b))
+      }
+    })
+  }
+
+  // Cycle fallback: append unresolved nodes deterministically so layout can continue.
+  const unresolved = nodeIds
+    .filter(id => !orderedIds.includes(id))
+    .sort((a, b) => a.localeCompare(b))
+  const finalOrder = [...orderedIds, ...unresolved]
+
+  return finalOrder
+    .map(id => nodeById.get(id))
+    .filter((node): node is DiagramNode => Boolean(node))
 }

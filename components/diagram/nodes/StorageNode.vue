@@ -8,6 +8,8 @@
     <Handle type="target" :position="Position.Left" />
     <Handle type="source" :position="Position.Bottom" id="bottom" />
     <Handle type="target" :position="Position.Top" id="top" />
+    <Handle type="source" :position="Position.Top" id="top-source" />
+    <Handle type="target" :position="Position.Bottom" id="bottom-target" />
     <div class="generic-node-content" :style="{ borderColor: nodeColor }">
       <div class="generic-node-icon-wrap" :style="{ backgroundColor: nodeColor + '20' }">
         <Icon :icon="nodeIcon" :style="{ color: nodeColor }" class="generic-icon" />

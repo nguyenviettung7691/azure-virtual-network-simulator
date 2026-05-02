@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { getBezierPath } from '@vue-flow/core'
+import { getSmoothStepPath } from '@vue-flow/core'
 import type { EdgeProps } from '@vue-flow/core'
 
 interface NetworkEdgeProps extends EdgeProps {
@@ -51,16 +51,17 @@ interface NetworkEdgeProps extends EdgeProps {
 
 const props = defineProps<NetworkEdgeProps>()
 
-const edgeColor = computed(() => props.data.color || '#999999')
+const edgeColor = computed(() => 'var(--diagram-edge-color, var(--text, #323130))')
 
 const path = computed(() => {
-  const [edgePath] = getBezierPath({
+  const [edgePath] = getSmoothStepPath({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
     sourcePosition: props.sourcePosition,
     targetX: props.targetX,
     targetY: props.targetY,
     targetPosition: props.targetPosition,
+    borderRadius: 12,
   })
   return edgePath
 })
@@ -77,10 +78,6 @@ const edgeStyle = computed(() => ({
 <style scoped>
 .network-edge-label {
   font-size: 11px;
-  fill: var(--text, #323130);
-}
-
-@keyframes dashdraw {
-  to { stroke-dashoffset: -10; }
+  fill: var(--diagram-edge-color, var(--text, #323130));
 }
 </style>

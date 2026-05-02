@@ -1,6 +1,6 @@
 export const INTERNET_SOURCE_ID = '__internet__'
 
-export type TestType = 'connection' | 'loadbalance' | 'security' | 'dns'
+export type TestType = 'connection' | 'loadbalance' | 'dns'
 
 export type TestStatus = 'pending' | 'running' | 'pass' | 'fail' | 'warning'
 
@@ -10,6 +10,8 @@ export interface TestCondition {
   protocol?: string
   port?: number
   expectedResult?: 'allow' | 'deny'
+  hostname?: string
+  expectedBackendCount?: number
 }
 
 export interface TestResult {
