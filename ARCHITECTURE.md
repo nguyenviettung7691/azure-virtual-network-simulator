@@ -232,33 +232,58 @@ A reactive dashboard reflecting the live diagram state.
   - `npm run build` -> `.output/` (Nuxt production build)
   - `npm run generate` -> `.output/public/` (static artifact for CDN hosting)
 
-### 9.2 Recommended Production Target (AWS Amplify Hosting)
-- **Primary deployment target:** AWS Amplify Hosting.
-- Rationale:
-  - Native Git branch-based CI/CD for SPA deploys.
-  - Managed HTTPS, CDN edge delivery, and straightforward rollback.
-  - Built-in environment variable management aligned with `NUXT_PUBLIC_*` model.
-- Required build contract:
-  - Install: `npm ci`
-  - Build: `npm run generate`
-  - Artifact root: `.output/public`
-- Required SPA rewrite rule:
-  - `/<*>` -> `/index.html` with `200` rewrite.
-
-### 9.3 Secondary Target (CloudFront + S3)
-- Use when teams need explicit CDN control or separate platform ownership.
+### 9.2 Canonical Production Topology (Amplify Origin + CloudFront Front Door)
+- **Canonical deployment target:** CloudFront in front of AWS Amplify Hosting.
 - Reference topology:
-  - Browser -> CloudFront distribution -> S3 static origin.
-  - Browser directly calls external services (Cognito, S3 APIs via Amplify, Bedrock Runtime, MongoDB Data API).
-- Required SPA fallback behavior:
-  - CloudFront custom error responses for `403` and `404` to `/index.html` with response code `200`.
+  - Browser -> CloudFront distribution -> Amplify Hosting app URL (origin)
+  - Browser directly calls external services (Cognito, S3 APIs via Amplify, Bedrock Runtime, MongoDB Data API)
+- Rationale:
+  - Keeps Amplify native Git-based CI/CD unchanged for application lifecycle.
+  - Supports custom-domain front-door control through CloudFront and Route 53.
+  - Decouples application releases from edge/network infrastructure lifecycle.
 
-### 9.4 Cache-Control Strategy
+### 9.3 TLS, DNS, and Domain Requirements
+- ACM certificate must be issued in `us-east-1` for CloudFront.
+- Certificate validation is performed via DNS records in Route 53.
+- CloudFront Alternate Domain Name (CNAME) is set to the app custom hostname.
+- Route 53 points the app hostname to the CloudFront distribution domain.
+- Amplify still requires SPA rewrite behavior (`/<*>` -> `/index.html` as `200`) on the app branch so deep links resolve correctly when proxied through CloudFront.
+
+### 9.4 Event-Driven Cache Invalidation (Required)
+- Problem: Amplify deploys and CloudFront cache lifecycle are independent; edge content can remain stale after deploy.
+- Mandatory glue:
+  - EventBridge rule listens for successful Amplify deployment events.
+  - Event pattern:
+    - `source = aws.amplify`
+    - `detail-type = Amplify Deployment Status Change`
+    - `detail.jobStatus = SUCCEED`
+  - Target: Lambda function.
+  - Lambda action: `cloudfront:CreateInvalidation` with path `/*` for the managed distribution.
+- Outcome: every successful Amplify deploy automatically triggers CloudFront cache refresh without GitHub-side credentials.
+
+### 9.5 Infrastructure Ownership and IaC Boundary
+- App lifecycle owner: Amplify native CI/CD (Git push drives build/deploy).
+- Infrastructure lifecycle owner: Terraform in `infra/`.
+- Terraform-managed resources include:
+  - CloudFront distribution
+  - ACM certificate and validation records
+  - Route 53 records for app hostname
+  - EventBridge rule for Amplify deployment-success events
+  - Lambda invalidation function
+  - IAM permissions for Lambda (`cloudfront:CreateInvalidation`)
+- Required operator prerequisites before `terraform plan/apply`:
+  - Terraform CLI version `>= 1.6.0`
+  - AWS CLI v2 is installed and available (`aws --version` succeeds)
+  - AWS credentials for the target account are configured and valid (`aws sts get-caller-identity` succeeds)
+  - Human access should use short-term credentials (IAM Identity Center preferred): requires IAM Identity Center user, target-account permission set assignment with scope for ACM/Route 53/CloudFront/Lambda/EventBridge/IAM/CloudWatch Logs, and refresh via `aws sso login` when expired
+  - Preflight checks from `infra/scripts/check-prereqs.ps1` or `infra/scripts/check-prereqs.sh` are recommended as the standard readiness gate
+
+### 9.6 Cache-Control Strategy
 - `index.html` should be short-lived (`no-cache` or very low TTL) to pick up new release manifests quickly.
 - Fingerprinted bundles under `_nuxt/*` should be long-lived (`max-age=31536000, immutable`).
-- On release, invalidate only `index.html` unless emergency full flush is required.
+- On each successful Amplify deployment, run automatic CloudFront invalidation `/*` via the EventBridge -> Lambda path.
 
-### 9.5 Environment & Configuration Strategy
+### 9.7 Environment & Configuration Strategy
 - Maintain isolated environment stacks: `dev`, `staging`, `production`.
 - Each environment should use distinct values for:
   - Cognito user pool/client IDs
@@ -269,21 +294,21 @@ A reactive dashboard reflecting the live diagram state.
   - `NUXT_PUBLIC_*` values are embedded at build time in the client bundle.
   - Changing env vars in hosting without rebuild/redeploy does not change active runtime behavior.
 
-### 9.6 Release Flow
+### 9.8 Release Flow
 1. Merge to the release branch (`main` for production).
-2. CI/build host runs `npm ci` and `npm run generate`.
-3. Publish static artifact (`.output/public`) to hosting target.
-4. Ensure SPA rewrite/fallback rule remains active.
-5. Invalidate or refresh `index.html`.
-6. Smoke-test sign-in, save/load setup, challenge generation, and settings persistence.
+2. Amplify native CI/CD runs `npm ci` and `npm run generate` and deploys to Amplify Hosting.
+3. Amplify emits deployment status event on successful completion.
+4. EventBridge matches the success event and invokes Lambda.
+5. Lambda creates CloudFront invalidation `/*`.
+6. Smoke-test sign-in, save/load setup, challenge generation, settings persistence, and fresh-content delivery.
 
-### 9.7 Rollback Flow
-- Amplify Hosting:
-  - Redeploy a previous successful build from deployment history.
-- CloudFront + S3:
-  - Re-publish prior artifact version (or restore from S3 versioning), then invalidate `index.html`.
+### 9.9 Rollback Flow
+- Application rollback:
+  - Redeploy a previous successful Amplify build from deployment history.
+- Edge rollback/freshness control:
+  - Trigger CloudFront invalidation `/*` after rollback deployment to ensure stale edge cache is replaced.
 
-### 9.8 Security Hardening for Hosted SPA
+### 9.10 Security Hardening for Hosted SPA
 - Enforce HTTPS-only access.
 - Add response headers at CDN/hosting layer:
   - `Strict-Transport-Security`
@@ -294,11 +319,15 @@ A reactive dashboard reflecting the live diagram state.
 - Add/maintain CSP appropriate for Nuxt SPA and current external endpoints (AWS + MongoDB).
 - Keep S3 bucket private for app data; only use scoped IAM permissions through Cognito identities.
 
-### 9.9 Observability & Operational Checks
+### 9.11 Observability & Operational Checks
 - Deployment health checks should include:
   - App bootstrap loads without console/runtime errors.
   - Cognito authentication flow works.
   - S3 save/load path works.
   - Bedrock challenge generation works (or expected local fallback is shown).
   - MongoDB settings read/write works (or expected localStorage fallback is used).
+- Eventing and edge checks should include:
+  - EventBridge rule received deployment-success event.
+  - Lambda executed successfully with no permission/runtime failures.
+  - CloudFront invalidation completed within expected time.
 - Track platform metrics (build failures, CDN error rates, auth failures, API call errors) via AWS monitoring tools.

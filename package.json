@@ -1,6 +1,7 @@
 {
   "name": "azure-virtual-network-simulator",
   "version": "1.0.0",
+  "author": { "email": "nvtung.harry@gmail.com", "name": "Nguyen Viet Tung" },
   "private": true,
   "scripts": {
     "build": "nuxt build",
