@@ -85,6 +85,7 @@
         <Button
           label="Quick Sample"
           severity="secondary"
+          class="empty-btn-quick"
           @click="loadQuickSampleDiagram()"
         >
           <template #icon>
@@ -94,6 +95,7 @@
         <Button
           label="Full Sample"
           severity="secondary"
+          class="empty-btn-full"
           @click="loadFullSampleDiagram()"
         >
           <template #icon>
@@ -106,7 +108,8 @@
     <div v-if="isAnimationMode" class="animation-mode-banner">
       <Button
         label="Exit animation"
-        severity="secondary"
+        severity="danger"
+        class="animation-exit-btn"
         @click="exitAnimation"
       >
         <template #icon>
@@ -120,16 +123,21 @@
       <Button
         v-tooltip.bottom="'Auto Layout'"
         severity="secondary"
+        class="canvas-toolbar-btn"
         :disabled="isAnimationMode"
         @click="onAutoLayout"
       >
         <template #icon>
-          <Icon icon="mdi:auto-fix" style="width:20px;height:20px" />
+          <Icon
+            icon="mdi:auto-fix"
+            :style="{ width: '20px', height: '20px', color: isAnimationMode ? 'var(--text-muted)' : 'var(--primary)' }"
+          />
         </template>
       </Button>
       <Button
         v-tooltip.bottom="snapToGrid ? 'Disable snap' : 'Snap to grid'"
         :severity="snapToGrid ? 'primary' : 'secondary'"
+        class="canvas-toolbar-btn"
         :disabled="isAnimationMode"
         @click="snapToGrid = !snapToGrid"
       >
@@ -140,6 +148,7 @@
       <Button
         v-tooltip.bottom="'Fit View (reset to 1:1)'"
         severity="secondary"
+        class="canvas-toolbar-btn"
         @click="setViewport({ x: 0, y: 0, zoom: 1 }, { animation: true })"
       >
         <template #icon>
@@ -224,9 +233,33 @@ onMounted(() => {
 
 import type { DiagramAnimationSession, DiagramEdge, DiagramNode } from '~/types/diagram'
 
+// ─── Memoization for summary identify decoration ─────────────────────────────
+const summaryDecorateCache = ref<{ nodes: DiagramNode[]; highlightKey: string } | null>(null)
+
+function getSummaryDecorationCacheKey(highlightIds: string[]): string {
+  return highlightIds.length === 0 ? '' : highlightIds.join(',')
+}
+
+function computeSummaryDecoratedNodes(srcNodes: DiagramNode[], highlightedNodeIds: Set<string>): DiagramNode[] {
+  const cacheKey = getSummaryDecorationCacheKey(Array.from(highlightedNodeIds))
+  const cache = summaryDecorateCache.value
+
+  // Return cached result if nodes array reference and highlight key match
+  if (cache && cache.nodes === srcNodes && cache.highlightKey === cacheKey) {
+    return cache.nodes
+  }
+
+  const decorated = srcNodes.map(node => decorateSummaryIdentifyNode(node, highlightedNodeIds))
+  summaryDecorateCache.value = { nodes: decorated, highlightKey: cacheKey }
+  return decorated
+}
+
 const nodes = computed({
   get: () => {
-    if (!diagramStore.animationSession || !isAnimationMode.value) return diagramStore.nodes
+    if (!diagramStore.animationSession || !isAnimationMode.value) {
+      const highlightedNodeIds = new Set(diagramStore.summaryHighlightNodeIds)
+      return computeSummaryDecoratedNodes(diagramStore.nodes, highlightedNodeIds)
+    }
     return diagramStore.nodes.map(node => decorateAnimationNode(node, diagramStore.animationSession))
   },
   set: (val) => {
@@ -280,13 +313,38 @@ watch(isAnimationMode, (next, prev) => {
     elementsSelectable.value = restoreInteractiveAfterAnimation.value
   }
 
+  // Clear summary decoration cache when entering/exiting animation mode
+  summaryDecorateCache.value = null
   nextTick(() => syncRenderedGraph())
 })
+
+watch(
+  () => diagramStore.nodes.length,
+  () => {
+    // Invalidate cache when node count changes
+    summaryDecorateCache.value = null
+  }
+)
 
 watch(
   () => diagramStore.animationSession,
   () => nextTick(() => syncRenderedGraph()),
   { deep: true },
+)
+
+watch(
+  () => diagramStore.focusRequestId,
+  async () => {
+    if (isAnimationMode.value) return
+    const targetIds = new Set(diagramStore.focusNodeIds)
+    if (targetIds.size === 0) return
+
+    const targetNodes = (diagramStore.nodes as any[]).filter(n => targetIds.has(n.id))
+    if (targetNodes.length === 0) return
+
+    await nextTick()
+    fitView({ nodes: targetNodes as any, padding: 0.32, duration: 280 })
+  },
 )
 
 function onNodeClick({ node }: any) {
@@ -1283,6 +1341,116 @@ function loadFullSampleDiagram() {
       hostname: 'storage.platform.internal',
     },
   })
+
+  testsStore.addTest({
+    name: 'Internet → Azure Firewall (80)',
+    type: 'connection',
+    description: 'Validate that inbound internet traffic reaches the Azure Firewall on port 80.',
+    condition: {
+      sourceId: INTERNET_SOURCE_ID,
+      targetId: firewall1Id,
+      port: 80,
+    },
+  })
+
+  testsStore.addTest({
+    name: 'VM 1 → Internal Load Balancer (8080)',
+    type: 'loadbalance',
+    description: 'Validate east-west traffic from VM 1 through the Internal Load Balancer to its backend pool.',
+    condition: {
+      sourceId: nic1Id,
+      targetId: internalLbId,
+      expectedBackendCount: 2,
+    },
+  })
+
+  testsStore.addTest({
+    name: 'VM 4 → Internal App Gateway (80)',
+    type: 'loadbalance',
+    description: 'Validate internal traffic from VM 4 through the Internal Application Gateway to its backend pool.',
+    condition: {
+      sourceId: vm2Id,
+      targetId: internalAppGatewayId,
+      expectedBackendCount: 1,
+    },
+  })
+
+  testsStore.addTest({
+    name: 'Resolve api.example.com',
+    type: 'dns',
+    description: 'Resolve the public DNS A record for the Application Gateway frontend via the Public DNS Zone.',
+    condition: {
+      sourceId: '',
+      targetId: publicDnsId,
+      hostname: 'api.example.com',
+    },
+  })
+
+  testsStore.addTest({
+    name: 'VM 4 → AKS Cluster (443)',
+    type: 'connection',
+    description: 'Validate private connectivity from a workload VM to the AKS API server endpoint on port 443.',
+    condition: {
+      sourceId: vm2Id,
+      targetId: aks1Id,
+      port: 443,
+    },
+  })
+
+  testsStore.addTest({
+    name: 'App Service API → Key Vault (443)',
+    type: 'connection',
+    description: 'Validate that the App Service API can reach Key Vault over HTTPS for secret retrieval.',
+    condition: {
+      sourceId: appService1Id,
+      targetId: keyVault1Id,
+      port: 443,
+    },
+  })
+
+  testsStore.addTest({
+    name: 'Internet → VMSS API (80)',
+    type: 'connection',
+    description: 'Validate inbound internet connectivity to the VMSS API scale set on port 80.',
+    condition: {
+      sourceId: INTERNET_SOURCE_ID,
+      targetId: vmss1Id,
+      port: 80,
+    },
+  })
+
+  testsStore.addTest({
+    name: 'Functions Worker → Storage Account (443)',
+    type: 'connection',
+    description: 'Validate that the Functions Worker can reach the Storage Account over HTTPS via VNet integration.',
+    condition: {
+      sourceId: functions1Id,
+      targetId: storage1Id,
+      port: 443,
+    },
+  })
+
+  testsStore.addTest({
+    name: 'VM 3 → VPN Gateway (443)',
+    type: 'connection',
+    description: 'Validate connectivity from a subnet-3 workload to the VPN Gateway for on-premises tunnel access.',
+    condition: {
+      sourceId: 'sample-vm-3',
+      targetId: vpnGatewayId,
+      port: 443,
+    },
+  })
+
+  testsStore.addTest({
+    name: 'Internet → Public App Service Portal (443)',
+    type: 'connection',
+    description: 'Validate that the public-facing App Service Portal is reachable from the internet over HTTPS.',
+    condition: {
+      sourceId: INTERNET_SOURCE_ID,
+      targetId: publicAppServiceId,
+      port: 443,
+    },
+  })
 }
 
 function syncRenderedGraph() {
@@ -1302,11 +1470,22 @@ function decorateAnimationNode(node: DiagramNode, session: DiagramAnimationSessi
   }
 }
 
+function decorateSummaryIdentifyNode(node: DiagramNode, highlightedNodeIds: Set<string>): DiagramNode {
+  const identifyClass = highlightedNodeIds.has(node.id) ? 'summary-identify' : ''
+  return {
+    ...node,
+    class: mergeNodeClass((node as any).class, identifyClass),
+  }
+}
+
 function mergeNodeClass(currentClass: unknown, nextClass: string): string {
   const sanitizedCurrentClass = typeof currentClass === 'string'
     ? currentClass
       .split(/\s+/)
-      .filter(token => token && token !== 'animation-node' && !token.startsWith('animation-node--'))
+      .filter(token => token
+        && token !== 'animation-node'
+        && !token.startsWith('animation-node--')
+        && token !== 'summary-identify')
       .join(' ')
     : ''
 

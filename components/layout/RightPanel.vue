@@ -3,7 +3,7 @@
     <div class="panel-header" @click="toggle">
       <Button :icon="isCollapsed ? 'pi pi-chevron-left' : 'pi pi-chevron-right'" text size="small" class="collapse-btn" />
       <div class="panel-title" v-if="!isCollapsed">
-        <Icon icon="mdi:information-outline" class="panel-icon" />
+        <Icon icon="mdi:sitemap-outline" class="panel-icon" />
         <span>Network Summary</span>
       </div>
     </div>
@@ -20,16 +20,32 @@
           <AccordionContent>
             <div v-if="summaryNodes.length === 0" class="empty-section">No components added yet</div>
             <div v-else class="component-groups">
-              <div v-for="group in groupedComponents" :key="group.type" class="component-group">
-                <div class="group-header group-header-clickable" @click="toggleComponentGroup(group.type)">
-                  <Icon :icon="getIcon(group.type)" :style="{ color: getColor(group.type) }" class="group-type-icon" />
-                  <span class="group-label">{{ getLabel(group.type) }}</span>
-                  <Tag :value="String(group.nodes.length)" severity="info" />
-                  <Icon :icon="collapsedComponentTypes.has(group.type) ? 'mdi:chevron-right' : 'mdi:chevron-down'" class="group-chevron" />
-                </div>
-                <div class="component-list" v-show="!collapsedComponentTypes.has(group.type)">
-                  <div v-for="node in group.nodes" :key="node.id" class="component-row">
-                    <span class="comp-name">{{ node.data.name }}</span>
+              <div v-for="categoryGroup in categorizedComponentGroups" :key="categoryGroup.category" class="category-section">
+                <div class="category-subheading">{{ categoryGroup.category }}</div>
+                <div v-for="group in categoryGroup.groups" :key="group.type" class="component-group">
+                  <div
+                    :class="[
+                      'group-header',
+                      'group-header-clickable',
+                      { 'identify-active': isIdentifyEnabled && hoveredComponentGroupType === group.type },
+                    ]"
+                    @click="onComponentGroupHeaderClick(group.type)"
+                    @mouseenter="setHoveredComponentGroup(group.type)"
+                    @mouseleave="setHoveredComponentGroup(null)"
+                  >
+                    <Icon :icon="getIcon(group.type)" :style="{ color: getColor(group.type) }" class="group-type-icon" />
+                    <span class="group-label">{{ getLabel(group.type) }}</span>
+                    <Tag :value="String(group.nodes.length)" severity="info" />
+                    <Icon :icon="collapsedComponentTypes.has(group.type) ? 'mdi:chevron-right' : 'mdi:chevron-down'" class="group-chevron" />
+                  </div>
+                  <div class="component-list" v-show="!collapsedComponentTypes.has(group.type)">
+                    <div
+                      v-for="node in group.nodes"
+                      :key="node.id"
+                      :class="['component-row', { 'identify-active': isIdentifyEnabled && hoveredComponentGroupType === group.type }]"
+                    >
+                      <span class="comp-name">{{ node.data.name }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -47,21 +63,36 @@
           <AccordionContent>
             <div v-if="groupedConnections.length === 0" class="empty-section">No connections defined</div>
             <div v-else class="conn-groups">
-              <div v-for="(group, gi) in groupedConnections" :key="group.targetId"
-                   :class="['conn-group', gi % 2 === 1 ? 'conn-group-alt' : '', gi > 0 ? 'conn-group-sep' : '']">
-                <div class="conn-group-header" @click="toggleConnTarget(group.targetId)">
-                  <Icon :icon="collapsedConnTargets.has(group.targetId) ? 'mdi:chevron-right' : 'mdi:chevron-down'" class="conn-chevron" />
-                  <div class="conn-cell-content" style="flex: 1">
-                    <Icon v-if="getNodeType(group.targetId)" :icon="getNodeIcon(group.targetId)" :style="{ color: getNodeColor(group.targetId) }" class="conn-cell-icon" v-tooltip="getNodeTypeLabel(group.targetId)" />
-                    <span class="conn-target-label">{{ group.targetName }}</span>
+              <div v-for="categoryGroup in categorizedConnectivityGroups" :key="categoryGroup.category" class="category-section">
+                <div class="category-subheading">{{ categoryGroup.category }}</div>
+                <div
+                  v-for="(group, gi) in categoryGroup.groups"
+                  :key="group.targetId"
+                  :class="['conn-group', gi % 2 === 1 ? 'conn-group-alt' : '', gi > 0 ? 'conn-group-sep' : '']"
+                >
+                  <div
+                    :class="['conn-group-header', { 'identify-active': isIdentifyEnabled && hoveredConnectionTargetId === group.targetId }]"
+                    @click="onConnectivityGroupHeaderClick(group.targetId)"
+                    @mouseenter="setHoveredConnectionGroup(group.targetId)"
+                    @mouseleave="setHoveredConnectionGroup(null)"
+                  >
+                    <Icon :icon="collapsedConnTargets.has(group.targetId) ? 'mdi:chevron-right' : 'mdi:chevron-down'" class="conn-chevron" />
+                    <div class="conn-cell-content" style="flex: 1">
+                      <Icon v-if="getNodeType(group.targetId)" :icon="getNodeIcon(group.targetId)" :style="{ color: getNodeColor(group.targetId) }" class="conn-cell-icon" v-tooltip="getNodeTypeLabel(group.targetId)" />
+                      <span class="conn-target-label">{{ group.targetName }}</span>
+                    </div>
+                    <span class="conn-source-count">{{ group.edges.length }}</span>
                   </div>
-                  <span class="conn-source-count">{{ group.edges.length }}</span>
-                </div>
-                <div v-show="!collapsedConnTargets.has(group.targetId)" class="conn-sources">
-                  <div v-for="edge in group.edges" :key="edge.id" class="conn-source-row">
-                    <div class="conn-cell-content">
-                      <Icon v-if="getNodeType(edge.source)" :icon="getNodeIcon(edge.source)" :style="{ color: getNodeColor(edge.source) }" class="conn-cell-icon" v-tooltip="getNodeTypeLabel(edge.source)" />
-                      <span>{{ getNodeName(edge.source) }}</span>
+                  <div v-show="!collapsedConnTargets.has(group.targetId)" class="conn-sources">
+                    <div
+                      v-for="edge in group.edges"
+                      :key="edge.id"
+                      :class="['conn-source-row', { 'identify-active': isIdentifyEnabled && hoveredConnectionTargetId === group.targetId }]"
+                    >
+                      <div class="conn-cell-content">
+                        <Icon v-if="getNodeType(edge.source)" :icon="getNodeIcon(edge.source)" :style="{ color: getNodeColor(edge.source) }" class="conn-cell-icon" v-tooltip="getNodeTypeLabel(edge.source)" />
+                        <span>{{ getNodeName(edge.source) }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -160,13 +191,27 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { NetworkComponentType, getComponentIcon, getComponentLabel, getComponentColor } from '~/types/network'
+import {
+  NetworkComponentType,
+  COMPONENT_CATEGORY_ORDER,
+  getComponentCategory,
+  getComponentIcon,
+  getComponentLabel,
+  getComponentColor,
+  type ComponentCategory,
+} from '~/types/network'
 
 const diagramStore = useDiagramStore()
 
 // ─── Collapsible group state ─────────────────────────────────────────────────
 const collapsedComponentTypes = ref(new Set<string>())
 const collapsedConnTargets = ref(new Set<string>())
+const hoveredComponentGroupType = ref<string | null>(null)
+const hoveredConnectionTargetId = ref<string | null>(null)
+
+// ─── Debounce state for hover highlighting ───────────────────────────────────
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+const HOVER_DEBOUNCE_MS = 16 // One frame at 60fps
 
 function toggleComponentGroup(type: string) {
   const s = new Set(collapsedComponentTypes.value)
@@ -180,6 +225,57 @@ function toggleConnTarget(targetId: string) {
   if (s.has(targetId)) s.delete(targetId)
   else s.add(targetId)
   collapsedConnTargets.value = s
+}
+
+const isIdentifyEnabled = computed(() => diagramStore.viewMode !== 'animation')
+
+function setDiagramHighlightNodeIds(nodeIds: string[]) {
+  if (!isIdentifyEnabled.value) {
+    diagramStore.clearSummaryHighlightNodeIds()
+    return
+  }
+  diagramStore.setSummaryHighlightNodeIds(nodeIds)
+}
+
+function setDiagramHighlightNodeIdsDebounced(nodeIds: string[]) {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    setDiagramHighlightNodeIds(nodeIds)
+  }, HOVER_DEBOUNCE_MS)
+}
+
+function setHoveredComponentGroup(type: string | null) {
+  hoveredComponentGroupType.value = isIdentifyEnabled.value ? type : null
+  if (!type || !isIdentifyEnabled.value) {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    diagramStore.clearSummaryHighlightNodeIds()
+    return
+  }
+
+  setDiagramHighlightNodeIdsDebounced(componentGroupNodeIdsByType.value.get(type) || [])
+}
+
+function setHoveredConnectionGroup(targetId: string | null) {
+  hoveredConnectionTargetId.value = isIdentifyEnabled.value ? targetId : null
+  if (!targetId || !isIdentifyEnabled.value) {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    diagramStore.clearSummaryHighlightNodeIds()
+    return
+  }
+
+  setDiagramHighlightNodeIdsDebounced(connectivityGroupNodeIdsByTarget.value.get(targetId) || [])
+}
+
+function onComponentGroupHeaderClick(type: string) {
+  toggleComponentGroup(type)
+  const nodeIds = componentGroupNodeIdsByType.value.get(type) || []
+  diagramStore.requestFocusOnNodeIds(nodeIds)
+}
+
+function onConnectivityGroupHeaderClick(targetId: string) {
+  toggleConnTarget(targetId)
+  const nodeIds = connectivityGroupNodeIdsByTarget.value.get(targetId) || []
+  diagramStore.requestFocusOnNodeIds(nodeIds)
 }
 
 const isCollapsed = computed({
@@ -230,6 +326,28 @@ const groupedComponents = computed(() => {
   return [...map.entries()].map(([type, nodes]) => ({ type: type as NetworkComponentType, nodes }))
 })
 
+const componentGroupNodeIdsByType = computed(() => {
+  const map = new Map<string, string[]>()
+  groupedComponents.value.forEach((group) => {
+    map.set(group.type, group.nodes.map(node => node.id))
+  })
+  return map
+})
+
+const categorizedComponentGroups = computed(() => {
+  const groupsByCategory = new Map<ComponentCategory, typeof groupedComponents.value>()
+  for (const category of COMPONENT_CATEGORY_ORDER) groupsByCategory.set(category, [])
+
+  groupedComponents.value.forEach((group) => {
+    const category = getComponentCategory(group.type)
+    groupsByCategory.get(category)?.push(group)
+  })
+
+  return COMPONENT_CATEGORY_ORDER
+    .map(category => ({ category, groups: groupsByCategory.get(category) || [] }))
+    .filter(categoryGroup => categoryGroup.groups.length > 0)
+})
+
 const groupedConnections = computed(() => {
   const map = new Map<string, any[]>()
   // Real edges from the store
@@ -258,6 +376,29 @@ const groupedConnections = computed(() => {
     targetName: getNodeName(targetId),
     edges,
   }))
+})
+
+const connectivityGroupNodeIdsByTarget = computed(() => {
+  const map = new Map<string, string[]>()
+  groupedConnections.value.forEach((group) => {
+    map.set(group.targetId, [group.targetId, ...group.edges.map((edge: any) => edge.source)])
+  })
+  return map
+})
+
+const categorizedConnectivityGroups = computed(() => {
+  const groupsByCategory = new Map<ComponentCategory, typeof groupedConnections.value>()
+  for (const category of COMPONENT_CATEGORY_ORDER) groupsByCategory.set(category, [])
+
+  groupedConnections.value.forEach((group) => {
+    const targetType = getNodeType(group.targetId)
+    const category = targetType ? getComponentCategory(targetType) : 'Network'
+    groupsByCategory.get(category)?.push(group)
+  })
+
+  return COMPONENT_CATEGORY_ORDER
+    .map(category => ({ category, groups: groupsByCategory.get(category) || [] }))
+    .filter(categoryGroup => categoryGroup.groups.length > 0)
 })
 
 const initializedComponentCollapse = ref(false)
@@ -304,6 +445,20 @@ watch(groupedConnections, (groups) => {
   collapsedConnTargets.value = next
   previousConnectivityGroupKeys.value = new Set(groupKeys)
 }, { immediate: true })
+
+watch(isIdentifyEnabled, (enabled) => {
+  if (!enabled) {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    hoveredComponentGroupType.value = null
+    hoveredConnectionTargetId.value = null
+    diagramStore.clearSummaryHighlightNodeIds()
+  }
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  diagramStore.clearSummaryHighlightNodeIds()
+})
 
 const nsgCount = computed(() => summaryNodes.value.filter(n => n.data?.type === NetworkComponentType.NSG).length)
 const firewallCount = computed(() => summaryNodes.value.filter(n => n.data?.type === NetworkComponentType.FIREWALL).length)
@@ -683,6 +838,21 @@ const performanceFindings = computed((): AuditFinding[] => {
   gap: 0.5rem;
 }
 
+.category-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.category-subheading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.1rem 0.25rem;
+}
+
 .component-group {
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -705,6 +875,11 @@ const performanceFindings = computed((): AuditFinding[] => {
 
 .group-header-clickable:hover {
   background: var(--surface-hover);
+}
+
+.group-header.identify-active,
+.conn-group-header.identify-active {
+  background: color-mix(in srgb, var(--primary) 20%, var(--surface-alt) 80%);
 }
 
 .group-chevron {
@@ -790,6 +965,11 @@ const performanceFindings = computed((): AuditFinding[] => {
   border-bottom: 1px solid var(--border);
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+.conn-source-row.identify-active,
+.component-row.identify-active {
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface) 88%);
 }
 
 .conn-source-row:last-child {

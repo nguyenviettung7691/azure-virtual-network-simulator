@@ -38,9 +38,9 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 
 - **Interactive Canvas** — A drag-and-drop interface for arranging Azure networking components. Attachment lines and system nodes (like Public Internet) are rendered automatically based on your topology.
 - **Component Configuration** — Click any component to instantly edit its properties and metadata via a dedicated configuration form. 
-- **Real-Time Network Summary** — A live dashboard that groups your architecture by component type with collapsible sections. At panel level, only **Components** is expanded by default; Components and Connectivity groups inside those sections default to collapsed for faster scanning on large diagrams. Security and Performance count badges dynamically reflect live audit findings: green (no issues), yellow (warning), red (critical).
+- **Real-Time Network Summary** — A live dashboard that groups your architecture by component type with collapsible sections and category sub-headings aligned to the top toolbar taxonomy (**Network**, **Security**, **Gateway**, **Compute**, **Storage**, **Identity**). At panel level, only **Components** is expanded by default; Components and Connectivity groups inside those sections default to collapsed for faster scanning on large diagrams. Hovering a Components or Connectivity group header activates identify-highlighting for that group only inside the panel; this identifying overlay is automatically disabled during Animation Mode. Hover interactions are optimized with debouncing and memoization for smooth performance on large diagrams. Security and Performance count badges dynamically reflect live audit findings: green (no issues), yellow (warning), red (critical).
 - **Smart Auto-Layout** — One-click graph layout that runs a three-step pipeline: Kahn topological prerequisite sorting, hierarchical placement for clear left-to-right data flow, and orthogonal right-angle edge routing. Public-facing root nodes are placed in a dedicated near-top lane above policy nodes, root VNets are kept below top lanes, root VNet-managed nodes get their own post-VNet band, and private root infrastructure is placed in compact bottom rows. Root VNet spacing is normalized with deterministic minimum gaps on every run so repeated manual Auto-Layout passes do not overlap VNets. VNet Peering is parented to its Local VNet.
-- **Network Testing & Validation** — Create and run connection, load-balancing, and DNS tests. Review results via detailed status summaries and step-by-step physical traversal paths with color-coded last-node indicators: green (pass), red (fail), yellow (warning). The test summary row includes Pass, Fail, and Warning counts, with Total shown on a second centered line.
+- **Network Testing & Validation** — Create and run connection, load-balancing, and DNS tests. Review results via detailed status summaries and step-by-step physical traversal paths with color-coded last-node indicators: green (pass), red (fail), yellow (warning). The summary block now uses a full-width PrimeVue MeterGroup segmented bar (Pass/Fail/Warning percentages) plus icon-labeled metric text for Pass, Fail, Warning, and Total.
 - **Security & Performance Audits** — The Network Summary panel continuously audits your diagram for NSG coverage gaps, permissive inbound rules, missing health probes, and other best-practice issues — no test required.
 - **Connection Flow Animations** — Visualize your connection tests in action. Switch to Animation Mode to see a paper-plane traveler follow the exact hop-by-hop path for connection tests, fan out **simultaneously** from the load balancer to every backend VM for load-balancer tests (at the same per-hop pace used by the other test types), and trace the DNS resolution chain for DNS tests. Active edges display animated marching dashes and a glow effect.
 - **High-Contrast Diagram Edges** — In Architecture mode, all connection edges render in a theme-aware contrast color (`black` in light mode, `white` in dark mode) for clearer separation from component border colors.
@@ -108,15 +108,7 @@ Two built-in setup buttons are available in the empty canvas quick-start state:
 - **Full Sample**
   - Starts from the Quick Sample baseline, then expands it into a full-feature showcase.
   - Adds the remaining supported Azure component types (ASG, UDR, VPN Gateway, Application Gateway, NVA, VMSS, AKS, App Service, Functions, Storage Account, Blob Storage, Managed Disk, Managed Identity, Key Vault, Service Endpoint, Private Endpoint, Firewall, Bastion, VNet Peering, plus a second VNet/Subnet for peering context).
-  - Adds extra tests for the new topology sections (Application Gateway load-balancing, private-endpoint connectivity, Bastion inbound access, and additional DNS resolution).
-
-Implementation plan for the Full Sample (high level):
-
-1. Reuse the existing Quick Sample builder as the deterministic foundation.
-2. Append one representative node for each remaining supported component type.
-3. Add only attachment edges (not containment edges) so Auto-Layout continues to own parent/child nesting via `parentNode`.
-4. Seed additional tests that exercise newly introduced paths and services.
-5. Run one `autoLayout()` pass and a single `notifyDiagramLoaded()` event so test auto-run behavior stays consistent.
+  - Adds 14 tests covering all major component categories: Application Gateway load-balancing, private-endpoint connectivity, Bastion inbound access, Azure Firewall, Internal Load Balancer east-west, Internal App Gateway, Public DNS Zone resolution, AKS private API server, App Service → Key Vault, VMSS inbound, Functions → Storage, VPN Gateway access, Public App Service, and additional DNS resolution.
 
 ---
 

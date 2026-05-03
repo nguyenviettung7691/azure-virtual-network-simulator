@@ -45,16 +45,23 @@ A reactive dashboard reflecting the live diagram state.
 
 #### 3.1.1 Components Section
 - **Grouping:** Nodes grouped by component type.
+- **Category headings:** Type groups are nested beneath sub-headings that mirror the top toolbar taxonomy in fixed order: `Network`, `Security`, `Gateway`, `Compute`, `Storage`, `Identity`.
 - **Headers:** Clickable `.group-header-clickable` per type — includes component icon, label, count `<Tag>`, and a chevron icon. Clicking toggles `collapsedComponentTypes` (a `Set<string>` ref) to collapse/expand the node list below via `v-show`.
+- **Identify hover behavior:** Hovering a component group header highlights that header and only its related component rows (`identify-active` class scope). This behavior is panel-local and does not modify canvas node state.
+  - **Performance optimization:** Hover events are debounced at 16ms (one frame at 60fps) in `RightPanel.vue` to reduce store update frequency. Canvas node decoration is memoized in `DiagramCanvas.vue` based on highlight node IDs, avoiding unnecessary re-renders when the highlight set hasn't changed.
 - **Default state:** All component-type groups initialize collapsed by default.
 
 #### 3.1.2 Connectivity Section
 - **Structure:** Div-based collapsible groups (`.conn-groups` container), one `.conn-group` per target node.
+- **Category headings:** Target groups are categorized using the target component type and rendered under the same fixed category order used by the top toolbar (`Network`, `Security`, `Gateway`, `Compute`, `Storage`, `Identity`).
 - **Data Synthesis:** Rows reflect explicit attachment edges *and* synthesized containment relationships mapped from `node.parentNode`, guaranteeing full topology visibility.
 - **Collapse/Expand:** Each `.conn-group-header` (chevron + target icon + name + source count badge) is clickable — toggles `collapsedConnTargets` ref; the `.conn-sources` list of source rows is shown/hidden via `v-show`.
 - **Iconography:** Source and Target cells include a small, colored component-type icon. Tooltips expose the full type label.
+- **Identify hover behavior:** Hovering a connectivity group header highlights that header and its related source rows only (`identify-active` class scope).
+  - **Performance optimization:** Same debouncing and memoization strategy applies to connectivity group hovers, ensuring smooth interaction on large diagrams.
 - **Default state:** All target groups initialize collapsed by default.
 - **Count badge contrast:** The source-count badge uses a solid primary background with primary-contrast text for readability.
+- **Animation-mode guard:** Identify hover behavior is disabled when `diagramStore.viewMode === 'animation'`.
 
 ### 3.1.3 Security and Performance Sections
 - **Count badges:** Each component-type count `<Tag>` uses dynamic `:severity` via `getCountSeverity(types, findings)`:
@@ -78,9 +85,9 @@ A reactive dashboard reflecting the live diagram state.
 - **Action Buttons:** 
   - Row 1: Full-width "Add Test" block button.
   - Row 2: Half-width "Run All" (`severity="success"`) and "Delete All" (triggers confirm dialog).
-- **Summary Tags:**
-  - Row 1 (centered): Pass, Fail, Warning.
-  - Row 2 (centered): Total.
+- **Summary Metering:**
+  - A full-width PrimeVue `MeterGroup` segmented bar renders Pass/Fail/Warning percentage slices.
+  - A label row below the bar renders icon-labeled metrics in the format `<ColoredIcon> <Name> (<Count>)` for Pass, Fail, Warning, and Total.
 - **Test Cards:**
   - Visuals: Left-accent border.
   - Header Row: Type icon + Test Name + Bottom border separator.
@@ -88,6 +95,7 @@ A reactive dashboard reflecting the live diagram state.
   - *Note:* "Run Animation" button is rendered for **connection, load-balance, and DNS** test types.
 - **Results Output:**
   - Order: Summary Message -> Detailed Findings (if applicable) -> Compact Inline Flowchart.
+  - Test-type group headers use slightly increased typography for quicker scanability.
   - **Flowcharts:** Renders literal physical traversal paths (Node ID resolving to Component Name + Icon).
     - *Passing:* Final node highlighted green with `mdi:check-circle` badge (`.fni-success` / `.flow-success-badge`).
     - *Failing:* Path terminates explicitly at the blocking component (e.g., NSG) with a red `mdi:close-circle` badge (`.fni-blocked` / `.flow-blocked-badge`).
@@ -175,21 +183,21 @@ A reactive dashboard reflecting the live diagram state.
 #### 6.1.2 Full Sample
 - **Base strategy:** Calls the Quick Sample loader first, then appends the rest of the component catalog in one deterministic pass before the queued layout runs.
 - **Additional component coverage:** ASG, UDR, VPN Gateway, App Gateway, NVA, VMSS, AKS, App Service, Functions, Storage Account, Blob Storage, Managed Disk, Managed Identity, Key Vault, Service Endpoint, Private Endpoint, Firewall, Bastion, VNet Peering, plus an additional VNet/Subnet for peering context.
-- **Additional tests:** Adds targeted tests beyond Quick Sample for:
-  - Application Gateway load-balancing path.
-  - Workload-to-private-endpoint connectivity.
+- **Additional tests:** Adds 14 targeted tests beyond Quick Sample covering:
+  - Application Gateway (public) load-balancing path.
+  - Workload-to-private-endpoint connectivity (VM 2 → Storage Private Endpoint).
   - Internet-to-Bastion path.
-  - Additional private DNS resolution.
-
-#### 6.1.3 Implementation Plan (Developer Detail)
-1. Keep `loadQuickSampleDiagram()` as the canonical baseline seed routine.
-2. Implement `loadFullSampleDiagram()` as an extension layer that:
-   - reuses baseline IDs where needed,
-   - appends missing component types,
-   - and creates only attachment edges.
-3. Ensure seeded nodes provide required data fields expected by summary audits and test simulation logic (for example NSG rules, LB/AppGW backend references, DNS record sets).
-4. Add full-sample-specific tests using existing test types (`connection`, `loadbalance`, `dns`) so they auto-run through the current `diagramLoadId` watcher path.
-5. Preserve single-pass post-seed behavior: one Auto-Layout run and one diagram-loaded notification to avoid duplicate test reruns.
+  - Private DNS resolution (`storage.platform.internal`).
+  - Azure Firewall inbound connectivity (Internet → port 80).
+  - Internal Load Balancer east-west path (VM 1 → port 8080, backend count assertion).
+  - Internal Application Gateway east-west path (backend count assertion).
+  - Public DNS Zone resolution (`api.example.com`).
+  - AKS Cluster private API server access (VM 4 → port 443).
+  - App Service API to Key Vault HTTPS connectivity.
+  - VMSS inbound internet reachability (Internet → port 80).
+  - Azure Functions to Storage Account HTTPS path.
+  - VPN Gateway subnet access from workload VM (VM 3 → port 443).
+  - Public App Service Portal internet reachability (Internet → port 443).
 
 ### 6.2 Data Destruction
 - **Reset Diagram:** Removes all components. A confirm dialog must provide an optional checkbox: "Also reset all network tests".

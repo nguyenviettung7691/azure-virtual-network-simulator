@@ -17,16 +17,15 @@
         <span class="node-label">Subnet</span>
         <span class="node-name">{{ data.name }}</span>
       </div>
-    </div>
-
-    <div class="node-body">
-      <div class="node-property" v-if="data.addressPrefix">
-        <span class="prop-label">CIDR:</span>
-        <span class="prop-value">{{ data.addressPrefix }}</span>
-      </div>
-      <div class="node-property" v-if="data.nsgId">
-        <span class="prop-label">NSG:</span>
-        <span class="prop-value nsg-badge">Protected</span>
+      <div class="node-header-info">
+        <div class="node-property" v-if="data.addressPrefix">
+          <span class="prop-label">CIDR:</span>
+          <span class="prop-value">{{ data.addressPrefix }}</span>
+        </div>
+        <div class="node-property" v-if="data.nsgId">
+          <span class="prop-label">NSG:</span>
+          <span class="prop-value nsg-badge">Protected</span>
+        </div>
       </div>
     </div>
   </div>
@@ -75,15 +74,24 @@ function onDblClick() {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background-color: rgba(80, 167, 240, 0.08);
+  background: linear-gradient(135deg, rgba(80, 167, 240, 0.9) 0%, rgba(80, 167, 240, 0.82) 100%);
   border-radius: 6px 6px 0 0;
-  border-bottom: 1px solid rgba(80, 167, 240, 0.2);
+  border-bottom: 1px solid rgba(80, 167, 240, 0.36);
+}
+
+.node-header-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .node-icon {
   width: 18px;
   height: 18px;
-  color: #50a7f0;
+  color: rgba(255, 255, 255, 0.98);
   flex-shrink: 0;
 }
 
@@ -96,48 +104,67 @@ function onDblClick() {
 
 .node-label {
   font-size: 10px;
-  color: var(--text-muted, #605e5c);
+  color: var(--text, #323130);
+  opacity: 0.85;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
 
 .node-name {
   font-size: 12px;
-  font-weight: 600;
-  color: #005a9e;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.98);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.node-body {
-  padding: 8px 12px;
+:global(.dark-mode) .subnet-header {
+  background: linear-gradient(135deg, rgba(96, 205, 255, 0.9) 0%, rgba(96, 205, 255, 0.82) 100%);
+  border-bottom-color: rgba(159, 230, 255, 0.4);
+}
+
+:global(.dark-mode) .subnet-node {
+  --subnet-accent: #60cdff;
+}
+
+:global(.dark-mode) .node-icon,
+:global(.dark-mode) .node-name {
+  color: #05314a;
+}
+
+:global(.dark-mode) .node-label {
+  color: #f3fbff;
+  opacity: 0.9;
 }
 
 .node-property {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
-  font-size: 11px;
+  margin-bottom: 0;
+  font-size: 10px;
+  min-width: 0;
 }
 
 .prop-label {
-  color: var(--text-muted, #605e5c);
+  color: rgba(255, 255, 255, 0.92);
   flex-shrink: 0;
 }
 
 .prop-value {
-  color: var(--text, #323130);
+  color: rgba(255, 255, 255, 0.98);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: right;
 }
 
 .nsg-badge {
-  background-color: rgba(209, 52, 56, 0.1);
-  color: #d13438;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.98);
   padding: 1px 6px;
   border-radius: 10px;
   font-size: 10px;

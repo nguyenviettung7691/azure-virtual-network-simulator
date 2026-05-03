@@ -35,13 +35,29 @@
       </div>
 
       <div class="test-summary" v-if="testsStore.tests.length > 0">
-        <div class="test-summary-row">
-          <Tag :value="`${testsStore.testSummary.passed} Pass`" severity="success" />
-          <Tag :value="`${testsStore.testSummary.failed} Fail`" severity="danger" />
-          <Tag :value="`${testsStore.testSummary.warning} Warning`" severity="warn" />
-        </div>
-        <div class="test-summary-row total-row">
-          <Tag :value="`${testsStore.testSummary.total} Total`" severity="secondary" />
+        <div class="test-summary-row meter-row">
+          <MeterGroup :value="testSummaryMeters" class="test-summary-meter">
+            <template #label>
+              <div class="meter-label-row">
+                <span class="summary-label pass">
+                  <Icon icon="mdi:check-circle" class="summary-label-icon" />
+                  Pass ({{ testsStore.testSummary.passed }})
+                </span>
+                <span class="summary-label fail">
+                  <Icon icon="mdi:close-circle" class="summary-label-icon" />
+                  Fail ({{ testsStore.testSummary.failed }})
+                </span>
+                <span class="summary-label warning">
+                  <Icon icon="mdi:alert-circle" class="summary-label-icon" />
+                  Warning ({{ testsStore.testSummary.warning }})
+                </span>
+                <span class="summary-label total">
+                  <Icon icon="mdi:counter" class="summary-label-icon" />
+                  Total ({{ testsStore.testSummary.total }})
+                </span>
+              </div>
+            </template>
+          </MeterGroup>
         </div>
       </div>
 
@@ -164,6 +180,17 @@ const groupedTests = computed(() =>
     }))
     .filter(group => group.tests.length > 0)
 )
+
+const testSummaryMeters = computed(() => {
+  const summary = testsStore.testSummary
+  if (summary.total <= 0) return []
+
+  return [
+    { label: 'Pass', value: Math.round((summary.passed / summary.total) * 100), color: 'var(--success)' },
+    { label: 'Fail', value: Math.round((summary.failed / summary.total) * 100), color: 'var(--danger)' },
+    { label: 'Warning', value: Math.round((summary.warning / summary.total) * 100), color: 'var(--warning)' },
+  ]
+})
 
 function toggle() { isCollapsed.value = !isCollapsed.value }
 
@@ -496,8 +523,63 @@ function deleteAllTests() {
   justify-content: center;
 }
 
-.total-row {
-  justify-content: center;
+.meter-row {
+  justify-content: stretch;
+}
+
+.test-summary-meter {
+  width: 100%;
+}
+
+.test-summary-meter :deep(.p-metergroup) {
+  width: 100%;
+}
+
+.test-summary-meter :deep(.p-metergroup-meter-container) {
+  width: 100%;
+}
+
+.test-summary-meter :deep(.p-metergroup-label-list) {
+  margin-top: 0.2rem;
+}
+
+.meter-label-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  flex-wrap: nowrap;
+}
+
+.summary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.summary-label-icon {
+  font-size: 0.74rem;
+}
+
+.summary-label.pass .summary-label-icon {
+  color: var(--success);
+}
+
+.summary-label.fail .summary-label-icon {
+  color: var(--danger);
+}
+
+.summary-label.warning .summary-label-icon {
+  color: var(--warning);
+}
+
+.summary-label.total .summary-label-icon {
+  color: var(--primary);
 }
 
 .empty-state {
@@ -590,7 +672,7 @@ function deleteAllTests() {
 }
 
 .test-group-label {
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: var(--text);
   min-width: 0;
@@ -633,7 +715,7 @@ function deleteAllTests() {
   min-width: 0;
 }
 
-.test-type-icon { font-size: 0.9rem; color: var(--primary); flex-shrink: 0; }
+.test-type-icon { font-size: 1rem; color: var(--primary); flex-shrink: 0; }
 
 .test-name {
   font-size: 0.8rem;

@@ -86,6 +86,13 @@ Use this file as the primary coding guide for architectural constraints and high
 - Keep manual edge creation/editing disabled at Vue Flow level.
 - Keep single-click-to-edit behavior for user-managed nodes while unlocked; Public Internet stays non-editable.
 
+### Network Summary Hover Performance
+
+- **Debounced hover state:** Network Summary group header hovers are debounced at 16ms (one frame at 60fps) in `components/layout/RightPanel.vue` to reduce store update frequency and prevent excessive node re-renders.
+- **Memoized node decoration:** Canvas node identification highlighting in `components/diagram/DiagramCanvas.vue` is memoized based on highlight node IDs to avoid re-decorating nodes when the highlight set hasn't changed.
+- **Cache invalidation:** The memoization cache is cleared when entering/exiting animation mode or when node count changes.
+- These optimizations ensure smooth hover interactions even on large diagrams with hundreds of nodes.
+
 ## Modal/Theme/Icon Constraints
 
 - Keep custom confirm component name `ConfirmActionDialog`; do not rename it to `ConfirmDialog`.

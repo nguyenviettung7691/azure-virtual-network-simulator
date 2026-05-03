@@ -9,6 +9,9 @@
     <div class="field checkbox-field">
       <label>DDoS Protection</label><ToggleSwitch v-model="model.enableDdosProtection" />
     </div>
+    <div class="field checkbox-field">
+      <label>VM Protection</label><ToggleSwitch v-model="model.enableVmProtection" />
+    </div>
   </div>
 </template>
 

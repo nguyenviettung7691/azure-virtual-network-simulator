@@ -3,7 +3,7 @@
     v-model:visible="diagramStore.showComponentModal"
     modal
     :header="modalTitle"
-    :style="{ width: '560px' }"
+    :style="{ width: '720px', maxWidth: '92vw' }"
     @hide="diagramStore.closeComponentModal()"
   >
     <div v-if="activeForm" class="form-wrapper">
@@ -76,8 +76,8 @@ const formMap: Partial<Record<NetworkComponentType, any>> = {
   [NetworkComponentType.MANAGED_IDENTITY]: resolveComponent('IdentityForm'),
   [NetworkComponentType.SERVICE_ENDPOINT]: resolveComponent('NetworkICForm'),
   [NetworkComponentType.PRIVATE_ENDPOINT]: resolveComponent('NetworkICForm'),
-  [NetworkComponentType.FIREWALL]: resolveComponent('NsgForm'),
-  [NetworkComponentType.BASTION]: resolveComponent('VpnGatewayForm'),
+  [NetworkComponentType.FIREWALL]: resolveComponent('FirewallForm'),
+  [NetworkComponentType.BASTION]: resolveComponent('BastionForm'),
 }
 
 const activeForm = computed(() => currentType.value ? formMap[currentType.value] : null)

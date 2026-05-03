@@ -858,7 +858,11 @@ function resolveVmForNic(nicId: string, nodes: any[], edges: any[]) {
 }
 
 function isBackendVmNode(node: any): boolean {
-  return node?.data?.type === NetworkComponentType.VM || node?.data?.type === NetworkComponentType.VMSS
+  return node?.data?.type === NetworkComponentType.VM
+    || node?.data?.type === NetworkComponentType.VMSS
+    || node?.data?.type === NetworkComponentType.AKS
+    || node?.data?.type === NetworkComponentType.APP_SERVICE
+    || node?.data?.type === NetworkComponentType.FUNCTIONS
 }
 
 function getConnectedNodes(nodeId: string, nodes: any[], edges: any[]) {
@@ -1204,7 +1208,7 @@ function checkNsgBlocking(path: string[], nodes: any[], condition: TestCondition
         if (rule.access === 'Deny' && rule.direction === 'Inbound') {
           if (condition.port &&
               rule.destinationPortRange !== '*' &&
-              rule.destinationPortRange === String(condition.port)) {
+              portRangeIncludesPort(rule.destinationPortRange, condition.port)) {
             return `NSG "${node.data.name}" rule "${rule.name}" blocks port ${condition.port}`
           }
           if (rule.destinationPortRange === '*' && rule.priority >= 4000) {

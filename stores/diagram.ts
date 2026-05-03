@@ -130,6 +130,9 @@ interface DiagramStoreState {
   edges: DiagramEdge[]
   viewMode: DiagramViewMode
   animationSession: DiagramAnimationSession | null
+  summaryHighlightNodeIds: string[]
+  focusNodeIds: string[]
+  focusRequestId: number
   animationRunId: number
   diagramLoadId: number
   selectedNodeId: string | null
@@ -151,6 +154,9 @@ export const useDiagramStore = defineStore('diagram', {
     edges: [],
     viewMode: 'infrastructure',
     animationSession: null,
+    summaryHighlightNodeIds: [],
+    focusNodeIds: [],
+    focusRequestId: 0,
     animationRunId: 0,
     diagramLoadId: 0,
     selectedNodeId: null,
@@ -246,6 +252,22 @@ export const useDiagramStore = defineStore('diagram', {
 
     setSelectedNode(id: string | null) {
       this.selectedNodeId = id
+    },
+
+    setSummaryHighlightNodeIds(nodeIds: string[]) {
+      const unique = [...new Set(nodeIds.filter(Boolean))]
+      this.summaryHighlightNodeIds = unique
+    },
+
+    clearSummaryHighlightNodeIds() {
+      this.summaryHighlightNodeIds = []
+    },
+
+    requestFocusOnNodeIds(nodeIds: string[]) {
+      const unique = [...new Set(nodeIds.filter(Boolean))]
+      if (unique.length === 0) return
+      this.focusNodeIds = unique
+      this.focusRequestId += 1
     },
 
     loadDiagram(state: DiagramState) {

@@ -60,72 +60,29 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { NetworkComponentType, getComponentIcon, getComponentLabel, getComponentColor } from '~/types/network'
+import {
+  NetworkComponentType,
+  COMPONENT_CATEGORY_ORDER,
+  COMPONENTS_BY_CATEGORY,
+  getComponentIcon,
+  getComponentLabel,
+  getComponentColor,
+} from '~/types/network'
 
 const authStore = useAuthStore()
 const diagramStore = useDiagramStore()
 const settingsStore = useSettingsStore()
 const savedSetupsStore = useSavedSetupsStore()
 
-const componentGroups = [
-  {
-    label: 'Network',
-    items: [
-      { type: NetworkComponentType.VNET, label: 'Virtual Network', icon: getComponentIcon(NetworkComponentType.VNET), color: getComponentColor(NetworkComponentType.VNET) },
-      { type: NetworkComponentType.SUBNET, label: 'Subnet', icon: getComponentIcon(NetworkComponentType.SUBNET), color: getComponentColor(NetworkComponentType.SUBNET) },
-      { type: NetworkComponentType.NETWORK_IC, label: 'Network Interface', icon: getComponentIcon(NetworkComponentType.NETWORK_IC), color: getComponentColor(NetworkComponentType.NETWORK_IC) },
-      { type: NetworkComponentType.IP_ADDRESS, label: 'Public IP', icon: getComponentIcon(NetworkComponentType.IP_ADDRESS), color: getComponentColor(NetworkComponentType.IP_ADDRESS) },
-      { type: NetworkComponentType.DNS_ZONE, label: 'DNS Zone', icon: getComponentIcon(NetworkComponentType.DNS_ZONE), color: getComponentColor(NetworkComponentType.DNS_ZONE) },
-      { type: NetworkComponentType.VNET_PEERING, label: 'VNet Peering', icon: getComponentIcon(NetworkComponentType.VNET_PEERING), color: getComponentColor(NetworkComponentType.VNET_PEERING) },
-      { type: NetworkComponentType.UDR, label: 'Route Table', icon: getComponentIcon(NetworkComponentType.UDR), color: getComponentColor(NetworkComponentType.UDR) },
-    ],
-  },
-  {
-    label: 'Security',
-    items: [
-      { type: NetworkComponentType.NSG, label: 'NSG', icon: getComponentIcon(NetworkComponentType.NSG), color: getComponentColor(NetworkComponentType.NSG) },
-      { type: NetworkComponentType.ASG, label: 'ASG', icon: getComponentIcon(NetworkComponentType.ASG), color: getComponentColor(NetworkComponentType.ASG) },
-      { type: NetworkComponentType.FIREWALL, label: 'Azure Firewall', icon: getComponentIcon(NetworkComponentType.FIREWALL), color: getComponentColor(NetworkComponentType.FIREWALL) },
-      { type: NetworkComponentType.BASTION, label: 'Bastion', icon: getComponentIcon(NetworkComponentType.BASTION), color: getComponentColor(NetworkComponentType.BASTION) },
-      { type: NetworkComponentType.SERVICE_ENDPOINT, label: 'Service Endpoint', icon: getComponentIcon(NetworkComponentType.SERVICE_ENDPOINT), color: getComponentColor(NetworkComponentType.SERVICE_ENDPOINT) },
-      { type: NetworkComponentType.PRIVATE_ENDPOINT, label: 'Private Endpoint', icon: getComponentIcon(NetworkComponentType.PRIVATE_ENDPOINT), color: getComponentColor(NetworkComponentType.PRIVATE_ENDPOINT) },
-    ],
-  },
-  {
-    label: 'Gateway',
-    items: [
-      { type: NetworkComponentType.VPN_GATEWAY, label: 'VPN Gateway', icon: getComponentIcon(NetworkComponentType.VPN_GATEWAY), color: getComponentColor(NetworkComponentType.VPN_GATEWAY) },
-      { type: NetworkComponentType.APP_GATEWAY, label: 'App Gateway', icon: getComponentIcon(NetworkComponentType.APP_GATEWAY), color: getComponentColor(NetworkComponentType.APP_GATEWAY) },
-      { type: NetworkComponentType.NVA, label: 'NVA', icon: getComponentIcon(NetworkComponentType.NVA), color: getComponentColor(NetworkComponentType.NVA) },
-      { type: NetworkComponentType.LOAD_BALANCER, label: 'Load Balancer', icon: getComponentIcon(NetworkComponentType.LOAD_BALANCER), color: getComponentColor(NetworkComponentType.LOAD_BALANCER) },
-    ],
-  },
-  {
-    label: 'Compute',
-    items: [
-      { type: NetworkComponentType.VM, label: 'Virtual Machine', icon: getComponentIcon(NetworkComponentType.VM), color: getComponentColor(NetworkComponentType.VM) },
-      { type: NetworkComponentType.VMSS, label: 'VM Scale Set', icon: getComponentIcon(NetworkComponentType.VMSS), color: getComponentColor(NetworkComponentType.VMSS) },
-      { type: NetworkComponentType.AKS, label: 'AKS', icon: getComponentIcon(NetworkComponentType.AKS), color: getComponentColor(NetworkComponentType.AKS) },
-      { type: NetworkComponentType.APP_SERVICE, label: 'App Service', icon: getComponentIcon(NetworkComponentType.APP_SERVICE), color: getComponentColor(NetworkComponentType.APP_SERVICE) },
-      { type: NetworkComponentType.FUNCTIONS, label: 'Functions', icon: getComponentIcon(NetworkComponentType.FUNCTIONS), color: getComponentColor(NetworkComponentType.FUNCTIONS) },
-    ],
-  },
-  {
-    label: 'Storage',
-    items: [
-      { type: NetworkComponentType.STORAGE_ACCOUNT, label: 'Storage Account', icon: getComponentIcon(NetworkComponentType.STORAGE_ACCOUNT), color: getComponentColor(NetworkComponentType.STORAGE_ACCOUNT) },
-      { type: NetworkComponentType.BLOB_STORAGE, label: 'Blob Storage', icon: getComponentIcon(NetworkComponentType.BLOB_STORAGE), color: getComponentColor(NetworkComponentType.BLOB_STORAGE) },
-      { type: NetworkComponentType.MANAGED_DISK, label: 'Managed Disk', icon: getComponentIcon(NetworkComponentType.MANAGED_DISK), color: getComponentColor(NetworkComponentType.MANAGED_DISK) },
-    ],
-  },
-  {
-    label: 'Identity',
-    items: [
-      { type: NetworkComponentType.KEY_VAULT, label: 'Key Vault', icon: getComponentIcon(NetworkComponentType.KEY_VAULT), color: getComponentColor(NetworkComponentType.KEY_VAULT) },
-      { type: NetworkComponentType.MANAGED_IDENTITY, label: 'Managed Identity', icon: getComponentIcon(NetworkComponentType.MANAGED_IDENTITY), color: getComponentColor(NetworkComponentType.MANAGED_IDENTITY) },
-    ],
-  },
-]
+const componentGroups = COMPONENT_CATEGORY_ORDER.map((label) => ({
+  label,
+  items: COMPONENTS_BY_CATEGORY[label].map((type) => ({
+    type,
+    label: getComponentLabel(type),
+    icon: getComponentIcon(type),
+    color: getComponentColor(type),
+  })),
+}))
 
 function addComponent(type: NetworkComponentType) {
   diagramStore.openAddComponentModal(type)

@@ -29,6 +29,7 @@ export default defineNuxtConfig({
         'Divider',
         'InputNumber', 'InputText',
         'Message',
+        'MeterGroup',
         'Password',
         'ProgressBar', 'ProgressSpinner',
         'Select', 'SelectButton',

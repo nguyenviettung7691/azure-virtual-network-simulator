@@ -522,3 +522,67 @@ export function getComponentLabel(type: NetworkComponentType): string {
   }
   return labels[type] || type
 }
+
+export type ComponentCategory = 'Network' | 'Security' | 'Gateway' | 'Compute' | 'Storage' | 'Identity'
+
+export const COMPONENT_CATEGORY_ORDER: ComponentCategory[] = [
+  'Network',
+  'Security',
+  'Gateway',
+  'Compute',
+  'Storage',
+  'Identity',
+]
+
+export const COMPONENTS_BY_CATEGORY: Record<ComponentCategory, NetworkComponentType[]> = {
+  Network: [
+    NetworkComponentType.VNET,
+    NetworkComponentType.SUBNET,
+    NetworkComponentType.NETWORK_IC,
+    NetworkComponentType.IP_ADDRESS,
+    NetworkComponentType.DNS_ZONE,
+    NetworkComponentType.VNET_PEERING,
+    NetworkComponentType.UDR,
+  ],
+  Security: [
+    NetworkComponentType.NSG,
+    NetworkComponentType.ASG,
+    NetworkComponentType.FIREWALL,
+    NetworkComponentType.BASTION,
+    NetworkComponentType.SERVICE_ENDPOINT,
+    NetworkComponentType.PRIVATE_ENDPOINT,
+  ],
+  Gateway: [
+    NetworkComponentType.VPN_GATEWAY,
+    NetworkComponentType.APP_GATEWAY,
+    NetworkComponentType.NVA,
+    NetworkComponentType.LOAD_BALANCER,
+  ],
+  Compute: [
+    NetworkComponentType.VM,
+    NetworkComponentType.VMSS,
+    NetworkComponentType.AKS,
+    NetworkComponentType.APP_SERVICE,
+    NetworkComponentType.FUNCTIONS,
+  ],
+  Storage: [
+    NetworkComponentType.STORAGE_ACCOUNT,
+    NetworkComponentType.BLOB_STORAGE,
+    NetworkComponentType.MANAGED_DISK,
+  ],
+  Identity: [
+    NetworkComponentType.KEY_VAULT,
+    NetworkComponentType.MANAGED_IDENTITY,
+  ],
+}
+
+const COMPONENT_TO_CATEGORY = Object.entries(COMPONENTS_BY_CATEGORY).reduce((acc, [category, types]) => {
+  types.forEach((type) => {
+    acc[type] = category as ComponentCategory
+  })
+  return acc
+}, {} as Record<NetworkComponentType, ComponentCategory>)
+
+export function getComponentCategory(type: NetworkComponentType): ComponentCategory {
+  return COMPONENT_TO_CATEGORY[type] || 'Network'
+}

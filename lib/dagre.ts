@@ -674,6 +674,15 @@ function compactRootVnetSpacing(
     activeRow.push(id)
   })
 
+  // Re-order rows by the smallest VNet ID in each row so the vertical stacking order
+  // is deterministic across runs. Without this, Dagre non-deterministic placement of
+  // disconnected clusters can reverse VNet order between the first and subsequent runs.
+  rows.sort((rowA, rowB) => {
+    const minIdA = [...rowA].sort((a, b) => a.localeCompare(b))[0] ?? ''
+    const minIdB = [...rowB].sort((a, b) => a.localeCompare(b))[0] ?? ''
+    return minIdA.localeCompare(minIdB)
+  })
+
   // Stage 1: compact each row horizontally to the uniform node gap rhythm.
   rows.forEach(row => {
     const rowIds = sortIdsByLayout(row, absPos)
@@ -969,17 +978,31 @@ function enforceRootVnetTopBandClearance(
 
   if (rootVnetIds.length === 0) return
 
-  const topBandBottom = topBandRects.reduce((max, rect) => Math.max(max, rect.y + rect.h), Number.NEGATIVE_INFINITY)
-  const minimumVnetTop = topBandBottom + OUTSIDE_POLICY_GAP_Y
+  // Find the topmost (minimum y) root VNet. Policy nodes placed above lower VNets in
+  // stacked multi-VNet layouts must not force the topmost VNet to be pushed past them.
+  // Only top-band nodes genuinely above the topmost VNet determine the clearance.
+  const topmostVnetY = rootVnetIds
+    .map(id => absPos.get(id)?.y ?? Number.POSITIVE_INFINITY)
+    .reduce((min, y) => Math.min(min, y), Number.POSITIVE_INFINITY)
 
+  const relevantTopBandBottom = topBandRects
+    .filter(rect => rect.y < topmostVnetY)
+    .reduce((max, rect) => Math.max(max, rect.y + rect.h), Number.NEGATIVE_INFINITY)
+
+  if (!Number.isFinite(relevantTopBandBottom)) return
+
+  const minimumVnetTop = relevantTopBandBottom + OUTSIDE_POLICY_GAP_Y
+  if (topmostVnetY >= minimumVnetTop) return
+
+  // Apply a uniform vertical shift to ALL root VNets so they all move together,
+  // preserving their relative arrangement while bringing the topmost VNet just
+  // below the actual top band.
+  const globalDy = minimumVnetTop - topmostVnetY
   rootVnetIds.forEach(vnetId => {
     const rect = absPos.get(vnetId)
     if (!rect) return
-    if (rect.y >= minimumVnetTop) return
-
-    const dy = minimumVnetTop - rect.y
-    absPos.set(vnetId, { ...rect, y: rect.y + dy })
-    shiftDescendants(vnetId, 0, dy, absPos, g)
+    absPos.set(vnetId, { ...rect, y: rect.y + globalDy })
+    shiftDescendants(vnetId, 0, globalDy, absPos, g)
   })
 }
 
