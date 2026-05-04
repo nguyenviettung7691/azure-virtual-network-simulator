@@ -1,7 +1,10 @@
 {
   "name": "azure-virtual-network-simulator",
   "version": "1.0.0",
-  "author": { "email": "nvtung.harry@gmail.com", "name": "Nguyen Viet Tung" },
+  "author": {
+    "email": "nvtung.harry@gmail.com",
+    "name": "Nguyen Viet Tung"
+  },
   "private": true,
   "scripts": {
     "build": "nuxt build",
@@ -26,8 +29,7 @@
     "@xmldom/xmldom": "^0.9.4",
     "aws-amplify": "^6.8.1",
     "dagre": "^0.8.5",
-    "html-to-image": "^1.11.11",
-    "jspdf": "^4.2.1",
+    "pdf-lib": "^1.17.1",
     "jszip": "^3.10.1",
     "nuxt": "3.13.2",
     "pinia": "^2.2.6",

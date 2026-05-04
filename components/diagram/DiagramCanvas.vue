@@ -224,7 +224,11 @@ onMounted(() => {
     if (name === 'loadDiagram') {
       after(() => nextTick(() => {
         syncRenderedGraph()
-        nextTick(() => fitView())
+        nextTick(async () => {
+          await fitView()
+          await nextTick()
+          diagramStore.notifyLoadRenderComplete()
+        })
       }))
     }
   })

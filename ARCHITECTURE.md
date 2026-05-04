@@ -4,6 +4,29 @@ This document serves as the exhaustive implementation specification and develope
 
 ---
 
+## Feature Reference (README → Architecture Mapping)
+
+This section maps the condensed features in README.md to their detailed architectural specifications below.
+
+| README Feature | Detailed Specification |
+|---|---|
+| **Interactive Canvas** | § 1.1 Diagram Engine; § 1.2 Viewport Controls |
+| **Component Configuration** | § 2 Property Forms |
+| **Real-Time Network Summary** | § 3.1 Network Summary Panel |
+| **Smart Auto-Layout** | § 5 Auto-Layout Pipeline |
+| **High-Contrast Edges** | § 1.1 Edge Rendering; § 8 Styling |
+| **Canvas Controls** | § 1.2 Viewport Controls (Lock/Unlock, Fit View, Minimap) |
+| **Network Testing** | § 4.1 Test Types; § 4.2 Test UI |
+| **Security & Performance Audits** | § 3.1.3 Audit Findings; § 4.3 Audit Engine |
+| **Connection Flow Animations** | § 4.3 Connection Flow Animation Mode |
+| **Import & Export** | § 7.1 Import/Export Pipelines |
+| **Cloud Saves** | § 7.2 Cloud Persistence |
+| **AI Challenges** | § 7.3 AI Challenge Generation |
+| **Tablet-Responsive Toolbars** | § 3.4 Toolbar Responsiveness |
+| **Dark / Light Mode** | § 8 Styling Architecture |
+
+---
+
 ## 1. Core Canvas Implementation
 
 ### 1.1 Diagram Engine (Vue Flow)
@@ -70,6 +93,17 @@ A reactive dashboard reflecting the live diagram state.
   - `'warn'` — at least one `warning` finding matches (and no critical)
   - `'success'` — nodes exist and no relevant findings
 - **`AuditFinding`** type includes `relatedTypes?: NetworkComponentType[]`; every `findings.push()` call in `securityFindings` and `performanceFindings` sets this field so `getCountSeverity` can filter correctly.
+
+### 3.4 Toolbar Responsiveness (Tablet Baseline)
+- **Supported minimum viewport:** Responsive toolbar support is guaranteed down to tablet widths (`<= 1024px`). Phone-size viewport optimization is out of scope.
+- **Top Toolbar (`AppHeader.vue`):**
+  - Keeps logo icon visible while reducing branding footprint for tighter widths.
+  - Preserves component category access through a compact, horizontally scrollable center rail.
+  - Preserves access to right-side account/setup actions in compact form.
+- **Bottom Toolbar (`BottomToolbar.vue`):**
+  - Stays single-row at tablet widths.
+  - Uses horizontal scrolling rather than multi-row wrapping so all primary actions (Export, Import, Save, AI Challenge, Reset, Status) remain reachable.
+  - Keeps export progress/spinner visibility intact in compact button states.
 
 ---
 
@@ -208,8 +242,29 @@ A reactive dashboard reflecting the live diagram state.
 ## 7. I/O, Persistence & AI Integrations
 
 ### 7.1 Import / Export Pipelines
-- **Export Formats:** Configured to serialize canvas state to PNG (via `html-to-image`), SVG, PDF (via `jsPDF`), `.drawio`, or Visio `.vsdx` (via `JSZip`).
-- **Import Formats:** Deserializes `.drawio`, `.xml` (via `@xmldom/xmldom`), or `.vsdx`.
+- **Export Formats:** Configured to serialize canvas state to PNG, SVG, PDF, or `.drawio`.
+- **Image export rendering strategy:**
+  - `SVG` export is produced by an app-owned DOM-to-SVG serializer that captures the live Vue Flow viewport without relying on third-party DOM snapshot libraries.
+  - `PNG` and `PDF` export render from diagram state using a canvas-based raster pipeline (worker-first with main-thread fallback), avoiding `foreignObject`-dependent rasterization.
+  - If worker conversion is unavailable, PNG/PDF fallback to the compatible main-thread conversion path.
+  - Save thumbnails reuse the same diagram-state raster pipeline so export previews and saved-setup thumbnails stay visually aligned.
+  - `.drawio` export uses a structured diagram-state serializer in a lazy worker helper so XML generation stays off the UI thread.
+  - Known limitations (current raster pipeline): PNG/PDF/thumbnail output is intentionally topology-first and may not yet match all live-template visual details (icons, gradients, and CSS-only effects) pixel-for-pixel.
+- **Export Controls:** Bottom toolbar exposes format buttons (`.drawio`, `PNG`, `PDF`, `SVG`) and an inline custom filename input.
+- **Filename Policy:** Default name is generated as `azure-vnet-YYYYMMDD-HHmmss`; user input is sanitized and extension-normalized to match the selected format.
+- **Progress and lock UX:**
+  - `PNG`, `PDF`, `SVG` use determinate stage-driven progress updates.
+  - `.drawio` uses spinner-first progress and transitions to determinate progress for longer operations.
+  - While any export is active, all export buttons are disabled until completion/failure.
+- **Import Formats:** Deserializes `.drawio` or `.xml` (via `@xmldom/xmldom`).
+- **Successful import lifecycle:**
+  - A successful import replaces the current diagram state through `loadDiagram()` and then completes the existing Vue Flow sync bridge (`setNodes`, `setEdges`, `fitView`) before any post-import prompt is shown.
+  - For app-native `.drawio` files produced by this simulator, if network tests already exist, the UI prompts after the imported diagram has rendered to ask whether those existing tests should also be reset.
+  - If the user keeps the existing tests, the current test set is preserved and rerun against the imported diagram when auto-run is enabled.
+  - If the user resets the existing tests, only test state is cleared; the imported diagram remains loaded.
+- **Round-Trip Guarantees for Native Exports:**
+  - `.drawio`: full component metadata is embedded and restored for simulator-native re-import.
+  - Generic third-party `.drawio` files remain supported through fallback parsing.
 
 ### 7.2 Cloud Persistence (Amazon S3)
 - Authenticated users serialize JSON setup payloads and base64 thumbnail PNGs to an S3 bucket configured via `aws-amplify`.

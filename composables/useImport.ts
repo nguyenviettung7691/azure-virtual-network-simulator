@@ -1,27 +1,29 @@
 import { importFromDrawio } from '~/lib/drawio'
-import { importFromVsdx } from '~/lib/vsdx'
+
+export type ImportResult =
+  | { success: true; format: 'drawio' | 'xml' }
+  | { success: false; reason: 'unsupported-format' | 'parse-failed' }
 
 export const useImport = () => {
   const diagramStore = useDiagramStore()
 
-  async function importFromFile(file: File): Promise<boolean> {
+  async function importFromFile(file: File): Promise<ImportResult> {
     try {
       if (file.name.endsWith('.drawio') || file.name.endsWith('.xml')) {
         const text = await file.text()
-        const state = importFromDrawio(text)
+        const state = await importFromDrawio(text)
         diagramStore.loadDiagram(state)
-        return true
-      } else if (file.name.endsWith('.vsdx')) {
-        const state = await importFromVsdx(file)
-        diagramStore.loadDiagram(state)
-        return true
+        return {
+          success: true,
+          format: file.name.endsWith('.drawio') ? 'drawio' : 'xml',
+        }
       } else {
         console.error('Unsupported file format:', file.name)
-        return false
+        return { success: false, reason: 'unsupported-format' }
       }
     } catch (err) {
       console.error('Import failed:', err)
-      return false
+      return { success: false, reason: 'parse-failed' }
     }
   }
 
@@ -29,7 +31,7 @@ export const useImport = () => {
     return new Promise(resolve => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = '.drawio,.xml,.vsdx'
+      input.accept = '.drawio'
       input.onchange = (e) => {
         const file = (e.target as HTMLInputElement).files?.[0] || null
         resolve(file)
@@ -39,9 +41,9 @@ export const useImport = () => {
     })
   }
 
-  async function importFromFileDialog(): Promise<boolean> {
+  async function importFromFileDialog(): Promise<ImportResult> {
     const file = await triggerFileUpload()
-    if (!file) return false
+    if (!file) return { success: false, reason: 'unsupported-format' }
     return importFromFile(file)
   }
 

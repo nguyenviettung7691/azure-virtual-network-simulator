@@ -65,6 +65,9 @@ export default defineNuxtConfig({
     optimizeDeps: {
       include: ['dagre', '@vue-flow/core', '@vue-flow/background', '@vue-flow/controls', '@vue-flow/minimap'],
     },
+    worker: {
+      format: 'es',
+    },
   },
   app: {
     head: {

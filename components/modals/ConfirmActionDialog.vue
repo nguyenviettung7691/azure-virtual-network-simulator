@@ -23,8 +23,8 @@
       </div>
     </div>
     <template #footer>
-      <Button label="Cancel" text @click="diagramStore.cancelConfirmDialog()" />
-      <Button label="Confirm" icon="pi pi-check" severity="danger" @click="diagramStore.executeConfirmedAction()" />
+      <Button :label="diagramStore.confirmDialogCancelLabel" text @click="diagramStore.cancelConfirmDialog()" />
+      <Button :label="diagramStore.confirmDialogConfirmLabel" icon="pi pi-check" severity="danger" @click="diagramStore.executeConfirmedAction()" />
     </template>
   </Dialog>
 </template>

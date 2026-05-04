@@ -144,8 +144,19 @@ interface DiagramStoreState {
   showConfirmDialog: boolean
   confirmDialogMessage: string
   confirmDialogAction: ((checkboxChecked?: boolean) => void) | null
+  confirmDialogCancelAction: (() => void) | null
   confirmDialogCheckboxLabel: string | null
   confirmDialogCheckboxChecked: boolean
+  confirmDialogConfirmLabel: string
+  confirmDialogCancelLabel: string
+  pendingLoadRenderWaiters: Array<() => void>
+}
+
+interface ConfirmDialogOptions {
+  checkboxLabel?: string
+  cancelAction?: () => void
+  confirmLabel?: string
+  cancelLabel?: string
 }
 
 export const useDiagramStore = defineStore('diagram', {
@@ -168,8 +179,12 @@ export const useDiagramStore = defineStore('diagram', {
     showConfirmDialog: false,
     confirmDialogMessage: '',
     confirmDialogAction: null,
+    confirmDialogCancelAction: null,
     confirmDialogCheckboxLabel: null,
     confirmDialogCheckboxChecked: false,
+    confirmDialogConfirmLabel: 'Confirm',
+    confirmDialogCancelLabel: 'Cancel',
+    pendingLoadRenderWaiters: [],
   }),
 
   getters: {
@@ -281,6 +296,19 @@ export const useDiagramStore = defineStore('diagram', {
       this.diagramLoadId++
     },
 
+    waitForNextLoadRender() {
+      return new Promise<void>((resolve) => {
+        this.pendingLoadRenderWaiters = [...this.pendingLoadRenderWaiters, resolve]
+      })
+    },
+
+    notifyLoadRenderComplete() {
+      if (this.pendingLoadRenderWaiters.length === 0) return
+      const waiters = this.pendingLoadRenderWaiters
+      this.pendingLoadRenderWaiters = []
+      waiters.forEach(resolve => resolve())
+    },
+
     resetDiagram() {
       this.stopAnimation()
       this.nodes = []
@@ -335,11 +363,21 @@ export const useDiagramStore = defineStore('diagram', {
       this.addingComponentType = null
     },
 
-    confirmAction(message: string, action: ((checkboxChecked?: boolean) => void), checkboxLabel?: string) {
+    confirmAction(
+      message: string,
+      action: ((checkboxChecked?: boolean) => void),
+      checkboxLabelOrOptions?: string | ConfirmDialogOptions,
+    ) {
+      const options = typeof checkboxLabelOrOptions === 'string'
+        ? { checkboxLabel: checkboxLabelOrOptions }
+        : (checkboxLabelOrOptions ?? {})
       this.confirmDialogMessage = message
       this.confirmDialogAction = action
-      this.confirmDialogCheckboxLabel = checkboxLabel ?? null
+      this.confirmDialogCancelAction = options.cancelAction ?? null
+      this.confirmDialogCheckboxLabel = options.checkboxLabel ?? null
       this.confirmDialogCheckboxChecked = false
+      this.confirmDialogConfirmLabel = options.confirmLabel ?? 'Confirm'
+      this.confirmDialogCancelLabel = options.cancelLabel ?? 'Cancel'
       this.showConfirmDialog = true
     },
 
@@ -347,15 +385,23 @@ export const useDiagramStore = defineStore('diagram', {
       if (this.confirmDialogAction) this.confirmDialogAction(this.confirmDialogCheckboxChecked)
       this.showConfirmDialog = false
       this.confirmDialogAction = null
+      this.confirmDialogCancelAction = null
       this.confirmDialogCheckboxLabel = null
       this.confirmDialogCheckboxChecked = false
+      this.confirmDialogConfirmLabel = 'Confirm'
+      this.confirmDialogCancelLabel = 'Cancel'
     },
 
     cancelConfirmDialog() {
+      const cancelAction = this.confirmDialogCancelAction
       this.showConfirmDialog = false
       this.confirmDialogAction = null
+      this.confirmDialogCancelAction = null
       this.confirmDialogCheckboxLabel = null
       this.confirmDialogCheckboxChecked = false
+      this.confirmDialogConfirmLabel = 'Confirm'
+      this.confirmDialogCancelLabel = 'Cancel'
+      if (cancelAction) cancelAction()
     },
 
     setViewport(viewport: { x: number; y: number; zoom: number }) {

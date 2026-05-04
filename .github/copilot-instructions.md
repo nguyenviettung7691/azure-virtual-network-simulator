@@ -6,6 +6,18 @@ This repository is a Nuxt 3 SPA for designing and simulating Azure virtual netwo
 
 Use this file as the primary coding guide for architectural constraints and high-risk implementation rules.
 
+## Documentation Structure
+
+This project maintains three complementary documentation files, each serving a distinct purpose:
+
+| File | Purpose | Audience | Detail Level |
+|---|---|---|---|
+| **README.md** | Overall project document highlighting easy-to-scan main points, setup instructions, and deployment overview | Project stakeholders, new developers, quick reference | High-level summaries |
+| **ARCHITECTURE.md** | Exhaustive fully detailed developer guide with complete specifications, algorithms, UI/UX rules, and implementation contracts | Contributors, maintainers, deep technical reference | Comprehensive technical specs |
+| **copilot-instructions.md** | Guidance for GitHub Copilot prompt, critical rules, high-risk implementation constraints, and architectural guardrails | Copilot (AI coding agent), code generators, automation | Actionable constraints & rules |
+
+**Navigation:** Use the Feature Reference table in ARCHITECTURE.md § 0 to map README features to their detailed specifications. When implementing changes, consult README for scope context, ARCHITECTURE for implementation rules, and copilot-instructions for risk mitigation guidance.
+
 ## Core Stack
 
 - Framework: Nuxt 3 SPA (`ssr: false`)
@@ -72,6 +84,7 @@ Use this file as the primary coding guide for architectural constraints and high
 ### Auto-run behavior
 
 - Test auto-run is triggered by explicit load/import events (`diagramLoadId` changes), not by generic node/edge count changes.
+- App-native `.drawio` imports may defer that one auto-run cycle until the post-import reset-tests prompt is resolved; keep the trigger tied to the import/load event rather than broad structural watchers.
 - Keep debounce and concurrency guards around automatic test execution.
 
 ### Animation mode
@@ -85,6 +98,7 @@ Use this file as the primary coding guide for architectural constraints and high
 - Keep animation keyframes global in `assets/css/diagram.css` (not scoped).
 - Keep manual edge creation/editing disabled at Vue Flow level.
 - Keep single-click-to-edit behavior for user-managed nodes while unlocked; Public Internet stays non-editable.
+- Preserve tablet-responsive toolbar behavior (`<= 1024px`) for `components/layout/AppHeader.vue` and `components/layout/BottomToolbar.vue`: top toolbar remains compact with horizontal access to component groups, bottom toolbar remains single-row with horizontal scrolling (no forced multi-row wrap).
 
 ### Network Summary Hover Performance
 
@@ -105,7 +119,6 @@ Use this file as the primary coding guide for architectural constraints and high
 - Pre-existing `vue-tsc --noEmit` issues exist in:
     - `lib/drawio.ts`
     - `lib/s3.ts`
-    - `lib/vsdx.ts`
     - `stores/savedSetups.ts`
     - `types/diagram.ts`
 - Do not introduce new type errors in files you modify.

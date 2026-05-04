@@ -144,6 +144,7 @@ function openSetups() {
   justify-content: center;
   gap: 0.35rem;
   overflow-x: auto;
+  min-width: 0;
   scrollbar-width: none;
 }
 
@@ -155,6 +156,7 @@ function openSetups() {
   flex-direction: column;
   align-items: center;
   gap: 3px;
+  flex-shrink: 0;
   padding: 0;
   border-radius: 7px;
   background: var(--group-card-bg, rgba(0, 0, 0, 0.07));
@@ -197,5 +199,72 @@ function openSetups() {
 .sign-in-btn {
   background: var(--primary-color) !important;
   color: var(--primary-color-text) !important;
+}
+
+@media (max-width: 1024px) {
+  .app-header {
+    gap: 0.35rem;
+    padding: 0 0.5rem;
+    height: 74px;
+    min-height: 74px;
+  }
+
+  .header-left {
+    min-width: 44px;
+  }
+
+  .logo-img {
+    width: 30px;
+    height: 30px;
+  }
+
+  .logo-text {
+    display: none;
+  }
+
+  .header-center {
+    justify-content: flex-start;
+    gap: 0.25rem;
+    padding: 0 0.15rem;
+  }
+
+  .component-group {
+    gap: 2px;
+    padding: 0.05rem;
+    border-radius: 6px;
+  }
+
+  .group-label {
+    font-size: 0.58rem;
+    letter-spacing: 0.04em;
+  }
+
+  .group-items {
+    gap: 1px;
+  }
+
+  .component-btn {
+    width: 33px !important;
+    height: 33px !important;
+  }
+
+  .btn-icon {
+    font-size: 1.25rem;
+  }
+
+  .header-right {
+    min-width: auto;
+    gap: 0.15rem;
+  }
+
+  .header-right .header-btn {
+    width: 33px;
+    height: 33px;
+    padding: 0;
+  }
+
+  .sign-in-btn :deep(.p-button-label) {
+    display: none;
+  }
 }
 </style>

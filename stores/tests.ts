@@ -25,6 +25,7 @@ interface TestsState {
   showTestFormModal: boolean
   editingTest: NetworkTest | null
   autoRunEnabled: boolean
+  skipNextDiagramLoadAutoRun: boolean
 }
 
 export const useTestsStore = defineStore('tests', {
@@ -34,6 +35,7 @@ export const useTestsStore = defineStore('tests', {
     showTestFormModal: false,
     editingTest: null,
     autoRunEnabled: true,
+    skipNextDiagramLoadAutoRun: false,
   }),
 
   getters: {
@@ -126,6 +128,20 @@ export const useTestsStore = defineStore('tests', {
     closeTestFormModal() {
       this.showTestFormModal = false
       this.editingTest = null
+    },
+
+    deferNextDiagramLoadAutoRun() {
+      this.skipNextDiagramLoadAutoRun = true
+    },
+
+    consumeNextDiagramLoadAutoRunSkip() {
+      if (!this.skipNextDiagramLoadAutoRun) return false
+      this.skipNextDiagramLoadAutoRun = false
+      return true
+    },
+
+    resetNextDiagramLoadAutoRunSkip() {
+      this.skipNextDiagramLoadAutoRun = false
     },
 
     clearAllTests() {

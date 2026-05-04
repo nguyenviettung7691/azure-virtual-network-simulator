@@ -36,20 +36,30 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 
 ## Features
 
-- **Interactive Canvas** — A drag-and-drop interface for arranging Azure networking components. Attachment lines and system nodes (like Public Internet) are rendered automatically based on your topology.
-- **Component Configuration** — Click any component to instantly edit its properties and metadata via a dedicated configuration form. 
-- **Real-Time Network Summary** — A live dashboard that groups your architecture by component type with collapsible sections and category sub-headings aligned to the top toolbar taxonomy (**Network**, **Security**, **Gateway**, **Compute**, **Storage**, **Identity**). At panel level, only **Components** is expanded by default; Components and Connectivity groups inside those sections default to collapsed for faster scanning on large diagrams. Hovering a Components or Connectivity group header activates identify-highlighting for that group only inside the panel; this identifying overlay is automatically disabled during Animation Mode. Hover interactions are optimized with debouncing and memoization for smooth performance on large diagrams. Security and Performance count badges dynamically reflect live audit findings: green (no issues), yellow (warning), red (critical).
-- **Smart Auto-Layout** — One-click graph layout that runs a three-step pipeline: Kahn topological prerequisite sorting, hierarchical placement for clear left-to-right data flow, and orthogonal right-angle edge routing. Public-facing root nodes are placed in a dedicated near-top lane above policy nodes, root VNets are kept below top lanes, root VNet-managed nodes get their own post-VNet band, and private root infrastructure is placed in compact bottom rows. Root VNet spacing is normalized with deterministic minimum gaps on every run so repeated manual Auto-Layout passes do not overlap VNets. VNet Peering is parented to its Local VNet.
-- **Network Testing & Validation** — Create and run connection, load-balancing, and DNS tests. Review results via detailed status summaries and step-by-step physical traversal paths with color-coded last-node indicators: green (pass), red (fail), yellow (warning). The summary block now uses a full-width PrimeVue MeterGroup segmented bar (Pass/Fail/Warning percentages) plus icon-labeled metric text for Pass, Fail, Warning, and Total.
-- **Security & Performance Audits** — The Network Summary panel continuously audits your diagram for NSG coverage gaps, permissive inbound rules, missing health probes, and other best-practice issues — no test required.
-- **Connection Flow Animations** — Visualize your connection tests in action. Switch to Animation Mode to see a paper-plane traveler follow the exact hop-by-hop path for connection tests, fan out **simultaneously** from the load balancer to every backend VM for load-balancer tests (at the same per-hop pace used by the other test types), and trace the DNS resolution chain for DNS tests. Active edges display animated marching dashes and a glow effect.
-- **High-Contrast Diagram Edges** — In Architecture mode, all connection edges render in a theme-aware contrast color (`black` in light mode, `white` in dark mode) for clearer separation from component border colors.
-- **AI Architecture Challenges** — Test your networking skills with time-boxed, dynamically generated challenges powered by Amazon Bedrock, featuring real-time evaluation of your diagram.
-- **Cloud Saves** — Authenticated users can securely save, manage, and reload their diagrams and thumbnails using Amazon S3.
-- **Import & Export** — Load existing layouts (`.drawio`, `.xml`, `.vsdx`) or export your finished architectures to PNG, SVG, PDF, draw.io, or Visio formats.
-- **Quick Sample + Full Sample** — Start fast with a compact Quick Sample, or load a Full Sample that includes every supported Azure component type and a broader test suite to showcase end-to-end simulator features.
-- **Canvas Controls** — Lock the canvas to safely pan and zoom without accidental edits, easily fit the entire topology to your screen, or clear the board to start fresh. The Minimap is interactive: drag inside it to pan and use wheel-scroll on it to zoom.
-- **Dark / Light Mode** — Native support for both themes, respecting your system OS preferences or manual overrides.
+**Canvas & Visualization**
+- **Interactive Canvas** — Drag-and-drop interface with automatic system nodes (Public Internet) and attachment lines.
+- **Smart Auto-Layout** — One-click hierarchical graph layout with deterministic left-to-right data flow.
+- **High-Contrast Edges** — Theme-aware edge rendering for clarity.
+- **Canvas Controls** — Lock/unlock, fit view, interactive minimap, and clear board.
+
+**Configuration & Design**
+- **Component Configuration** — Click-to-edit property forms for all Azure components.
+- **Real-Time Network Summary** — Live dashboard with collapsible sections, type grouping, hover identification, and audit badges.
+- **Quick Sample + Full Sample** — Pre-built starter topologies.
+
+**Testing & Validation**
+- **Network Testing** — Connection, load-balancing, and DNS test creation and execution.
+- **Security & Performance Audits** — Continuous best-practice checks (NSG coverage, health probes, etc.).
+- **Connection Flow Animations** — Visualize test paths with animated travelers and color-coded results.
+
+**Data & Integration**
+- **Import & Export** — Support for `.drawio`, `.xml`, PNG, SVG, and PDF formats.
+- **Cloud Saves** — S3-backed diagram persistence for authenticated users.
+- **AI Challenges** — Bedrock-powered, time-boxed networking exercises.
+
+**Accessibility**
+- **Tablet-Responsive Toolbars** — Optimized for viewports ≤ 1024px.
+- **Dark / Light Mode** — Theme support with system preference respect.
 
 ---
 
@@ -66,9 +76,8 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 | Graph layout | Dagre |
 | Data fetching | TanStack Vue Query |
 | Utilities | VueUse |
-| Image export | html-to-image |
-| PDF export | jsPDF |
-| Archive (VSDX) | JSZip |
+| Image export | App-owned DOM-to-SVG serializer (`lib/export/domSnapshot.ts`) |
+| PDF export | pdf-lib |
 | XML parsing | @xmldom/xmldom |
 | AWS auth + storage | aws-amplify v6 |
 | AWS AI | @aws-sdk/client-bedrock-runtime |
@@ -548,7 +557,6 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 │   ├── s3.ts                # S3 upload/download helpers for diagrams & thumbnails
 │   ├── dagre.ts             # Auto-layout integration
 │   ├── drawio.ts            # draw.io XML import/export
-│   └── vsdx.ts              # Visio VSDX import/export (via JSZip)
 ├── pages/index.vue          # Single page – renders the full application layout
 ├── stores/                  # Pinia stores (auth, diagram, challenges, savedSetups, settings, tests)
 └── types/                   # TypeScript interfaces and enums
@@ -564,8 +572,8 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 | `useDiagram` | CRUD operations for nodes plus programmatic management of system-rendered edges and the temporary animation-mode overlay |
 | `useAI` | Triggers Bedrock challenge generation via the challenges store |
 | `useS3` | Save, load, and delete diagram setups to/from S3 and local cache |
-| `useExport` | Exports the canvas to PNG, SVG, PDF, draw.io, or VSDX |
-| `useImport` | Imports diagrams from `.drawio`, `.xml`, or `.vsdx` files |
+| `useExport` | Exports the canvas to PNG, SVG, PDF, or draw.io |
+| `useImport` | Imports diagrams from `.drawio` or `.xml` files; successful app-native `.drawio` imports can prompt to reset existing network tests after the diagram finishes rendering |
 | `useLayout` | Wraps Dagre to auto-arrange nodes on demand (not triggered automatically on every node addition) |
 | `useSettings` | Reads and writes user preferences via the settings store |
 | `useTests` | Runs validation tests against the current diagram state; auto-runs are debounced (500 ms) and skip concurrent runs |
@@ -580,8 +588,33 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 | SVG image | `.svg` | Export |
 | PDF document | `.pdf` | Export |
 | draw.io diagram | `.drawio` | Export & Import |
-| Microsoft Visio | `.vsdx` | Export & Import |
 | draw.io XML | `.xml` | Import |
+
+Export behavior details:
+
+- Export toolbar buttons: `.drawio`, `PNG`, `PDF`, `SVG`.
+- Default export filename format: `azure-vnet-YYYYMMDD-HHmmss`.
+- Custom filename: provided via inline input in the Export toolbar; extension is normalized to the selected format.
+- Progress behavior:
+  - `PNG`, `PDF`, `SVG` show determinate progress updates based on export stages.
+  - `.drawio` uses spinner-first progress and transitions to determinate mode for longer-running exports.
+- Export lock behavior:
+  - While any export is running, all export buttons are disabled until that export completes or fails.
+- Rendering behavior:
+  - `SVG` export uses an app-owned DOM-to-SVG serializer to capture an exact serialized snapshot of the live diagram canvas.
+  - `PNG` and `PDF` render from diagram state via a canvas-based raster path (worker-first, with a main-thread fallback) to avoid `foreignObject`-dependent rasterization.
+  - `.drawio` export serializes structured diagram state in a worker-side format helper instead of serializing the live DOM.
+  - If worker conversion is unavailable, PNG/PDF fallback to the compatible main-thread path.
+  - Save thumbnails reuse the same diagram-state raster pipeline so export and cloud-save previews stay visually aligned.
+- Import behavior:
+  - `.drawio` and `.xml` imports replace the current diagram state after a successful parse.
+  - Successful app-native `.drawio` imports wait for the imported diagram to finish rendering and fit into view before any follow-up test prompt is shown.
+  - If network tests already exist, successful app-native `.drawio` imports ask whether those existing tests should also be reset.
+  - Choosing to keep existing tests preserves them and reruns them against the imported diagram when auto-run is enabled.
+- Known limitations (current PNG/PDF/thumbnail renderer):
+  - Raster exports currently prioritize topology clarity and deterministic positioning over pixel-perfect parity with live node templates, iconography, and CSS-only visual effects.
+- Round-trip compatibility:
+  - `.drawio` export preserves component metadata for re-import into the simulator.
 
 ---
 

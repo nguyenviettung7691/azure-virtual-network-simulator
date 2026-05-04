@@ -17,6 +17,7 @@ export const useTests = () => {
     () => diagramStore.diagramLoadId,
     async (newVal, oldVal) => {
       if (newVal === oldVal || newVal === 0) return
+      if (testsStore.consumeNextDiagramLoadAutoRunSkip()) return
       if (testsStore.autoRunEnabled && testsStore.tests.length > 0 && !testsStore.isRunning) {
         await runAllTests()
       }

@@ -51,7 +51,18 @@ interface NetworkEdgeProps extends EdgeProps {
 
 const props = defineProps<NetworkEdgeProps>()
 
-const edgeColor = computed(() => 'var(--diagram-edge-color, var(--text, #323130))')
+function resolveEdgeColor(): string {
+  if (typeof document === 'undefined') return '#323130'
+
+  const root = document.documentElement
+  const computedStyles = window.getComputedStyle(root)
+  const explicit = computedStyles.getPropertyValue('--diagram-edge-color').trim()
+  if (explicit) return explicit
+
+  return root.classList.contains('dark-mode') ? '#f3f2f1' : '#323130'
+}
+
+const edgeColor = computed(() => resolveEdgeColor())
 
 const path = computed(() => {
   const [edgePath] = getSmoothStepPath({
