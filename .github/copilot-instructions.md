@@ -22,7 +22,8 @@ This project maintains three complementary documentation files, each serving a d
 
 - Framework: Nuxt 3 SPA (`ssr: false`)
 - UI: PrimeVue 4 (Aura)
-- State: Pinia
+- Local state: Pinia
+- Remote/server state: TanStack Vue Query
 - Diagram engine: Vue Flow + Dagre
 - Language: TypeScript (strict)
 - Runtime/package manager: Node.js 18+ and npm
@@ -32,8 +33,8 @@ This project maintains three complementary documentation files, each serving a d
 - `components/diagram/`: canvas, nodes, and edge renderers
 - `components/forms/`: component edit forms
 - `components/layout/`: app shell panels and toolbars
-- `composables/`: thin wrappers over stores
-- `stores/`: authoritative app state and business logic
+- `composables/`: thin wrappers plus Vue Query hooks/controllers for remote state
+- `stores/`: authoritative local app state and business logic
 - `lib/`: integrations (AWS, Bedrock, exports/imports, layout)
 - `types/`: shared domain types
 
@@ -41,13 +42,16 @@ This project maintains three complementary documentation files, each serving a d
 
 ### Source of truth and lifecycle
 
-- Pinia stores are the single source of truth; composables should stay thin.
+- Pinia stores are the source of truth for local UI/infrastructure state; TanStack Vue Query owns remote/server state such as auth session bootstrap, MongoDB settings sync, and S3 saved setups.
+- Query/mutation orchestration belongs in composables such as `useAuthQueries.ts`, `useSettingsQueries.ts`, and `useSavedSetupQueries.ts`; do not move external I/O back into stores unless the architecture explicitly changes.
 - AWS is configured once in `app.vue` via `configureAWS()` from `lib/aws.ts`.
+- `app.vue` is also the lifecycle root for mounting the current-user query and settings sync after the app warms local settings and is ready for remote access.
 - Runtime config values are `NUXT_PUBLIC_*` and are public in the client bundle.
 
 ### Node and component model
 
 - `types/network.ts` `AnyNetworkComponent` is the canonical union for all component types.
+- `types/diagram.ts` `SavedSetup` is the canonical saved-setup shape and uses `diagram` plus optional `thumbnail`; `lib/s3.ts` must preserve compatibility when reading legacy records that still use `state`, `thumbnailUrl`, or raw diagram payloads.
 - The Public Internet node is system-managed: visible in non-empty diagrams, not palette-creatable, and has no form component.
 - For user-managed types, keep the standard pattern aligned:
     - enum value in `NetworkComponentType`
@@ -116,10 +120,17 @@ This project maintains three complementary documentation files, each serving a d
 ## Known Type-Check Status
 
 - `npm run build` is the validation gate.
-- Pre-existing `vue-tsc --noEmit` issues exist in:
-    - `lib/drawio.ts`
+- Pre-existing `npx vue-tsc --noEmit` issues currently remain in areas including:
+    - `components/diagram/DiagramCanvas.vue`
+    - `components/diagram/edges/AnimationEdge.vue`
+    - `components/forms/LoadBalancerForm.vue`
+    - `components/modals/ComponentFormModal.vue`
+    - `components/panels/TestFormModal.vue`
+    - `composables/useExport.ts`
+    - `lib/dagre.ts`
+    - `lib/export/**`
     - `lib/s3.ts`
-    - `stores/savedSetups.ts`
+    - `stores/tests.ts`
     - `types/diagram.ts`
 - Do not introduce new type errors in files you modify.
 
@@ -189,5 +200,6 @@ Copy `.env.example` to `.env` and provide valid `NUXT_PUBLIC_*` values.
 
 - Preserve system-managed Public Internet behavior.
 - Keep store-driven Vue Flow sync and deterministic layout behavior.
+- Keep TanStack Vue Query responsible for remote/server state flows (auth bootstrap, settings sync, saved setups) unless the architecture is intentionally being changed.
 - Do not reintroduce implicit auto-layout on node add.
 - Preserve deployment architecture contract and docs synchronization rule.

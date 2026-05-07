@@ -32,9 +32,9 @@
             </div>
             <Message v-if="pwError" severity="error" :closable="false">{{ pwError }}</Message>
             <Message v-if="pwSuccess" severity="success" :closable="false">Password changed successfully</Message>
-            <Button label="Change Password" size="small" :loading="changingPw" @click="changePassword" />
+            <Button label="Change Password" size="small" :loading="changePasswordMutation.isPending.value" @click="changePassword" />
             <Divider />
-            <Button label="Sign Out" icon="pi pi-sign-out" severity="danger" text @click="logout" />
+            <Button label="Sign Out" icon="pi pi-sign-out" severity="danger" text :loading="logoutMutation.isPending.value" @click="logout" />
           </div>
         </TabPanel>
 
@@ -107,12 +107,13 @@ import { Icon } from '@iconify/vue'
 
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
+const changePasswordMutation = useChangePasswordMutation()
+const logoutMutation = useLogoutMutation()
 
 const oldPassword = ref('')
 const newPassword = ref('')
 const pwError = ref('')
 const pwSuccess = ref(false)
-const changingPw = ref(false)
 
 const darkModeValue = ref(settingsStore.darkMode)
 const animateEdges = ref(settingsStore.animateEdges)
@@ -141,24 +142,25 @@ const regions = ['eastus', 'eastus2', 'westus', 'westus2', 'westeurope', 'northe
 
 async function changePassword() {
   if (!oldPassword.value || !newPassword.value) return
-  changingPw.value = true
   pwError.value = ''
   pwSuccess.value = false
   try {
-    await authStore.changePassword(oldPassword.value, newPassword.value)
+    await changePasswordMutation.mutateAsync({ oldPassword: oldPassword.value, newPassword: newPassword.value })
     pwSuccess.value = true
     oldPassword.value = ''
     newPassword.value = ''
   } catch (err: any) {
     pwError.value = err.message || 'Failed to change password'
-  } finally {
-    changingPw.value = false
   }
 }
 
 async function logout() {
-  await authStore.logout()
-  settingsStore.closeSettingsModal()
+  try {
+    await logoutMutation.mutateAsync()
+    settingsStore.closeSettingsModal()
+  } catch {
+    // Keep the modal open when sign-out fails.
+  }
 }
 </script>
 

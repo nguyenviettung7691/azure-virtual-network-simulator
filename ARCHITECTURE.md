@@ -17,7 +17,7 @@ This section maps the condensed features in README.md to their detailed architec
 | **High-Contrast Edges** | § 1.1 Edge Rendering; § 8 Styling |
 | **Canvas Controls** | § 1.2 Viewport Controls (Lock/Unlock, Fit View, Minimap) |
 | **Network Testing** | § 4.1 Test Types; § 4.2 Test UI |
-| **Security & Performance Audits** | § 3.1.3 Audit Findings; § 4.3 Audit Engine |
+| **Security & Performance Audits** | § 3.1.3 Audit Findings |
 | **Connection Flow Animations** | § 4.3 Connection Flow Animation Mode |
 | **Import & Export** | § 7.1 Import/Export Pipelines |
 | **Cloud Saves** | § 7.2 Cloud Persistence |
@@ -48,6 +48,12 @@ This section maps the condensed features in README.md to their detailed architec
 - **State Toggles (Lock/Unlock):**
   - **Locked (Default read-only):** Pan and zoom enabled. Node dragging, selection, and property editing disabled. Bound to a visually highlighted toggle button.
   - **Unlocked (Edit mode):** Enables node dragging and selection. `cursor: pointer` applied on component name hover. Triggers the configuration form sequence on `click`.
+
+### 1.3 Application State Boundaries
+- **Local app state:** Pinia remains the authoritative state layer for diagram topology, modal visibility, local settings values, auth presentation state, challenge state, and test state.
+- **Remote / server state:** TanStack Vue Query owns browser-side remote reads/writes for the authenticated Cognito session bootstrap, MongoDB-backed settings sync, and S3-backed saved setup list/save/delete flows.
+- **Lifecycle root:** `app.vue` configures AWS once, warms local settings from `localStorage`, then mounts the current-user query and settings sync controller after the app is ready to talk to remote services.
+- **Implementation boundary:** New remote orchestration should live in query composables (`useAuthQueries.ts`, `useSettingsQueries.ts`, `useSavedSetupQueries.ts`) rather than moving external I/O back into Pinia stores.
 
 ---
 
@@ -267,12 +273,26 @@ A reactive dashboard reflecting the live diagram state.
   - Generic third-party `.drawio` files remain supported through fallback parsing.
 
 ### 7.2 Cloud Persistence (Amazon S3)
-- Authenticated users serialize JSON setup payloads and base64 thumbnail PNGs to an S3 bucket configured via `aws-amplify`.
-- State can be retrieved and rehydrated into the Pinia diagram store dynamically.
+- Authenticated users persist canonical `SavedSetup` records to S3 through `aws-amplify/storage`.
+- Each setup stores metadata plus diagram JSON at `users/{userId}/diagrams/{setupId}.json`; optional preview PNGs are stored separately at `users/{userId}/thumbnails/{setupId}.png`.
+- `configureAWS()` must continue wiring Cognito user pool + identity pool config so Amplify Storage can resolve authenticated browser AWS credentials for S3 operations.
+- Because storage calls use `accessLevel: 'private'`, the physical S3 object prefix is `private/{identityId}/users/{userId}/...` even though app code works with logical keys under `users/{userId}/...`.
+- The canonical saved-setup shape is `id`, `name`, `description?`, `createdAt`, `updatedAt`, `thumbnail?`, `diagram`, and `tags?`.
+- `lib/s3.ts` must continue normalizing legacy setup payloads that still use `state`, `thumbnailUrl`, or raw `DiagramState` JSON so older saved data remains readable.
+- TanStack Vue Query owns the authenticated list/save/delete lifecycle. `savedSetupsStore` is limited to modal UI state, while successful setup loads rehydrate the Pinia diagram store.
 
 ### 7.3 AI Challenge Generation (Amazon Bedrock)
 - Integration with Bedrock evaluates diagram state in real-time.
 - Supports 4 difficulty tiers. Generates time-boxed prompts against which the local canvas state is verified for compliance.
+- `lib/bedrock.ts` must source browser AWS credentials explicitly from `fetchAuthSession()` rather than relying on the AWS SDK browser default credential chain.
+- The current implementation selects region from `NUXT_PUBLIC_BEDROCK_REGION`, invokes the hardcoded model `anthropic.claude-3-haiku-20240307-v1:0`, and falls back to local challenge generation on credentials/model/region failures.
+
+### 7.4 User Settings Persistence (MongoDB Atlas)
+- The settings store owns the local settings snapshot, applies theme/layout side effects, and writes every change to `localStorage` immediately.
+- MongoDB-backed settings sync is controlled by TanStack Vue Query in `useSettingsQueries.ts`, not by direct store-owned fetch/upsert logic.
+- On authenticated bootstrap, remote settings are queried after AWS/session initialization. If a remote document exists, it overwrites the local snapshot and then rewrites the warmed `localStorage` cache.
+- After bootstrap, subsequent authenticated settings changes are persisted through a debounced Vue Query mutation (`1500 ms`) so rapid toggles collapse into a single upsert.
+- When no authenticated user is present, remote sync is disabled and `localStorage` remains the only persistence layer.
 
 ---
 
@@ -348,8 +368,10 @@ A reactive dashboard reflecting the live diagram state.
 
 ### 9.7 Environment & Configuration Strategy
 - Maintain isolated environment stacks: `dev`, `staging`, `production`.
+- Relevant client build-time keys currently include `NUXT_PUBLIC_AWS_REGION`, `NUXT_PUBLIC_COGNITO_USER_POOL_ID`, `NUXT_PUBLIC_COGNITO_CLIENT_ID`, `NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID`, `NUXT_PUBLIC_S3_BUCKET`, `NUXT_PUBLIC_BEDROCK_REGION`, and the MongoDB `NUXT_PUBLIC_*` settings keys.
 - Each environment should use distinct values for:
   - Cognito user pool/client IDs
+  - Cognito identity pool ID
   - S3 bucket
   - Bedrock region (if applicable)
   - MongoDB endpoint/API key/database/collection

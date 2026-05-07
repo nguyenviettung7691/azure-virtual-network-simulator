@@ -53,7 +53,7 @@ export interface SavedSetup {
   description?: string
   createdAt: string
   updatedAt: string
-  thumbnailUrl?: string
-  state: DiagramState
+  thumbnail?: string
+  diagram: DiagramState
   tags?: string[]
 }

@@ -53,6 +53,7 @@ export default defineNuxtConfig({
       awsRegion: process.env.NUXT_PUBLIC_AWS_REGION || 'us-east-1',
       cognitoUserPoolId: process.env.NUXT_PUBLIC_COGNITO_USER_POOL_ID || '',
       cognitoClientId: process.env.NUXT_PUBLIC_COGNITO_CLIENT_ID || '',
+      cognitoIdentityPoolId: process.env.NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID || '',
       s3Bucket: process.env.NUXT_PUBLIC_S3_BUCKET || '',
       bedrockRegion: process.env.NUXT_PUBLIC_BEDROCK_REGION || 'us-east-1',
       mongodbEndpoint: process.env.NUXT_PUBLIC_MONGODB_ENDPOINT || '',

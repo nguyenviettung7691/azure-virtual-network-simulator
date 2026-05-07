@@ -206,7 +206,7 @@ function submit() {
 </script>
 
 <style scoped>
-.test-form { display: flex; flex-direction: column; gap: 0.9rem; }
-.field { display: flex; flex-direction: column; gap: 0.3rem; }
+.test-form { display: flex; flex-direction: column; gap: 1.25rem; padding-top: 0.5rem; }
+.field { display: flex; flex-direction: column; gap: 0.4rem; }
 .field label { font-size: 0.85rem; font-weight: 600; color: var(--text-color-secondary); }
 </style>

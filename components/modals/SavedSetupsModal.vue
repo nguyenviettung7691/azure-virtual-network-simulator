@@ -6,19 +6,19 @@
     :style="{ width: '700px' }"
     @hide="savedSetupsStore.closeModal()"
   >
-    <div v-if="savedSetupsStore.isLoading" class="loading-state">
+    <div v-if="isLoading" class="loading-state">
       <ProgressSpinner />
       <p>Loading setups...</p>
     </div>
 
-    <div v-else-if="savedSetupsStore.setups.length === 0" class="empty-state">
+    <div v-else-if="setups.length === 0" class="empty-state">
       <Icon icon="mdi:folder-open-outline" class="empty-icon" />
       <p>No saved setups yet</p>
       <small>Use the "Save Setup" button in the bottom toolbar to save your current diagram</small>
     </div>
 
     <div v-else class="setups-grid">
-      <div v-for="setup in savedSetupsStore.setups" :key="setup.id" class="setup-card">
+      <div v-for="setup in setups" :key="setup.id" class="setup-card">
         <div class="setup-thumbnail">
           <img v-if="setup.thumbnail" :src="setup.thumbnail" alt="Setup preview" />
           <div v-else class="no-thumbnail">
@@ -32,12 +32,12 @@
         </div>
         <div class="setup-actions">
           <Button label="Use" icon="pi pi-check" size="small" @click="useSetup(setup)" />
-          <Button label="Delete" icon="pi pi-trash" size="small" severity="danger" text @click="deleteSetup(setup)" />
+          <Button label="Delete" icon="pi pi-trash" size="small" severity="danger" text :loading="deleteSavedSetupMutation.isPending.value" :disabled="deleteSavedSetupMutation.isPending.value" @click="deleteSetup(setup)" />
         </div>
       </div>
     </div>
 
-    <Message v-if="savedSetupsStore.error" severity="error" :closable="false">{{ savedSetupsStore.error }}</Message>
+    <Message v-if="errorMessage" severity="error" :closable="false">{{ errorMessage }}</Message>
   </Dialog>
 </template>
 
@@ -45,8 +45,28 @@
 import { Icon } from '@iconify/vue'
 import type { SavedSetup } from '~/types/diagram'
 
+const authStore = useAuthStore()
 const savedSetupsStore = useSavedSetupsStore()
 const diagramStore = useDiagramStore()
+const savedSetupsQuery = useSavedSetupsQuery(
+  computed(() => authStore.userId),
+  computed(() => savedSetupsStore.showModal && authStore.isAuthenticated),
+)
+const deleteSavedSetupMutation = useDeleteSavedSetupMutation()
+
+const setups = computed(() => savedSetupsQuery.data.value ?? [])
+const isLoading = computed(() => savedSetupsQuery.isPending.value)
+const errorMessage = computed(() => {
+  if (deleteSavedSetupMutation.error.value) {
+    return resolveSavedSetupErrorMessage(deleteSavedSetupMutation.error.value, 'Failed to delete setup')
+  }
+
+  if (savedSetupsQuery.error.value) {
+    return resolveSavedSetupErrorMessage(savedSetupsQuery.error.value, 'Failed to load setups')
+  }
+
+  return null
+})
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
@@ -55,14 +75,19 @@ function formatDate(iso: string) {
 function useSetup(setup: SavedSetup) {
   diagramStore.confirmAction(
     `Load "${setup.name}"? This will replace your current diagram.`,
-    () => savedSetupsStore.loadSetupIntoDiagram(setup)
+    () => {
+      diagramStore.loadDiagram(setup.diagram)
+      savedSetupsStore.closeModal()
+    },
   )
 }
 
 function deleteSetup(setup: SavedSetup) {
   diagramStore.confirmAction(
     `Delete "${setup.name}"? This cannot be undone.`,
-    () => savedSetupsStore.deleteSetup(setup.id)
+    () => {
+      void deleteSavedSetupMutation.mutateAsync(setup.id)
+    },
   )
 }
 </script>

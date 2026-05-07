@@ -54,7 +54,7 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 
 **Data & Integration**
 - **Import & Export** — Support for `.drawio`, `.xml`, PNG, SVG, and PDF formats.
-- **Cloud Saves** — S3-backed diagram persistence for authenticated users.
+- **Cloud Saves** — S3-backed saved setups with metadata and thumbnail previews for authenticated users.
 - **AI Challenges** — Bedrock-powered, time-boxed networking exercises.
 
 **Accessibility**
@@ -71,10 +71,10 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 | UI component library | PrimeVue 4 (Aura preset via `@primevue/themes`) |
 | Styling & theming | App-owned CSS tokens in `assets/css/main.css` plus PrimeVue Aura semantic tokens from `assets/primevue-theme.ts` |
 | Icons | PrimeIcons 7 (`primeicons`) for `pi pi-*` UI icons; Iconify + `@iconify-json/mdi` for diagram/canvas icons via `@iconify/vue` |
-| State management | Pinia |
+| Local app state | Pinia |
+| Remote / server state | TanStack Vue Query (`@tanstack/vue-query`) |
 | Diagram engine | Vue Flow (`@vue-flow/core`) + `@vue-flow/controls` + `@vue-flow/background` + `@vue-flow/minimap` |
 | Graph layout | Dagre |
-| Data fetching | TanStack Vue Query |
 | Utilities | VueUse |
 | Image export | App-owned DOM-to-SVG serializer (`lib/export/domSnapshot.ts`) |
 | PDF export | pdf-lib |
@@ -195,11 +195,11 @@ cd azure-virtual-network-simulator
 npm install
 ```
 
-The `postinstall` script runs `nuxt prepare` automatically to generate the `.nuxt` directory and TypeScript types.
+The `postinstall` script clears stale caches (`.nuxt`, `node_modules/.vite`, `node_modules/.cache`) then runs `nuxt prepare` to generate the `.nuxt` directory and TypeScript types.
 
 ### Environment Variables
 
-Create a `.env` file in the project root. All variables are prefixed with `NUXT_PUBLIC_` and are exposed to the client bundle.
+Copy `.env.example` to `.env` in the project root and fill in the required values. All variables are prefixed with `NUXT_PUBLIC_` and are exposed to the client bundle.
 
 ```dotenv
 # AWS region for Cognito and S3
@@ -208,6 +208,7 @@ NUXT_PUBLIC_AWS_REGION=us-east-1
 # Amazon Cognito
 NUXT_PUBLIC_COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
 NUXT_PUBLIC_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
+NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID=us-east-1:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
 # Amazon S3 – bucket for saved diagrams
 NUXT_PUBLIC_S3_BUCKET=your-diagrams-bucket-name
@@ -222,7 +223,7 @@ NUXT_PUBLIC_MONGODB_DATABASE=vnet-simulator
 NUXT_PUBLIC_MONGODB_COLLECTION=user_settings
 ```
 
-> **Note:** Because all variables are `public`, they are embedded in the built JavaScript bundle. Do **not** place IAM secret keys or other sensitive credentials here. Bedrock calls rely on the end-user's Cognito identity credentials (see [Amazon Bedrock](#amazon-bedrock) below). The MongoDB API key should be scoped to the `user_settings` collection with read/write permissions only (see [MongoDB Atlas](#mongodb-atlas)).
+> **Note:** Because all variables are `public`, they are embedded in the built JavaScript bundle. Do **not** place IAM secret keys or other sensitive credentials here. Browser-side AWS access for S3 and Bedrock comes from temporary credentials resolved through the configured Cognito Identity Pool. If those credentials are unavailable or the deployed identity lacks the needed IAM permissions, Bedrock falls back to a locally generated challenge. The MongoDB API key should be scoped to the `user_settings` collection with read/write permissions only (see [MongoDB Atlas](#mongodb-atlas)).
 
 ### Running Locally
 
@@ -368,6 +369,8 @@ Important behavior for this app:
 
 ## AWS Services Integration
 
+This section describes the app-side AWS dependencies as they exist in the current repository. The Terraform stack in `infra/` provisions the deployment edge (CloudFront, ACM, Route 53, EventBridge, Lambda invalidation) but does **not** provision Cognito, S3, or Bedrock resources for the application itself.
+
 ### Amazon Cognito
 
 **Purpose:** User authentication — sign up, email confirmation, sign in, password reset, and password change.
@@ -382,10 +385,13 @@ Amplify.configure({
     Cognito: {
       userPoolId: config.public.cognitoUserPoolId,
       userPoolClientId: config.public.cognitoClientId,
+      identityPoolId: config.public.cognitoIdentityPoolId,
     },
   },
 })
 ```
+
+**Current scope:** The repo reads `NUXT_PUBLIC_COGNITO_USER_POOL_ID`, `NUXT_PUBLIC_COGNITO_CLIENT_ID`, and `NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID` at startup. The User Pool, app client, Identity Pool, email delivery, and authenticated IAM roles remain external setup work.
 
 **Setup steps:**
 
@@ -395,13 +401,13 @@ Amplify.configure({
 4. Under **Messaging**, configure an email sender (Cognito default or SES) for the verification email.
 5. Note the **User Pool ID** and **App Client ID** and add them to `.env`.
 
-**Required IAM / resource-based permissions:** None on the caller side — the app uses unauthenticated sign-up / sign-in flows. If you add an Identity Pool for Bedrock / S3 access, attach the appropriate IAM roles to the authenticated identity (see sections below).
+**Required IAM / resource-based permissions:** None for the basic user-pool auth flows above. Browser-side access to S3 or Bedrock in this repo depends on the configured Cognito Identity Pool exchanging the signed-in user session for temporary AWS credentials on the authenticated IAM role.
 
 ---
 
 ### Amazon S3
 
-**Purpose:** Per-user persistence of diagram state (JSON) and canvas thumbnails (PNG). Each object is stored under `users/{userId}/diagrams/{setupId}.json` and `users/{userId}/thumbnails/{setupId}.png` with `private` access level (scoped to the authenticated Cognito identity).
+**Purpose:** Per-user persistence of saved setups. The app passes logical keys `users/{userId}/diagrams/{setupId}.json` and `users/{userId}/thumbnails/{setupId}.png` to Amplify Storage with `accessLevel: 'private'`. Amplify scopes those objects under the authenticated identity's private prefix in S3, so the physical object path becomes `private/{identityId}/users/{userId}/...`. TanStack Vue Query drives the authenticated list/save/delete lifecycle in the browser.
 
 **SDK:** `aws-amplify/storage` (Amplify v6)
 
@@ -418,11 +424,13 @@ Amplify.configure({
 })
 ```
 
+**Current scope:** The repo configures the bucket name, S3 region, and Cognito Identity Pool-backed credential path in `lib/aws.ts`, but it does not provision the bucket, CORS rules, Identity Pool, or IAM roles needed for browser uploads/downloads.
+
 **Setup steps:**
 
 1. **Create an S3 bucket** in your chosen region. Block all public access.
-2. **Create a Cognito Identity Pool** linked to the User Pool created above (see Cognito section).
-3. **Create an IAM role** for authenticated identities with the following inline policy (replace `BUCKET_NAME`):
+2. **Create a Cognito Identity Pool** linked to the User Pool created above (see Cognito section), note the Identity Pool ID, and add it to `.env` as `NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID`.
+3. **Create an IAM role** for authenticated identities with a policy scoped to the Amplify private prefix (replace `BUCKET_NAME`):
 
 ```json
 {
@@ -430,10 +438,18 @@ Amplify.configure({
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:ListBucket"],
-      "Resource": [
-        "arn:aws:s3:::BUCKET_NAME/users/${cognito-identity.amazonaws.com:sub}/*"
-      ]
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::BUCKET_NAME/private/${cognito-identity.amazonaws.com:sub}/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::BUCKET_NAME",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": ["private/${cognito-identity.amazonaws.com:sub}/*"]
+        }
+      }
     }
   ]
 }
@@ -459,16 +475,16 @@ Amplify.configure({
 
 ### Amazon Bedrock
 
-**Purpose:** AI-generated networking challenges. The app calls `anthropic.claude-3-haiku-20240307-v1:0` via the Bedrock Runtime API to produce a structured `Challenge` JSON object tailored to the selected difficulty and the components already present in the diagram.
+**Purpose:** AI-generated networking challenges. The app calls Amazon Bedrock from the browser to produce a structured `Challenge` JSON object tailored to the selected difficulty and the components already present in the diagram.
 
 **SDK:** `@aws-sdk/client-bedrock-runtime`
 
-**Model used:** `anthropic.claude-3-haiku-20240307-v1:0`
+**Current implementation:** `lib/bedrock.ts` creates a `BedrockRuntimeClient` using `NUXT_PUBLIC_BEDROCK_REGION` and an explicit credentials provider backed by `fetchAuthSession()`. The model remains hardcoded to `anthropic.claude-3-haiku-20240307-v1:0`; there is currently no runtime env var for model selection in this repo.
 
 **Setup steps:**
 
 1. **Request model access** — in the AWS Console, go to **Amazon Bedrock → Model access** and request access for **Anthropic Claude 3 Haiku**. Access is usually granted within a few minutes.
-2. **Grant IAM permissions** — the Cognito authenticated IAM role (created in the S3 section) must also include:
+2. **Grant IAM permissions** — the authenticated IAM role attached to your Cognito Identity Pool must be allowed to invoke that model:
 
 ```json
 {
@@ -482,13 +498,13 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 
 3. Set `NUXT_PUBLIC_BEDROCK_REGION` in `.env` to the region where you have Bedrock access (Bedrock availability varies by region).
 
-> **Fallback:** If the Bedrock call fails (e.g., the user is not authenticated or the model is unavailable), the challenges store falls back to a locally generated challenge so the app remains functional without AWS credentials.
+> **Fallback:** If the Bedrock call fails for any reason (for example missing browser credentials, missing model access, or region mismatch), the challenges store falls back to a locally generated challenge so the app remains functional.
 
 ---
 
 ### MongoDB Atlas
 
-**Purpose:** Per-user persistence of application preference settings (theme, dark mode, region defaults, UI toggles, etc.). Settings are stored in MongoDB Atlas via the App Services HTTPS Endpoints (Data API) — no MongoDB driver is required in the browser. A 1.5-second debounce is applied so that rapid setting changes result in a single document upsert. When a user is not signed in, settings fall back to `localStorage`.
+**Purpose:** Per-user persistence of application preference settings (theme, dark mode, region defaults, UI toggles, etc.). Settings are stored in MongoDB Atlas via the App Services HTTPS Endpoints (Data API) — no MongoDB driver is required in the browser. TanStack Vue Query loads remote settings after authenticated session bootstrap, and a 1.5-second debounced mutation persists later changes. When a user is not signed in, settings fall back to `localStorage`.
 
 **Client:** Browser `fetch()` — no additional npm packages required.
 
@@ -539,7 +555,7 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 ## Project Structure
 
 ```
-├── app.vue                  # Root component – configures AWS, loads settings & auth
+├── app.vue                  # Root component – configures AWS, boots auth query, mounts settings sync
 ├── nuxt.config.ts           # Nuxt configuration, runtime config, PrimeVue setup
 ├── assets/
 │   ├── primevue-theme.ts    # PrimeVue Aura theme config (preset + darkModeSelector)
@@ -550,15 +566,20 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 │   ├── layout/              # AppHeader, LeftPanel, RightPanel, BottomToolbar
 │   ├── modals/              # Auth, settings, saved setups, challenge, confirm dialogs
 │   └── panels/              # ChallengePanel, TestFormModal
-├── composables/             # Reusable logic (auth, diagram, export, import, S3, AI, settings)
+├── composables/             # Reusable logic plus Vue Query hooks/controllers (auth, settings, saved setups, export, import, AI)
 ├── lib/
 │   ├── aws.ts               # Amplify bootstrap (Cognito + S3)
 │   ├── bedrock.ts           # Bedrock client + challenge generation prompt
-│   ├── s3.ts                # S3 upload/download helpers for diagrams & thumbnails
+│   ├── s3.ts                # S3 helpers for canonical saved setup records and thumbnails
 │   ├── dagre.ts             # Auto-layout integration
 │   ├── drawio.ts            # draw.io XML import/export
+│   ├── layout.ts            # Node dimension constants (base widths, heights, min sizes)
+│   ├── mongodb.ts           # MongoDB Atlas App Services helpers (read/upsert user settings)
+│   └── export/              # Export pipeline (worker, raster, SVG, PDF helpers, format serializers)
+├── plugins/
+│   └── vue-query.ts         # Shared QueryClient + Vue Query plugin registration
 ├── pages/index.vue          # Single page – renders the full application layout
-├── stores/                  # Pinia stores (auth, diagram, challenges, savedSetups, settings, tests)
+├── stores/                  # Pinia stores for diagram state and local UI/app state (remote state is query-driven)
 └── types/                   # TypeScript interfaces and enums
 ```
 
@@ -568,14 +589,17 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 
 | Composable | Responsibility |
 |---|---|
-| `useAuth` | Exposes auth state and actions from the auth Pinia store |
+| `useAuth` | Exposes Pinia auth state plus Vue Query-backed auth actions |
+| `useAuthQueries` | Current-user query and auth mutations against Amplify Auth |
 | `useDiagram` | CRUD operations for nodes plus programmatic management of system-rendered edges and the temporary animation-mode overlay |
 | `useAI` | Triggers Bedrock challenge generation via the challenges store |
-| `useS3` | Save, load, and delete diagram setups to/from S3 and local cache |
+| `useS3` | Compatibility wrapper around query-backed saved setup save/load/delete operations |
+| `useSavedSetupQueries` | Vue Query hooks for S3-backed saved setup list/save/delete |
 | `useExport` | Exports the canvas to PNG, SVG, PDF, or draw.io |
 | `useImport` | Imports diagrams from `.drawio` or `.xml` files; successful app-native `.drawio` imports can prompt to reset existing network tests after the diagram finishes rendering |
 | `useLayout` | Wraps Dagre to auto-arrange nodes on demand (not triggered automatically on every node addition) |
-| `useSettings` | Reads and writes user preferences via the settings store |
+| `useSettings` | Reads and writes local user preferences via the settings store |
+| `useSettingsQueries` | Vue Query controller/hooks for MongoDB-backed settings load/save |
 | `useTests` | Runs validation tests against the current diagram state; auto-runs are debounced (500 ms) and skip concurrent runs |
 
 ---
@@ -634,7 +658,7 @@ The diagram store evaluates challenge completion automatically whenever the canv
 
 ## Settings
 
-User preferences are persisted to **MongoDB Atlas** when the user is authenticated and restored from MongoDB on every sign-in (remote settings always take precedence). `localStorage` is used as an immediate-write cache and as the sole persistence layer when the user is not signed in, ensuring preferences are available offline and before any network round-trip completes.
+User preferences are persisted to **MongoDB Atlas** when the user is authenticated and restored through a Vue Query-driven sync pass after session bootstrap. The remote document always takes precedence once loaded and is written back through a 1.5-second debounced mutation. `localStorage` remains the immediate-write cache and the sole persistence layer when the user is not signed in, ensuring preferences are available offline and before any network round-trip completes.
 
 Available settings include:
 
@@ -643,6 +667,7 @@ Available settings include:
 | Theme | `ocean-blue` | Multiple PrimeVue presets |
 | Dark mode | `system` | `system` / `light` / `dark` |
 | Language | `en` | — |
+| Auto-save | `true` | toggle |
 | Auto-save interval | `30` s | Any positive integer |
 | Default Azure region | `eastus` | Any Azure region string |
 | Show minimap | `true` | toggle |

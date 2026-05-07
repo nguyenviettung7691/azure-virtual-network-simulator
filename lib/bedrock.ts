@@ -1,5 +1,6 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 import type { Challenge } from '~/types/challenge'
+import { getBrowserAwsCredentials } from '~/lib/aws'
 import { ChallengeDifficulty } from '~/types/challenge'
 import { NetworkComponentType } from '~/types/network'
 
@@ -17,6 +18,16 @@ function getBedrockClient(): BedrockRuntimeClient {
     const config = useRuntimeConfig()
     bedrockClient = new BedrockRuntimeClient({
       region: config.public.bedrockRegion || 'us-east-1',
+      credentials: async () => {
+        const credentials = await getBrowserAwsCredentials()
+
+        return {
+          accessKeyId: credentials.accessKeyId,
+          secretAccessKey: credentials.secretAccessKey,
+          sessionToken: credentials.sessionToken,
+          expiration: credentials.expiration,
+        }
+      },
     })
   }
   return bedrockClient

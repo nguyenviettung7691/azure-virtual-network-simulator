@@ -190,8 +190,8 @@ interface ExportProgressState {
 const diagramStore = useDiagramStore()
 const authStore = useAuthStore()
 const challengesStore = useChallengesStore()
-const savedSetupsStore = useSavedSetupsStore()
 const testsStore = useTestsStore()
+const saveCurrentSetupMutation = useSaveCurrentSetupMutation()
 
 const { exportToPng, exportToSvgFile, exportToPdf, exportToDrawioFile } = useExport()
 const { importFromFile } = useImport()
@@ -200,7 +200,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const showSaveDialog = ref(false)
 const setupName = ref('')
 const saveError = ref('')
-const isSaving = ref(false)
+const isSaving = computed(() => saveCurrentSetupMutation.isPending.value)
 const exportDurationEstimatesMs = ref<Record<ExportFormat, number>>({
   drawio: 7000,
   png: 4500,
@@ -452,15 +452,12 @@ async function confirmSave() {
     saveError.value = 'Please enter a setup name'
     return
   }
-  isSaving.value = true
   saveError.value = ''
   try {
-    await savedSetupsStore.saveCurrentSetup(setupName.value.trim())
+    await saveCurrentSetupMutation.mutateAsync({ name: setupName.value.trim() })
     showSaveDialog.value = false
-  } catch (err: any) {
-    saveError.value = err.message || 'Failed to save'
-  } finally {
-    isSaving.value = false
+  } catch (error) {
+    saveError.value = resolveSavedSetupErrorMessage(error, 'Failed to save')
   }
 }
 
