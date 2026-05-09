@@ -2,35 +2,36 @@ import type { UserSettings } from '~/types/settings'
 
 interface MongoDBConfig {
   mongodbEndpoint: string
-  mongodbApiKey: string
   mongodbDatabase: string
   mongodbCollection: string
 }
 
 /**
- * Fetch stored user settings from MongoDB Atlas App Services HTTPS Endpoint.
+ * Fetch stored user settings via the AWS Lambda Function URL proxy.
+ * The Lambda verifies the Cognito JWT and queries MongoDB using the
+ * server-side connection string — no MongoDB credentials are ever
+ * embedded in the client bundle.
  * Returns null if the document does not exist or if the endpoint is not configured.
  */
 export async function getUserSettings(
   userId: string,
   config: MongoDBConfig,
+  jwtToken: string,
 ): Promise<UserSettings | null> {
-  if (!config.mongodbEndpoint || !config.mongodbApiKey) return null
+  if (!config.mongodbEndpoint || !jwtToken) return null
 
   try {
-    const url = `${config.mongodbEndpoint}/action/findOne`
-    const response = await fetch(url, {
+    const response = await fetch(config.mongodbEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'api-key': config.mongodbApiKey,
+        'Authorization': `Bearer ${jwtToken}`,
       },
       body: JSON.stringify({
-        dataSource: 'Cluster0',
+        action: 'findOne',
         database: config.mongodbDatabase,
         collection: config.mongodbCollection,
         filter: { userId },
-        projection: { _id: 0, userId: 0 },
       }),
     })
 
@@ -44,31 +45,30 @@ export async function getUserSettings(
 }
 
 /**
- * Upsert user settings into MongoDB Atlas App Services HTTPS Endpoint.
+ * Upsert user settings via the AWS Lambda Function URL proxy.
  * Fails silently — callers should not rely on this completing successfully.
  */
 export async function saveUserSettings(
   userId: string,
   settings: UserSettings,
   config: MongoDBConfig,
+  jwtToken: string,
 ): Promise<void> {
-  if (!config.mongodbEndpoint || !config.mongodbApiKey) return
+  if (!config.mongodbEndpoint || !jwtToken) return
 
   try {
-    const url = `${config.mongodbEndpoint}/action/updateOne`
-    await fetch(url, {
+    await fetch(config.mongodbEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'api-key': config.mongodbApiKey,
+        'Authorization': `Bearer ${jwtToken}`,
       },
       body: JSON.stringify({
-        dataSource: 'Cluster0',
+        action: 'updateOne',
         database: config.mongodbDatabase,
         collection: config.mongodbCollection,
         filter: { userId },
-        update: { $set: { userId, ...settings } },
-        upsert: true,
+        settings,
       }),
     })
   } catch {

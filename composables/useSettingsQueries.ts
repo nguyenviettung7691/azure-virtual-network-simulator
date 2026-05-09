@@ -1,3 +1,4 @@
+import { fetchAuthSession } from 'aws-amplify/auth'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import type { MaybeRefOrGetter } from 'vue'
 import { getUserSettings, saveUserSettings } from '~/lib/mongodb'
@@ -33,9 +34,17 @@ function useMongoConfig() {
 
   return {
     mongodbEndpoint: config.mongodbEndpoint,
-    mongodbApiKey: config.mongodbApiKey,
     mongodbDatabase: config.mongodbDatabase,
     mongodbCollection: config.mongodbCollection,
+  }
+}
+
+async function getCognitoIdToken(): Promise<string> {
+  try {
+    const session = await fetchAuthSession()
+    return session.tokens?.idToken?.toString() ?? ''
+  } catch {
+    return ''
   }
 }
 
@@ -56,7 +65,8 @@ export function useUserSettingsQuery(
         return null
       }
 
-      return getUserSettings(resolvedUserId, mongoConfig)
+      const jwtToken = await getCognitoIdToken()
+      return getUserSettings(resolvedUserId, mongoConfig, jwtToken)
     },
     enabled: computed(() => Boolean(toValue(enabled) && toValue(userId))),
     retry: false,
@@ -71,7 +81,8 @@ export function useSaveUserSettingsMutation() {
 
   return useMutation({
     mutationFn: async ({ userId, settings }: { userId: string, settings: UserSettings }) => {
-      await saveUserSettings(userId, settings, mongoConfig)
+      const jwtToken = await getCognitoIdToken()
+      await saveUserSettings(userId, settings, mongoConfig, jwtToken)
 
       return { userId, settings }
     },

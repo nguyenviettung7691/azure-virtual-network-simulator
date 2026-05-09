@@ -57,7 +57,6 @@ export default defineNuxtConfig({
       s3Bucket: process.env.NUXT_PUBLIC_S3_BUCKET || '',
       bedrockRegion: process.env.NUXT_PUBLIC_BEDROCK_REGION || 'us-east-1',
       mongodbEndpoint: process.env.NUXT_PUBLIC_MONGODB_ENDPOINT || '',
-      mongodbApiKey: process.env.NUXT_PUBLIC_MONGODB_API_KEY || '',
       mongodbDatabase: process.env.NUXT_PUBLIC_MONGODB_DATABASE || 'vnet-simulator',
       mongodbCollection: process.env.NUXT_PUBLIC_MONGODB_COLLECTION || 'user_settings',
     },

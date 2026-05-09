@@ -262,7 +262,7 @@ A reactive dashboard reflecting the live diagram state.
   - `PNG`, `PDF`, `SVG` use determinate stage-driven progress updates.
   - `.drawio` uses spinner-first progress and transitions to determinate progress for longer operations.
   - While any export is active, all export buttons are disabled until completion/failure.
-- **Import Formats:** Deserializes `.drawio` or `.xml` (via `@xmldom/xmldom`).
+- **Import Formats:** Parser-level import deserializes `.drawio` or `.xml` (via `@xmldom/xmldom`); the bottom-toolbar file picker currently accepts `.drawio`.
 - **Successful import lifecycle:**
   - A successful import replaces the current diagram state through `loadDiagram()` and then completes the existing Vue Flow sync bridge (`setNodes`, `setEdges`, `fitView`) before any post-import prompt is shown.
   - For app-native `.drawio` files produced by this simulator, if network tests already exist, the UI prompts after the imported diagram has rendered to ask whether those existing tests should also be reset.
@@ -285,7 +285,13 @@ A reactive dashboard reflecting the live diagram state.
 - Integration with Bedrock evaluates diagram state in real-time.
 - Supports 4 difficulty tiers. Generates time-boxed prompts against which the local canvas state is verified for compliance.
 - `lib/bedrock.ts` must source browser AWS credentials explicitly from `fetchAuthSession()` rather than relying on the AWS SDK browser default credential chain.
-- The current implementation selects region from `NUXT_PUBLIC_BEDROCK_REGION`, invokes the hardcoded model `anthropic.claude-3-haiku-20240307-v1:0`, and falls back to local challenge generation on credentials/model/region failures.
+- The current implementation selects region from `NUXT_PUBLIC_BEDROCK_REGION`; `nuxt.config.ts` defaults this runtime key to `us-east-1`, while `lib/bedrock.ts` keeps a defensive `ap-southeast-1` fallback if the runtime value is empty. It invokes the model via the **global cross-region inference profile** `global.amazon.nova-2-lite-v1:0` (Amazon Nova 2 Lite), and falls back to local challenge generation on credentials/model/region failures.
+- **Model access (current AWS Bedrock behavior):**
+  - The Amazon Bedrock Model access page has been retired. Serverless foundation models are automatically enabled across all commercial regions when first invoked.
+  - **Amazon Nova 2 Lite** is a first-party Amazon model. It is not sold through AWS Marketplace — no `aws-marketplace:*` permissions or Anthropic FTU form are required. The model activates automatically on first `InvokeModel` call.
+  - `ap-southeast-1` (Singapore) does not support in-region or geo cross-region inference for Nova 2 Lite. The app uses the global inference profile (`global.amazon.nova-2-lite-v1:0`) which routes to the optimal region worldwide and is fully supported from `ap-southeast-1`.
+- The authenticated IAM role (Cognito Identity Pool) must have an explicit `bedrock:InvokeModel` allow policy scoped to the model ARN with a region wildcard to cover global cross-region routing: `arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0`.
+- The request body format follows the Amazon Nova messages API (`messages` + `inferenceConfig`); the response is parsed at `output.message.content[0].text`. This differs from the legacy Anthropic format — do not revert to `anthropic_version`/`content[0].text` response parsing.
 
 ### 7.4 User Settings Persistence (MongoDB Atlas)
 - The settings store owns the local settings snapshot, applies theme/layout side effects, and writes every change to `localStorage` immediately.
@@ -293,6 +299,10 @@ A reactive dashboard reflecting the live diagram state.
 - On authenticated bootstrap, remote settings are queried after AWS/session initialization. If a remote document exists, it overwrites the local snapshot and then rewrites the warmed `localStorage` cache.
 - After bootstrap, subsequent authenticated settings changes are persisted through a debounced Vue Query mutation (`1500 ms`) so rapid toggles collapse into a single upsert.
 - When no authenticated user is present, remote sync is disabled and `localStorage` remains the only persistence layer.
+- **Transport:** The browser calls an **AWS Lambda Function URL** (`NUXT_PUBLIC_MONGODB_ENDPOINT`) authenticated with the user's Cognito ID token (`Authorization: Bearer <id-token>`). The Lambda verifies the JWT against Cognito's JWKS endpoint and executes `findOne` / `updateOne` using the native Node.js MongoDB driver. MongoDB credentials never leave the Lambda environment.
+- **Deprecation note:** The former Atlas App Services Data API (HTTPS Endpoints) was deprecated and reached end-of-life in 2025. The Lambda proxy replaces it. The `mongodbApiKey` runtime config key has been removed — only `mongodbEndpoint`, `mongodbDatabase`, and `mongodbCollection` remain as public build-time config values.
+- **Lambda source:** `infra/lambda/mongodb-settings.mjs`. Required environment variables: `MONGODB_URI`, `MONGODB_DATABASE`, `MONGODB_COLLECTION`, `COGNITO_USER_POOL_ID`, `COGNITO_REGION`, and optionally `ALLOWED_ORIGIN` for CORS.
+- **JWT verification:** The reference Lambda performs structural decode plus expiry/issuer checks. For production, add the `aws-jwt-verify` npm package for full RS256 signature validation.
 
 ---
 
@@ -319,7 +329,7 @@ A reactive dashboard reflecting the live diagram state.
 - **Canonical deployment target:** CloudFront in front of AWS Amplify Hosting.
 - Reference topology:
   - Browser -> CloudFront distribution -> Amplify Hosting app URL (origin)
-  - Browser directly calls external services (Cognito, S3 APIs via Amplify, Bedrock Runtime, MongoDB Data API)
+  - Browser directly calls external services (Cognito, S3 APIs via Amplify, Bedrock Runtime, MongoDB Lambda proxy)
 - Rationale:
   - Keeps Amplify native Git-based CI/CD unchanged for application lifecycle.
   - Supports custom-domain front-door control through CloudFront and Route 53.
@@ -368,16 +378,19 @@ A reactive dashboard reflecting the live diagram state.
 
 ### 9.7 Environment & Configuration Strategy
 - Maintain isolated environment stacks: `dev`, `staging`, `production`.
-- Relevant client build-time keys currently include `NUXT_PUBLIC_AWS_REGION`, `NUXT_PUBLIC_COGNITO_USER_POOL_ID`, `NUXT_PUBLIC_COGNITO_CLIENT_ID`, `NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID`, `NUXT_PUBLIC_S3_BUCKET`, `NUXT_PUBLIC_BEDROCK_REGION`, and the MongoDB `NUXT_PUBLIC_*` settings keys.
+- Relevant client build-time keys currently include `NUXT_PUBLIC_AWS_REGION`, `NUXT_PUBLIC_COGNITO_USER_POOL_ID`, `NUXT_PUBLIC_COGNITO_CLIENT_ID`, `NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID`, `NUXT_PUBLIC_S3_BUCKET`, `NUXT_PUBLIC_BEDROCK_REGION`, `NUXT_PUBLIC_MONGODB_ENDPOINT`, `NUXT_PUBLIC_MONGODB_DATABASE`, and `NUXT_PUBLIC_MONGODB_COLLECTION`.
 - Each environment should use distinct values for:
   - Cognito user pool/client IDs
   - Cognito identity pool ID
   - S3 bucket
-  - Bedrock region (if applicable)
-  - MongoDB endpoint/API key/database/collection
+  - Bedrock region (`NUXT_PUBLIC_BEDROCK_REGION`; runtime default `us-east-1`, commonly set per environment such as `ap-southeast-1` when following this repo's Nova cross-region examples)
+  - MongoDB Lambda Function URL and database/collection names (`NUXT_PUBLIC_MONGODB_ENDPOINT`, `NUXT_PUBLIC_MONGODB_DATABASE`, `NUXT_PUBLIC_MONGODB_COLLECTION`)
+- Where variables are configured:
+  - **Local development:** `.env` file in the project root (copied from `.env.example`). Nuxt reads this automatically.
+  - **AWS Amplify deployment:** **Amplify → your app → Hosting → Environment variables**. Amplify injects these as OS environment variables during `npm run generate`; the `.env` file is not used in CI builds.
 - Critical rule:
   - `NUXT_PUBLIC_*` values are embedded at build time in the client bundle.
-  - Changing env vars in hosting without rebuild/redeploy does not change active runtime behavior.
+  - Changing env vars in Amplify without triggering a new build/redeploy does not change active runtime behavior.
 
 ### 9.8 Release Flow
 1. Merge to the release branch (`main` for production).

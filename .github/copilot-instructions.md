@@ -91,6 +91,11 @@ This project maintains three complementary documentation files, each serving a d
 - App-native `.drawio` imports may defer that one auto-run cycle until the post-import reset-tests prompt is resolved; keep the trigger tied to the import/load event rather than broad structural watchers.
 - Keep debounce and concurrency guards around automatic test execution.
 
+### Import scope
+
+- Keep current import UX behavior where the bottom toolbar picker accepts `.drawio`.
+- Preserve parser compatibility in `useImport.ts` for `.xml` when files are provided programmatically.
+
 ### Animation mode
 
 - Animation mode is an ephemeral overlay state, not persisted infrastructure state.

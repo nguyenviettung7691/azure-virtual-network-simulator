@@ -1,4 +1,4 @@
-# Azure Virtual Network Simulator
+﻿# Azure Virtual Network Simulator
 
 An interactive, browser-based topology designer and simulator for Azure Virtual Network architectures. Build, visualise, and validate Azure network diagrams using a drag-and-drop canvas, then challenge yourself with AI-generated networking tasks.
 
@@ -9,23 +9,9 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Azure Network Components](#azure-network-components)
-- [Developer Onboarding](#developer-onboarding)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Environment Variables](#environment-variables)
-  - [Running Locally](#running-locally)
-  - [Building for Production](#building-for-production)
-- [Deployment](#deployment)
-  - [Recommended Topology: Amplify Origin + CloudFront Front Door](#recommended-topology-amplify-origin--cloudfront-front-door)
-  - [AWS-Native Cache Invalidation Glue](#aws-native-cache-invalidation-glue)
-  - [Infrastructure as Code (Terraform)](#infrastructure-as-code-terraform)
-  - [Environment Strategy](#environment-strategy)
-  - [Rollback](#rollback)
-- [AWS Services Integration](#aws-services-integration)
-  - [Amazon Cognito](#amazon-cognito)
-  - [Amazon S3](#amazon-s3)
-  - [Amazon Bedrock](#amazon-bedrock)
-  - [MongoDB Atlas](#mongodb-atlas)
+- [Developer Onboarding](docs/developer-onboarding.md)
+- [Deployment](docs/deployment.md)
+- [AWS Services Integration](docs/aws-services-integration.md)
 - [Project Structure](#project-structure)
 - [Key Composables](#key-composables)
 - [Export & Import Formats](#export--import-formats)
@@ -53,12 +39,12 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 - **Connection Flow Animations** — Visualize test paths with animated travelers and color-coded results.
 
 **Data & Integration**
-- **Import & Export** — Support for `.drawio`, `.xml`, PNG, SVG, and PDF formats.
+- **Import & Export** — Toolbar export/import supports `.drawio`, PNG, SVG, and PDF; parser/composable import also handles `.xml` payloads.
 - **Cloud Saves** — S3-backed saved setups with metadata and thumbnail previews for authenticated users.
 - **AI Challenges** — Bedrock-powered, time-boxed networking exercises.
 
 **Accessibility**
-- **Tablet-Responsive Toolbars** — Optimized for viewports ≤ 1024px.
+- **Tablet-Responsive Toolbars** — Optimized for viewports <= 1024px.
 - **Dark / Light Mode** — Theme support with system preference respect.
 
 ---
@@ -117,7 +103,7 @@ Two built-in setup buttons are available in the empty canvas quick-start state:
 - **Full Sample**
   - Starts from the Quick Sample baseline, then expands it into a full-feature showcase.
   - Adds the remaining supported Azure component types (ASG, UDR, VPN Gateway, Application Gateway, NVA, VMSS, AKS, App Service, Functions, Storage Account, Blob Storage, Managed Disk, Managed Identity, Key Vault, Service Endpoint, Private Endpoint, Firewall, Bastion, VNet Peering, plus a second VNet/Subnet for peering context).
-  - Adds 14 tests covering all major component categories: Application Gateway load-balancing, private-endpoint connectivity, Bastion inbound access, Azure Firewall, Internal Load Balancer east-west, Internal App Gateway, Public DNS Zone resolution, AKS private API server, App Service → Key Vault, VMSS inbound, Functions → Storage, VPN Gateway access, Public App Service, and additional DNS resolution.
+  - Adds 14 tests covering all major component categories: Application Gateway load-balancing, private-endpoint connectivity, Bastion inbound access, Azure Firewall, Internal Load Balancer east-west, Internal App Gateway, Public DNS Zone resolution, AKS private API server, App Service -> Key Vault, VMSS inbound, Functions -> Storage, VPN Gateway access, Public App Service, and additional DNS resolution.
 
 ---
 
@@ -181,406 +167,64 @@ If cyclic dependencies exist, unresolved nodes are appended deterministically so
 
 ## Developer Onboarding
 
-### Prerequisites
+Requires **Node.js >= 18 LTS** and **npm >= 9**, plus an AWS account with Cognito, S3, Bedrock, and MongoDB Atlas configured. After cloning, run `npm install` then copy `.env.example` to `.env` and fill in the `NUXT_PUBLIC_*` values. Start the dev server with `npm run dev`; generate a static build with `npm run generate`.
 
-- **Node.js** ≥ 18 LTS
-- **npm** ≥ 9 (or `pnpm` / `yarn` — adjust commands accordingly)
-- An AWS account with the services below provisioned (see [AWS Services Integration](#aws-services-integration))
-
-### Installation
-
-```bash
-git clone <repo-url>
-cd azure-virtual-network-simulator
-npm install
-```
-
-The `postinstall` script clears stale caches (`.nuxt`, `node_modules/.vite`, `node_modules/.cache`) then runs `nuxt prepare` to generate the `.nuxt` directory and TypeScript types.
-
-### Environment Variables
-
-Copy `.env.example` to `.env` in the project root and fill in the required values. All variables are prefixed with `NUXT_PUBLIC_` and are exposed to the client bundle.
-
-```dotenv
-# AWS region for Cognito and S3
-NUXT_PUBLIC_AWS_REGION=us-east-1
-
-# Amazon Cognito
-NUXT_PUBLIC_COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
-NUXT_PUBLIC_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
-NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID=us-east-1:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-
-# Amazon S3 – bucket for saved diagrams
-NUXT_PUBLIC_S3_BUCKET=your-diagrams-bucket-name
-
-# Amazon Bedrock region (can differ from the main region)
-NUXT_PUBLIC_BEDROCK_REGION=us-east-1
-
-# MongoDB Atlas App Services (HTTPS Endpoints) – user preference settings
-NUXT_PUBLIC_MONGODB_ENDPOINT=https://data.mongodb-api.com/app/<app-id>/endpoint/data/v1
-NUXT_PUBLIC_MONGODB_API_KEY=your-atlas-app-services-api-key
-NUXT_PUBLIC_MONGODB_DATABASE=vnet-simulator
-NUXT_PUBLIC_MONGODB_COLLECTION=user_settings
-```
-
-> **Note:** Because all variables are `public`, they are embedded in the built JavaScript bundle. Do **not** place IAM secret keys or other sensitive credentials here. Browser-side AWS access for S3 and Bedrock comes from temporary credentials resolved through the configured Cognito Identity Pool. If those credentials are unavailable or the deployed identity lacks the needed IAM permissions, Bedrock falls back to a locally generated challenge. The MongoDB API key should be scoped to the `user_settings` collection with read/write permissions only (see [MongoDB Atlas](#mongodb-atlas)).
-
-### Running Locally
-
-```bash
-npm run dev
-```
-
-The development server starts at `http://localhost:3000` with hot-module replacement and Nuxt DevTools enabled.
-
-### Building for Production
-
-```bash
-# Build the SPA bundle
-npm run build
-
-# Preview the production build locally
-npm run preview
-
-# Or generate a fully static output
-npm run generate
-```
+For full setup instructions, environment variable reference, and build commands, see [Developer Onboarding](docs/developer-onboarding.md).
 
 ---
 
 ## Deployment
 
-This project is a client-side Nuxt SPA (`ssr: false`). For production hosting, use static deployment with CDN edge caching.
+This project is a client-side Nuxt SPA (`ssr: false`). The canonical topology uses **AWS Amplify** as the build/deploy origin with **CloudFront** as the custom-domain front door. Cache invalidation is automated via EventBridge -> Lambda -> CloudFront after each successful Amplify deployment. Infrastructure for the deployment edge (CloudFront, ACM, Route 53, EventBridge, Lambda) is Terraform-managed in `infra/`.
 
-### Recommended Topology: Amplify Origin + CloudFront Front Door
-
-Use AWS Amplify Hosting as the application build/deploy origin and place CloudFront in front of it for custom-domain delivery.
-
-This topology is the default for this repository, especially when the target domain pattern cannot be attached directly in Amplify custom-domain settings.
-
-1. Connect the GitHub repository in **AWS Amplify -> Hosting**.
-2. Select the target branch (`main` for production, optional `develop` for staging).
-3. Configure build settings:
-
-```yaml
-version: 1
-frontend:
-  phases:
-    preBuild:
-      commands:
-        - npm ci
-    build:
-      commands:
-        - npm run generate
-  artifacts:
-    baseDirectory: .output/public
-    files:
-      - '**/*'
-  cache:
-    paths:
-      - node_modules/**/*
-```
-
-4. Add all required `NUXT_PUBLIC_*` variables in Amplify environment variables.
-5. In Amplify Hosting, add SPA rewrite rule so client-side routes resolve to `index.html`:
-   - Source: `/<*>`
-   - Target: `/index.html`
-   - Type: `200 (Rewrite)`
-6. Request an ACM certificate for the app hostname in `us-east-1` (CloudFront requirement), then validate via DNS in Route 53.
-7. Create a CloudFront distribution:
-   - Origin: Amplify app public domain URL
-   - Alternate domain name (CNAME): app custom domain
-   - TLS certificate: ACM certificate from `us-east-1`
-8. In Route 53, point the app custom domain to the CloudFront distribution domain.
-
-### AWS-Native Cache Invalidation Glue
-
-Because Amplify and CloudFront are independently moving parts, CloudFront cache invalidation must run after every successful Amplify deployment.
-
-Default mechanism:
-
-1. EventBridge rule listens to Amplify deployment success events:
-   - `source`: `aws.amplify`
-   - `detail-type`: `Amplify Deployment Status Change`
-   - `detail.jobStatus`: `SUCCEED`
-2. Rule target is a Lambda function with permission to call `cloudfront:CreateInvalidation` for the specific distribution.
-3. Lambda submits a full invalidation path set: `/*`.
-
-Operational flow:
-
-Git push -> Amplify build/deploy success -> EventBridge event -> Lambda -> CloudFront invalidation (`/*`) -> users receive fresh content.
-
-This avoids GitHub-side CloudFront credentials and keeps invalidation fully AWS-native.
-
-### Infrastructure as Code (Terraform)
-
-Infrastructure is managed separately from app code lifecycle.
-
-- App lifecycle: Amplify native Git-connected CI/CD builds and deploys application code.
-- Infrastructure lifecycle: Terraform in `infra/` manages CloudFront, ACM, Route 53, EventBridge rule, Lambda function, IAM role/policies, and related wiring.
-
-Before running Terraform in `infra/`, complete and verify these prerequisites:
-
-1. Install Terraform CLI 1.6+ and verify:
-
-```bash
-terraform version
-```
-
-2. Install AWS CLI v2 and verify:
-
-```bash
-aws --version
-```
-
-3. Configure AWS credentials for the target account (profile or env vars), then verify access:
-
-```bash
-aws sts get-caller-identity
-```
-
-For human operators, use short-term credentials (IAM Identity Center preferred), ensure account access via assigned permission set with scope for this Terraform stack, and refresh via `aws sso login` when expired. Full credential workflows and scope details are documented in `infra/README.md` under "3) Configure and verify AWS credentials".
-
-4. Optional preflight checks provided by this repository:
-
-- PowerShell: `./infra/scripts/check-prereqs.ps1 -Profile <profile> -Region <region>`
-- Bash/Zsh: `./infra/scripts/check-prereqs.sh <profile> <region>`
-
-Detailed prerequisite and apply instructions are documented in `infra/README.md`.
-
-Keep these lifecycles decoupled: app releases continue through Amplify, while infra changes are applied through Terraform workflows.
-
-### Environment Strategy
-
-Use isolated AWS resources per environment (`dev`, `staging`, `production`) for Cognito, S3, Bedrock region config, and MongoDB endpoint/API key.
-
-Important behavior for this app:
-
-- All `NUXT_PUBLIC_*` values are embedded at build time.
-- Runtime changes in Amplify or CloudFront do not change app config until you rebuild and redeploy.
-- Do not put private credentials in `NUXT_PUBLIC_*`.
-
-### Rollback
-
-- **Application rollback (Amplify):** Redeploy a previous successful Amplify build from deployment history.
-- **Edge freshness rollback step (CloudFront):** Trigger a fresh invalidation (`/*`) so edge locations stop serving stale content from the superseded release.
+For full deployment instructions, Amplify build config, Terraform prerequisites, and rollback procedures, see [Deployment Guide](docs/deployment.md).
 
 ---
 
 ## AWS Services Integration
 
-This section describes the app-side AWS dependencies as they exist in the current repository. The Terraform stack in `infra/` provisions the deployment edge (CloudFront, ACM, Route 53, EventBridge, Lambda invalidation) but does **not** provision Cognito, S3, or Bedrock resources for the application itself.
+The app depends on four AWS-adjacent services. The Terraform stack in `infra/` provisions the deployment edge but does **not** provision these application-layer resources.
 
-### Amazon Cognito
+| Service | Purpose |
+|---|---|
+| **Amazon Cognito** | User authentication (sign up, sign in, password reset) |
+| **Amazon S3** | Per-user persistence of saved diagram setups |
+| **Amazon Bedrock** | AI-generated networking challenges (Nova 2 Lite via global cross-region inference) |
+| **MongoDB Atlas** | User preference settings via AWS Lambda Function URL proxy |
 
-**Purpose:** User authentication — sign up, email confirmation, sign in, password reset, and password change.
-
-**SDK:** `aws-amplify/auth` (Amplify v6)
-
-**Configuration (`lib/aws.ts`):**
-
-```ts
-Amplify.configure({
-  Auth: {
-    Cognito: {
-      userPoolId: config.public.cognitoUserPoolId,
-      userPoolClientId: config.public.cognitoClientId,
-      identityPoolId: config.public.cognitoIdentityPoolId,
-    },
-  },
-})
-```
-
-**Current scope:** The repo reads `NUXT_PUBLIC_COGNITO_USER_POOL_ID`, `NUXT_PUBLIC_COGNITO_CLIENT_ID`, and `NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID` at startup. The User Pool, app client, Identity Pool, email delivery, and authenticated IAM roles remain external setup work.
-
-**Setup steps:**
-
-1. Open the **AWS Console → Cognito → User Pools** and create a new user pool.
-2. In the **Sign-in experience** tab, enable **Email** as a sign-in option.
-3. In the **App clients** tab, create a public app client (no client secret) with the `USER_PASSWORD_AUTH` auth flow enabled.
-4. Under **Messaging**, configure an email sender (Cognito default or SES) for the verification email.
-5. Note the **User Pool ID** and **App Client ID** and add them to `.env`.
-
-**Required IAM / resource-based permissions:** None for the basic user-pool auth flows above. Browser-side access to S3 or Bedrock in this repo depends on the configured Cognito Identity Pool exchanging the signed-in user session for temporary AWS credentials on the authenticated IAM role.
-
----
-
-### Amazon S3
-
-**Purpose:** Per-user persistence of saved setups. The app passes logical keys `users/{userId}/diagrams/{setupId}.json` and `users/{userId}/thumbnails/{setupId}.png` to Amplify Storage with `accessLevel: 'private'`. Amplify scopes those objects under the authenticated identity's private prefix in S3, so the physical object path becomes `private/{identityId}/users/{userId}/...`. TanStack Vue Query drives the authenticated list/save/delete lifecycle in the browser.
-
-**SDK:** `aws-amplify/storage` (Amplify v6)
-
-**Configuration (`lib/aws.ts`):**
-
-```ts
-Amplify.configure({
-  Storage: {
-    S3: {
-      bucket: config.public.s3Bucket,
-      region: config.public.awsRegion,
-    },
-  },
-})
-```
-
-**Current scope:** The repo configures the bucket name, S3 region, and Cognito Identity Pool-backed credential path in `lib/aws.ts`, but it does not provision the bucket, CORS rules, Identity Pool, or IAM roles needed for browser uploads/downloads.
-
-**Setup steps:**
-
-1. **Create an S3 bucket** in your chosen region. Block all public access.
-2. **Create a Cognito Identity Pool** linked to the User Pool created above (see Cognito section), note the Identity Pool ID, and add it to `.env` as `NUXT_PUBLIC_COGNITO_IDENTITY_POOL_ID`.
-3. **Create an IAM role** for authenticated identities with a policy scoped to the Amplify private prefix (replace `BUCKET_NAME`):
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
-      "Resource": "arn:aws:s3:::BUCKET_NAME/private/${cognito-identity.amazonaws.com:sub}/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::BUCKET_NAME",
-      "Condition": {
-        "StringLike": {
-          "s3:prefix": ["private/${cognito-identity.amazonaws.com:sub}/*"]
-        }
-      }
-    }
-  ]
-}
-```
-
-4. Attach the IAM role to the **Authenticated role** of the Identity Pool.
-5. Add an **S3 CORS configuration** to allow requests from your dev and production origins:
-
-```json
-[
-  {
-    "AllowedHeaders": ["*"],
-    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-    "AllowedOrigins": ["http://localhost:3000", "https://your-production-domain.com"],
-    "ExposeHeaders": ["ETag"]
-  }
-]
-```
-
-6. Add the bucket name to `.env` as `NUXT_PUBLIC_S3_BUCKET`.
-
----
-
-### Amazon Bedrock
-
-**Purpose:** AI-generated networking challenges. The app calls Amazon Bedrock from the browser to produce a structured `Challenge` JSON object tailored to the selected difficulty and the components already present in the diagram.
-
-**SDK:** `@aws-sdk/client-bedrock-runtime`
-
-**Current implementation:** `lib/bedrock.ts` creates a `BedrockRuntimeClient` using `NUXT_PUBLIC_BEDROCK_REGION` and an explicit credentials provider backed by `fetchAuthSession()`. The model remains hardcoded to `anthropic.claude-3-haiku-20240307-v1:0`; there is currently no runtime env var for model selection in this repo.
-
-**Setup steps:**
-
-1. **Request model access** — in the AWS Console, go to **Amazon Bedrock → Model access** and request access for **Anthropic Claude 3 Haiku**. Access is usually granted within a few minutes.
-2. **Grant IAM permissions** — the authenticated IAM role attached to your Cognito Identity Pool must be allowed to invoke that model:
-
-```json
-{
-  "Effect": "Allow",
-  "Action": "bedrock:InvokeModel",
-  "Resource": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0"
-}
-```
-
-Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
-
-3. Set `NUXT_PUBLIC_BEDROCK_REGION` in `.env` to the region where you have Bedrock access (Bedrock availability varies by region).
-
-> **Fallback:** If the Bedrock call fails for any reason (for example missing browser credentials, missing model access, or region mismatch), the challenges store falls back to a locally generated challenge so the app remains functional.
-
----
-
-### MongoDB Atlas
-
-**Purpose:** Per-user persistence of application preference settings (theme, dark mode, region defaults, UI toggles, etc.). Settings are stored in MongoDB Atlas via the App Services HTTPS Endpoints (Data API) — no MongoDB driver is required in the browser. TanStack Vue Query loads remote settings after authenticated session bootstrap, and a 1.5-second debounced mutation persists later changes. When a user is not signed in, settings fall back to `localStorage`.
-
-**Client:** Browser `fetch()` — no additional npm packages required.
-
-**Collection schema:** one document per user, keyed on `userId`.
-
-```json
-{
-  "userId": "cognito-user-id",
-  "theme": "ocean-blue",
-  "darkMode": "system",
-  "language": "en",
-  "autoSave": true,
-  "autoSaveInterval": 30,
-  "showMinimap": true,
-  "showGrid": true,
-  "snapToGrid": false,
-  "gridSize": 20,
-  "defaultRegion": "eastus",
-  "defaultResourceGroup": "my-rg",
-  "showTooltips": true,
-  "animateEdges": true,
-  "compactNodes": false,
-  "sidebarCollapsed": false,
-  "rightPanelCollapsed": false
-}
-```
-
-**Setup steps:**
-
-1. **Create a MongoDB Atlas cluster** at [cloud.mongodb.com](https://cloud.mongodb.com). A free M0 tier cluster is sufficient.
-2. **Create a database and collection** named `vnet-simulator` / `user_settings` (or override with your env vars).
-3. **Create an Atlas App Services application**:
-   - Go to **App Services** → **Create a new App** → link it to your Atlas cluster.
-4. **Enable HTTPS Endpoints (Data API)**:
-   - In the App Services app, navigate to **HTTPS Endpoints** → **Enable the Data API**.
-   - Note the **App ID** — this forms the base URL: `https://data.mongodb-api.com/app/<app-id>/endpoint/data/v1`.
-5. **Create an API Key**:
-   - In App Services → **App Users** → **API Keys** → **Create API Key**.
-   - Assign it the `readWriteAnyDatabase` (or a custom) role scoped only to `vnet-simulator.user_settings`.
-6. **Configure collection rules** (recommended):
-   - In **Rules**, restrict the `user_settings` collection so that a user can only read/write documents where `userId` matches the authenticated identity.
-7. Add `NUXT_PUBLIC_MONGODB_ENDPOINT`, `NUXT_PUBLIC_MONGODB_API_KEY`, `NUXT_PUBLIC_MONGODB_DATABASE`, and `NUXT_PUBLIC_MONGODB_COLLECTION` to `.env`.
-
-> **Security note:** The API key is embedded in the client bundle. Restrict it at the Atlas Rules level so it cannot read or write documents for other users. For stronger protection consider replacing the API key with Cognito JWT tokens configured as a Custom JWT provider in Atlas App Services.
+For full console setup instructions for each service, see [AWS Services Integration](docs/aws-services-integration.md).
 
 ---
 
 ## Project Structure
 
 ```
-├── app.vue                  # Root component – configures AWS, boots auth query, mounts settings sync
-├── nuxt.config.ts           # Nuxt configuration, runtime config, PrimeVue setup
-├── assets/
-│   ├── primevue-theme.ts    # PrimeVue Aura theme config (preset + darkModeSelector)
-│   └── css/                 # Global and diagram-specific styles
-├── components/
-│   ├── diagram/             # Canvas, custom nodes, and edge components (Vue Flow, including connection-test animation mode)
-│   ├── forms/               # Per-component property forms (one per NetworkComponentType)
-│   ├── layout/              # AppHeader, LeftPanel, RightPanel, BottomToolbar
-│   ├── modals/              # Auth, settings, saved setups, challenge, confirm dialogs
-│   └── panels/              # ChallengePanel, TestFormModal
-├── composables/             # Reusable logic plus Vue Query hooks/controllers (auth, settings, saved setups, export, import, AI)
-├── lib/
-│   ├── aws.ts               # Amplify bootstrap (Cognito + S3)
-│   ├── bedrock.ts           # Bedrock client + challenge generation prompt
-│   ├── s3.ts                # S3 helpers for canonical saved setup records and thumbnails
-│   ├── dagre.ts             # Auto-layout integration
-│   ├── drawio.ts            # draw.io XML import/export
-│   ├── layout.ts            # Node dimension constants (base widths, heights, min sizes)
-│   ├── mongodb.ts           # MongoDB Atlas App Services helpers (read/upsert user settings)
-│   └── export/              # Export pipeline (worker, raster, SVG, PDF helpers, format serializers)
-├── plugins/
-│   └── vue-query.ts         # Shared QueryClient + Vue Query plugin registration
-├── pages/index.vue          # Single page – renders the full application layout
-├── stores/                  # Pinia stores for diagram state and local UI/app state (remote state is query-driven)
-└── types/                   # TypeScript interfaces and enums
+|-- app.vue                  # Root component - configures AWS, boots auth query, mounts settings sync
+|-- nuxt.config.ts           # Nuxt configuration, runtime config, PrimeVue setup
+|-- assets/
+|   |-- primevue-theme.ts    # PrimeVue Aura theme config (preset + darkModeSelector)
+|   \-- css/                 # Global and diagram-specific styles
+|-- components/
+|   |-- diagram/             # Canvas, custom nodes, and edge components (Vue Flow, including connection-test animation mode)
+|   |-- forms/               # Per-component property forms (one per NetworkComponentType)
+|   |-- layout/              # AppHeader, LeftPanel, RightPanel, BottomToolbar
+|   |-- modals/              # Auth, settings, saved setups, challenge, confirm dialogs
+|   \-- panels/              # ChallengePanel, TestFormModal
+|-- composables/             # Reusable logic plus Vue Query hooks/controllers (auth, settings, saved setups, export, import, AI)
+|-- lib/
+|   |-- aws.ts               # Amplify bootstrap (Cognito + S3)
+|   |-- bedrock.ts           # Bedrock client + challenge generation prompt
+|   |-- s3.ts                # S3 helpers for canonical saved setup records and thumbnails
+|   |-- dagre.ts             # Auto-layout integration
+|   |-- drawio.ts            # draw.io XML import/export
+|   |-- layout.ts            # Node dimension constants (base widths, heights, min sizes)
+|   |-- mongodb.ts           # MongoDB Atlas Lambda proxy helpers (read/upsert user settings via JWT-authenticated Function URL)
+|   \-- export/              # Export pipeline (worker, raster, SVG, PDF helpers, format serializers)
+|-- plugins/
+|   \-- vue-query.ts         # Shared QueryClient + Vue Query plugin registration
+|-- pages/index.vue          # Single page - renders the full application layout
+|-- stores/                  # Pinia stores for diagram state and local UI/app state (remote state is query-driven)
+\-- types/                   # TypeScript interfaces and enums
 ```
 
 ---
@@ -596,7 +240,7 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 | `useS3` | Compatibility wrapper around query-backed saved setup save/load/delete operations |
 | `useSavedSetupQueries` | Vue Query hooks for S3-backed saved setup list/save/delete |
 | `useExport` | Exports the canvas to PNG, SVG, PDF, or draw.io |
-| `useImport` | Imports diagrams from `.drawio` or `.xml` files; successful app-native `.drawio` imports can prompt to reset existing network tests after the diagram finishes rendering |
+| `useImport` | Imports diagram files; toolbar flow currently picks `.drawio`, while parser-level `importFromFile(...)` accepts `.drawio` and `.xml`; successful app-native `.drawio` imports can prompt to reset existing network tests after the diagram finishes rendering |
 | `useLayout` | Wraps Dagre to auto-arrange nodes on demand (not triggered automatically on every node addition) |
 | `useSettings` | Reads and writes local user preferences via the settings store |
 | `useSettingsQueries` | Vue Query controller/hooks for MongoDB-backed settings load/save |
@@ -611,8 +255,8 @@ Replace `us-east-1` with the value of `NUXT_PUBLIC_BEDROCK_REGION` if different.
 | PNG image | `.png` | Export |
 | SVG image | `.svg` | Export |
 | PDF document | `.pdf` | Export |
-| draw.io diagram | `.drawio` | Export & Import |
-| draw.io XML | `.xml` | Import |
+| draw.io diagram | `.drawio` | Export & Import (toolbar UI) |
+| draw.io XML payload | `.xml` | Import (parser/composable path) |
 
 Export behavior details:
 
@@ -631,7 +275,8 @@ Export behavior details:
   - If worker conversion is unavailable, PNG/PDF fallback to the compatible main-thread path.
   - Save thumbnails reuse the same diagram-state raster pipeline so export and cloud-save previews stay visually aligned.
 - Import behavior:
-  - `.drawio` and `.xml` imports replace the current diagram state after a successful parse.
+  - Import parser accepts `.drawio` and `.xml` and replaces the current diagram state after a successful parse.
+  - Bottom toolbar file picker currently filters to `.drawio`.
   - Successful app-native `.drawio` imports wait for the imported diagram to finish rendering and fit into view before any follow-up test prompt is shown.
   - If network tests already exist, successful app-native `.drawio` imports ask whether those existing tests should also be reset.
   - Choosing to keep existing tests preserves them and reruns them against the imported diagram when auto-run is enabled.
@@ -646,7 +291,7 @@ Export behavior details:
 
 Challenges are AI-generated JSON objects that instruct the user to build a specific Azure network topology. They include:
 
-- **Difficulty** — `BEGINNER` · `INTERMEDIATE` · `ADVANCED` · `EXPERT`
+- **Difficulty** — `BEGINNER` | `INTERMEDIATE` | `ADVANCED` | `EXPERT`
 - **Tasks** — typed actions (`add_component`, `connect_components`, `configure_component`, `remove_component`) each worth a set number of points
 - **Conditions** — required components, required connections, security requirements, and network requirements
 - **Time limit** — a countdown timer tracked in seconds
@@ -658,9 +303,9 @@ The diagram store evaluates challenge completion automatically whenever the canv
 
 ## Settings
 
-User preferences are persisted to **MongoDB Atlas** when the user is authenticated and restored through a Vue Query-driven sync pass after session bootstrap. The remote document always takes precedence once loaded and is written back through a 1.5-second debounced mutation. `localStorage` remains the immediate-write cache and the sole persistence layer when the user is not signed in, ensuring preferences are available offline and before any network round-trip completes.
+User preferences are persisted to **MongoDB Atlas** when the user is authenticated and restored through a Vue Query-driven sync pass after session bootstrap. The remote document always takes precedence once loaded and is written back through a 1.5-second debounced mutation. Persistence is handled via an **AWS Lambda Function URL proxy** — the browser sends its Cognito ID token, and the Lambda verifies it before executing the query, so MongoDB credentials never reach the client bundle. `localStorage` remains the immediate-write cache and the sole persistence layer when the user is not signed in, ensuring preferences are available offline and before any network round-trip completes.
 
-Available settings include:
+Persisted settings currently include:
 
 | Setting | Default | Options |
 |---|---|---|
@@ -670,6 +315,7 @@ Available settings include:
 | Auto-save | `true` | toggle |
 | Auto-save interval | `30` s | Any positive integer |
 | Default Azure region | `eastus` | Any Azure region string |
+| Default resource group | `my-rg` | Any resource group string |
 | Show minimap | `true` | toggle |
 | Show grid | `true` | toggle |
 | Snap to grid | `false` | toggle |
@@ -677,3 +323,7 @@ Available settings include:
 | Animate edges | `true` | toggle |
 | Compact nodes | `false` | toggle |
 | Show tooltips | `true` | toggle |
+| Sidebar collapsed | `false` | toggle |
+| Right panel collapsed | `false` | toggle |
+
+The Account Settings modal exposes a subset of these directly; the rest are persisted for layout/session compatibility across launches and authenticated sync.

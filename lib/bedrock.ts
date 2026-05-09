@@ -17,7 +17,7 @@ function getBedrockClient(): BedrockRuntimeClient {
   if (!bedrockClient) {
     const config = useRuntimeConfig()
     bedrockClient = new BedrockRuntimeClient({
-      region: config.public.bedrockRegion || 'us-east-1',
+      region: config.public.bedrockRegion || 'ap-southeast-1',
       credentials: async () => {
         const credentials = await getBrowserAwsCredentials()
 
@@ -81,18 +81,19 @@ Generate a challenge as a JSON object with this exact structure:
 Return ONLY valid JSON, no other text.`
 
   const body = JSON.stringify({
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 2000,
     messages: [
       {
         role: 'user',
-        content: prompt,
+        content: [{ text: prompt }],
       },
     ],
+    inferenceConfig: {
+      maxTokens: 2000,
+    },
   })
 
   const command = new InvokeModelCommand({
-    modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+    modelId: 'global.amazon.nova-2-lite-v1:0',
     contentType: 'application/json',
     accept: 'application/json',
     body: new TextEncoder().encode(body),
@@ -101,7 +102,7 @@ Return ONLY valid JSON, no other text.`
   const response = await client.send(command)
   const responseText = new TextDecoder().decode(response.body)
   const responseData = JSON.parse(responseText)
-  const content = responseData.content[0].text
+  const content = responseData.output.message.content[0].text
 
   const challenge = JSON.parse(content) as Challenge
   challenge.id = `challenge-${Date.now()}`
