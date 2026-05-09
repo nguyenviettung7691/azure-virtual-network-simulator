@@ -103,26 +103,16 @@ async function verifyToken(token) {
 }
 
 // ---------------------------------------------------------------------------
-// CORS helper
+// Response helper
+// CORS headers are configured on the Lambda Function URL — do not add them
+// here, as that would produce duplicate headers on non-preflight responses.
 // ---------------------------------------------------------------------------
 
-function corsHeaders(origin) {
-  // In production, restrict to your app's exact origin.
-  // During development '*' is convenient.
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  }
-}
-
-function respond(statusCode, body, origin) {
+function respond(statusCode, body) {
   return {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      ...corsHeaders(origin),
     },
     body: JSON.stringify(body),
   }
@@ -133,32 +123,24 @@ function respond(statusCode, body, origin) {
 // ---------------------------------------------------------------------------
 
 export const handler = async (event) => {
-  const origin = event.headers?.origin ?? ''
-  const method = event.requestContext?.http?.method?.toUpperCase() ?? 'POST'
-
-  // Handle CORS preflight
-  if (method === 'OPTIONS') {
-    return respond(204, {}, origin)
-  }
-
   // ── Auth ────────────────────────────────────────────────────────────────
   const authHeader = event.headers?.authorization ?? event.headers?.Authorization ?? ''
   const token = authHeader.replace(/^Bearer\s+/i, '').trim()
   if (!token) {
-    return respond(401, { error: 'Unauthorized — missing Authorization header' }, origin)
+    return respond(401, { error: 'Unauthorized — missing Authorization header' })
   }
 
   let payload
   try {
     payload = await verifyToken(token)
   } catch (err) {
-    return respond(401, { error: `Unauthorized — ${err.message}` }, origin)
+    return respond(401, { error: `Unauthorized — ${err.message}` })
   }
 
   // Use the Cognito `sub` as the user identifier (stable, unique per user)
   const userId = payload.sub
   if (!userId) {
-    return respond(401, { error: 'Unauthorized — token has no sub claim' }, origin)
+    return respond(401, { error: 'Unauthorized — token has no sub claim' })
   }
 
   // ── Parse request body ──────────────────────────────────────────────────
@@ -166,7 +148,7 @@ export const handler = async (event) => {
   try {
     body = JSON.parse(event.body ?? '{}')
   } catch {
-    return respond(400, { error: 'Invalid JSON body' }, origin)
+    return respond(400, { error: 'Invalid JSON body' })
   }
 
   const { action, database, collection } = body
@@ -176,7 +158,7 @@ export const handler = async (event) => {
   const colName = (typeof collection === 'string' && collection) ? collection : process.env.MONGODB_COLLECTION
 
   if (!dbName || !colName) {
-    return respond(500, { error: 'Server misconfiguration — database or collection not set' }, origin)
+    return respond(500, { error: 'Server misconfiguration — database or collection not set' })
   }
 
   // ── MongoDB operation ────────────────────────────────────────────────────
@@ -186,7 +168,7 @@ export const handler = async (event) => {
 
     if (action === 'findOne') {
       const doc = await col.findOne({ userId }, { projection: { _id: 0, userId: 0 } })
-      return respond(200, { document: doc ?? null }, origin)
+      return respond(200, { document: doc ?? null })
     }
 
     if (action === 'updateOne') {
@@ -196,12 +178,12 @@ export const handler = async (event) => {
         { $set: { userId, ...settings } },
         { upsert: true },
       )
-      return respond(200, { modifiedCount: 1 }, origin)
+      return respond(200, { modifiedCount: 1 })
     }
 
-    return respond(400, { error: `Unknown action: ${action}` }, origin)
+    return respond(400, { error: `Unknown action: ${action}` })
   } catch (err) {
     console.error('MongoDB error:', err)
-    return respond(500, { error: 'Internal server error' }, origin)
+    return respond(500, { error: 'Internal server error' })
   }
 }
