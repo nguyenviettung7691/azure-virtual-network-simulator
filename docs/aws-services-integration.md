@@ -324,7 +324,7 @@ NUXT_PUBLIC_BEDROCK_REGION=ap-southeast-1
 
 > **Why a Lambda proxy?** The former Atlas App Services Data API (HTTPS Endpoints) was deprecated and reached end-of-life in 2025. The AWS Lambda Function URL approach replaces it with a solution that fits the existing AWS-native infrastructure, reuses the Cognito session already in the app, and eliminates the need for any third-party API key in the client bundle. See the [official migration guide](https://www.mongodb.com/docs/atlas/app-services/data-api/data-api-deprecation/) for alternatives that were considered.
 
-**Client:** Browser `fetch()` → AWS Lambda Function URL (authenticated via `Authorization: Bearer <cognito-id-token>`) — no MongoDB driver or additional npm packages required in the browser.
+**Client:** Browser `fetch()` → AWS Lambda Function URL (authenticated via `Authorization: Bearer <cognito-id-token>`) — no MongoDB driver or additional npm packages required in the browser. Because the browser sends `POST` requests with both `Content-Type: application/json` and `Authorization`, the Function URL CORS policy must allow the production origin, the `POST` method, and both request headers.
 
 **Collection schema:** one document per user, keyed on `userId`.
 
@@ -451,6 +451,21 @@ NUXT_PUBLIC_BEDROCK_REGION=ap-southeast-1
 
 20. Set the Lambda **Handler** to `index.handler` (under **Runtime settings → Edit**).
 
+20a. Go to **Configuration → General configuration → Edit** and set:
+    - **Timeout:** `15 sec`
+    - **Memory:** `256 MB`
+
+    The Lambda handler initializes `MongoClient` with `serverSelectionTimeoutMS: 5000`, so the default 3-second Lambda timeout is too short and causes Function URL responses to fail with `502 Bad Gateway` plus CloudWatch `Status: timeout` before MongoDB can connect or return a real error.
+
+    If you are updating an existing function instead of using the console, run:
+
+    ```bash
+    aws lambda update-function-configuration \
+      --function-name vnet-simulator-mongodb-settings \
+      --timeout 15 \
+      --memory-size 256
+    ```
+
 21. Go to **Configuration → Environment variables → Edit** and add:
 
     | Key | Value |
@@ -460,17 +475,38 @@ NUXT_PUBLIC_BEDROCK_REGION=ap-southeast-1
     | `MONGODB_COLLECTION` | `user_settings` |
     | `COGNITO_USER_POOL_ID` | your Cognito User Pool ID (e.g. `us-east-1_XXXXXXXXX`) |
     | `COGNITO_REGION` | the AWS region of your Cognito User Pool (e.g. `us-east-1`) |
-    | `ALLOWED_ORIGIN` | your app's domain (e.g. `https://yourdomain.com`), or `*` during development |
 
     Click **Save**.
+
+  CORS is configured on the **Function URL** itself in the next step, not through Lambda environment variables.
 
 22. Go to **Configuration → Function URL → Create function URL**:
     - **Auth type:** NONE (the function verifies the Cognito JWT token itself)
     - **CORS → Allow origins:** your app domain (e.g. `https://yourdomain.com`), or `*` during development
+    - **CORS → Allow methods:** `POST`
     - **CORS → Allow headers:** `Content-Type, Authorization`
+    - **CORS → Max age:** `300`
     - Click **Save**
 
 23. Copy the **Function URL** (format: `https://<id>.lambda-url.<region>.on.aws`). This is your `NUXT_PUBLIC_MONGODB_ENDPOINT` value.
+
+    If you are updating an existing Function URL instead of recreating it, run:
+
+    ```bash
+    aws lambda update-function-url-config \
+      --function-name vnet-simulator-mongodb-settings \
+      --auth-type NONE \
+      --cors 'AllowOrigins=["https://azure-vnet.nguyenviettung.id.vn"],AllowMethods=["POST"],AllowHeaders=["content-type","authorization"],MaxAge=300'
+    ```
+
+    If your deployed Function URL is attached to an alias instead of `$LATEST`, add `--qualifier <alias-name>` so you update the same URL referenced by `NUXT_PUBLIC_MONGODB_ENDPOINT`.
+
+    This CORS-only change does not require a Lambda code upload or an Amplify rebuild.
+
+  24. If the function still fails after increasing the Lambda timeout, check **MongoDB Atlas → Security → Network Access** and make sure the Lambda can reach the cluster.
+    - For initial verification, temporarily allow `0.0.0.0/0`.
+    - If the timeout changes into a logged MongoDB connection error after that, the root cause was Atlas network access rather than Lambda execution time.
+    - Tighten the allow list again before production cutover.
 
 > **Production hardening:** For full JWT signature verification, add the [`aws-jwt-verify`](https://github.com/awslabs/aws-jwt-verify) npm package to the Lambda deployment. The reference implementation in [`infra/lambda/mongodb-settings.mjs`](../infra/lambda/mongodb-settings.mjs) performs structural decode and expiry/issuer checks only; `aws-jwt-verify` adds RS256 signature validation against the Cognito public key.
 
