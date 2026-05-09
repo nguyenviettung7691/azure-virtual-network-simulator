@@ -1,5 +1,15 @@
 import { uploadData, downloadData, list, remove } from 'aws-amplify/storage'
 import type { DiagramState, SavedSetup } from '~/types/diagram'
+import { isS3Configured } from '~/lib/aws'
+
+function assertS3Configured(): void {
+  if (!isS3Configured()) {
+    throw new Error(
+      'S3 storage is not configured. '
+      + 'Set NUXT_PUBLIC_S3_BUCKET to a valid bucket name (lowercase letters, numbers, and hyphens only, 3–63 characters).'
+    )
+  }
+}
 
 interface LegacySavedSetupRecord {
   id?: string
@@ -115,6 +125,7 @@ async function readSavedSetupRecord(userId: string, setupId: string): Promise<un
 }
 
 async function listSetupIds(userId: string): Promise<string[]> {
+  assertS3Configured()
   try {
     const prefix = `users/${userId}/diagrams/`
     const result = await list({ prefix, options: { accessLevel: 'private' } })
@@ -127,6 +138,7 @@ async function listSetupIds(userId: string): Promise<string[]> {
 }
 
 export async function saveSavedSetup(userId: string, setup: SavedSetup): Promise<void> {
+  assertS3Configured()
   const persistedSetup = {
     id: setup.id,
     name: setup.name,
