@@ -29,7 +29,7 @@
       @edges-change="onEdgesChange"
       @viewport-change="onViewportChange"
     >
-      <Background :variant="BackgroundVariant.Dots" :gap="20" :size="1" />
+      <Background v-if="showGrid" :variant="BackgroundVariant.Dots" :gap="20" :size="1" />
       <Controls>
         <template #control-zoom-in>
           <ControlButton v-tooltip.right="'Zoom In'" @click="zoomIn()">
@@ -57,6 +57,7 @@
         </template>
       </Controls>
       <MiniMap
+        v-if="showMinimap"
         :node-stroke-color="getNodeStrokeColor"
         :node-color="getNodeColor"
         :node-border-radius="4"
@@ -193,9 +194,13 @@ import AnimationEdge from './edges/AnimationEdge.vue'
 
 const diagramStore = useDiagramStore()
 const testsStore = useTestsStore()
+const settingsStore = useSettingsStore()
 const { fitView, zoomIn, zoomOut, setNodes, setEdges, setViewport, nodesDraggable, elementsSelectable } = useVueFlow()
 const isInteractive = computed(() => nodesDraggable.value || elementsSelectable.value)
 const isAnimationMode = computed(() => diagramStore.viewMode === 'animation')
+const showGrid = computed(() => settingsStore.showGrid)
+const showMinimap = computed(() => settingsStore.showMinimap)
+const animateInfrastructureEdges = computed(() => settingsStore.animateEdges)
 
 const canvasWrapper = ref<HTMLElement | null>(null)
 const snapToGrid = ref(false)
@@ -273,9 +278,19 @@ const nodes = computed({
 })
 
 const edges = computed({
-  get: () => (isAnimationMode.value && diagramStore.animationSession
-    ? diagramStore.animationSession.overlayEdges as any[]
-    : diagramStore.edges as any[]),
+  get: () => {
+    if (isAnimationMode.value && diagramStore.animationSession) {
+      return diagramStore.animationSession.overlayEdges as any[]
+    }
+
+    return (diagramStore.edges as any[]).map(edge => ({
+      ...edge,
+      data: {
+        ...(edge.data || {}),
+        animated: animateInfrastructureEdges.value,
+      },
+    }))
+  },
   set: (val) => {
     if (isAnimationMode.value) return
     diagramStore.edges = val as any
@@ -334,6 +349,11 @@ watch(
   () => diagramStore.animationSession,
   () => nextTick(() => syncRenderedGraph()),
   { deep: true },
+)
+
+watch(
+  () => settingsStore.animateEdges,
+  () => nextTick(() => syncRenderedGraph()),
 )
 
 watch(
@@ -398,11 +418,22 @@ function exitAnimation() {
 }
 
 function getNodeColor(node: any): string {
-  return (getComponentColor(node.data?.type) || '#0078d4') + '40'
+  return (getComponentColor(node.data?.type) || getThemePrimaryColor()) + '40'
 }
 
 function getNodeStrokeColor(node: any): string {
-  return getComponentColor(node.data?.type) || '#0078d4'
+  return getComponentColor(node.data?.type) || getThemePrimaryColor()
+}
+
+function getThemePrimaryColor(): string {
+  if (typeof document === 'undefined') {
+    return '#0078d4'
+  }
+
+  const computedStyles = window.getComputedStyle(document.documentElement)
+  return computedStyles.getPropertyValue('--primary').trim()
+    || computedStyles.getPropertyValue('--primary-color').trim()
+    || '#0078d4'
 }
 
 function loadQuickSampleDiagram() {

@@ -25,8 +25,10 @@
 <script setup lang="ts">
 import { NetworkComponentType, getComponentLabel } from '~/types/network'
 import type { AnyNetworkComponent } from '~/types/network'
+import type { VNetComponent } from '~/types/network'
 
 const diagramStore = useDiagramStore()
+const settingsStore = useSettingsStore()
 
 const formData = ref<Partial<AnyNetworkComponent>>({})
 
@@ -45,10 +47,31 @@ watch(() => diagramStore.showComponentModal, (visible) => {
       formData.value = { ...diagramStore.editingComponent }
     } else {
       const type = diagramStore.addingComponentType!
-      formData.value = { type, name: '', description: '', tags: {}, createdAt: new Date().toISOString(), id: `${type}-${Date.now()}` }
+      formData.value = buildInitialComponentData(type)
     }
   }
 })
+
+function buildInitialComponentData(type: NetworkComponentType): Partial<AnyNetworkComponent> {
+  const base: Partial<AnyNetworkComponent> = {
+    type,
+    name: '',
+    description: '',
+    tags: {},
+    createdAt: new Date().toISOString(),
+    id: `${type}-${Date.now()}`,
+  }
+
+  if (type === NetworkComponentType.VNET) {
+    const vnetDefaults: Partial<VNetComponent> = {
+      region: settingsStore.defaultRegion,
+      resourceGroup: settingsStore.defaultResourceGroup,
+    }
+    return { ...base, ...vnetDefaults }
+  }
+
+  return base
+}
 
 const formMap: Partial<Record<NetworkComponentType, any>> = {
   [NetworkComponentType.VNET]: resolveComponent('VNetForm'),

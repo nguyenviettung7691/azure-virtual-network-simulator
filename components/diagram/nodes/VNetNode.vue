@@ -64,8 +64,8 @@ function onDblClick() {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  background-color: rgba(0, 120, 212, 0.05);
-  border: 2px solid #0078d4;
+  background-color: color-mix(in srgb, var(--primary) 5%, transparent);
+  border: 2px solid var(--primary);
   border-radius: 8px;
   padding: 0;
   cursor: grab;
@@ -74,7 +74,7 @@ function onDblClick() {
 }
 
 .vnet-node.selected {
-  box-shadow: 0 0 0 3px #50a7f0, 0 4px 16px rgba(0, 120, 212, 0.25);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 48%, white), 0 4px 16px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
 .vnet-header {
@@ -82,9 +82,9 @@ function onDblClick() {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: linear-gradient(135deg, rgba(0, 120, 212, 0.9) 0%, rgba(0, 120, 212, 0.82) 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 90%, transparent) 0%, color-mix(in srgb, var(--primary) 82%, transparent) 100%);
   border-radius: 6px 6px 0 0;
-  border-bottom: 1px solid rgba(0, 120, 212, 0.34);
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 34%, transparent);
 }
 
 .node-header-meta {
@@ -139,9 +139,9 @@ function onDblClick() {
 .node-region {
   font-size: 10px;
   font-weight: 700;
-  color: #032742;
+  color: color-mix(in srgb, var(--primary-dark, var(--primary)) 66%, black);
   background-color: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(0, 90, 158, 0.45);
+  border: 1px solid color-mix(in srgb, var(--primary-dark, var(--primary)) 45%, transparent);
   padding: 2px 6px;
   border-radius: 10px;
   white-space: nowrap;

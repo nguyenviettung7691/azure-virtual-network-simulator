@@ -10,9 +10,9 @@
     <Handle type="target" :position="Position.Top" id="top" />
     <Handle type="source" :position="Position.Top" id="top-source" />
     <Handle type="target" :position="Position.Bottom" id="bottom-target" />
-    <div class="generic-node-content" :style="{ borderColor: '#0078d4' }">
-      <div class="generic-node-icon-wrap" :style="{ backgroundColor: '#0078d420' }">
-        <Icon icon="mdi:transit-connection" :style="{ color: '#0078d4' }" class="generic-icon" />
+    <div class="generic-node-content" :style="{ borderColor: 'var(--primary)' }">
+      <div class="generic-node-icon-wrap" :style="{ backgroundColor: 'color-mix(in srgb, var(--primary) 20%, transparent)' }">
+        <Icon icon="mdi:transit-connection" :style="{ color: 'var(--primary)' }" class="generic-icon" />
       </div>
       <div class="generic-node-info">
         <span class="generic-node-type">VNet Peering</span>

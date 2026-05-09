@@ -467,8 +467,8 @@ body {
 
 /* VNet node — container style */
 .network-node.node-vnet {
-  background-color: rgba(0, 120, 212, 0.06);
-  border-color: #0078d4;
+  background-color: color-mix(in srgb, var(--primary) 6%, transparent);
+  border-color: var(--primary);
   min-width: 320px;
   min-height: 220px;
   padding: 16px;
@@ -476,8 +476,8 @@ body {
 
 /* Subnet node — container style */
 .network-node.node-subnet {
-  background-color: rgba(80, 167, 240, 0.06);
-  border-color: #50a7f0;
+  background-color: color-mix(in srgb, var(--primary) 6%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 66%, white);
   border-style: dashed;
   min-width: 240px;
   min-height: 140px;
@@ -489,18 +489,18 @@ body {
 .network-node.node-asg { border-color: #b4009e; }
 .network-node.node-ip-address { border-color: #0099bc; }
 .network-node.node-dns-zone { border-color: #038387; }
-.network-node.node-vnet-peering { border-color: #0078d4; }
+.network-node.node-vnet-peering { border-color: var(--primary); }
 .network-node.node-udr { border-color: #8764b8; }
 .network-node.node-vpn-gateway { border-color: #004578; }
 .network-node.node-app-gateway { border-color: #0063b1; }
 .network-node.node-nva { border-color: #6b4226; }
-.network-node.node-load-balancer { border-color: #0078d4; }
+.network-node.node-load-balancer { border-color: var(--primary); }
 .network-node.node-vm { border-color: #107c10; }
 .network-node.node-vmss { border-color: #107c10; }
 .network-node.node-aks { border-color: #326ce5; }
 .network-node.node-app-service { border-color: #0062ad; }
 .network-node.node-functions { border-color: #7b2fb5; }
-.network-node.node-storage-account { border-color: #0078d4; }
+.network-node.node-storage-account { border-color: var(--primary); }
 .network-node.node-blob-storage { border-color: #0063b1; }
 .network-node.node-managed-disk { border-color: #6b4226; }
 .network-node.node-key-vault { border-color: #c7b130; }

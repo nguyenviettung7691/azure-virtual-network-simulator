@@ -55,8 +55,8 @@ function onDblClick() {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  background-color: rgba(80, 167, 240, 0.04);
-  border: 2px dashed #50a7f0;
+  background-color: color-mix(in srgb, var(--primary) 4%, transparent);
+  border: 2px dashed color-mix(in srgb, var(--primary) 66%, white);
   border-radius: 8px;
   padding: 0;
   cursor: grab;
@@ -65,8 +65,8 @@ function onDblClick() {
 }
 
 .subnet-node.selected {
-  box-shadow: 0 0 0 3px #50a7f0, 0 4px 12px rgba(80, 167, 240, 0.2);
-  border-color: #0078d4;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 48%, white), 0 4px 12px color-mix(in srgb, var(--primary) 22%, transparent);
+  border-color: var(--primary);
 }
 
 .subnet-header {
@@ -74,9 +74,9 @@ function onDblClick() {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: linear-gradient(135deg, rgba(80, 167, 240, 0.9) 0%, rgba(80, 167, 240, 0.82) 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 90%, transparent) 0%, color-mix(in srgb, var(--primary) 82%, transparent) 100%);
   border-radius: 6px 6px 0 0;
-  border-bottom: 1px solid rgba(80, 167, 240, 0.36);
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 36%, transparent);
 }
 
 .node-header-info {
