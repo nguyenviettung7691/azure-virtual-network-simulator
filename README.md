@@ -1,5 +1,7 @@
 ﻿# Azure Virtual Network Simulator
 
+![Azure VNet Simulator](image.png)
+
 An interactive, browser-based topology designer and simulator for Azure Virtual Network architectures. Build, visualise, and validate Azure network diagrams using a drag-and-drop canvas, then challenge yourself with AI-generated networking tasks.
 
 ---
