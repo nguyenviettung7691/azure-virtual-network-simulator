@@ -151,7 +151,6 @@
     <div class="toolbar-spacer" />
 
     <div class="toolbar-status">
-      <span v-if="diagramStore.isDirty" class="unsaved-indicator">● Unsaved</span>
       <span v-if="lastAutoSaveRelativeTime" class="autosave-time">
         <Icon icon="mdi:content-save-check" class="autosave-icon" />
         {{ lastAutoSaveRelativeTime }}
@@ -205,17 +204,19 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const showSaveDialog = ref(false)
 const setupName = ref('')
 const saveError = ref('')
+const autosaveNowMs = ref(Date.now())
+let autosaveTicker: ReturnType<typeof setInterval> | null = null
 const isSaving = computed(() => saveCurrentSetupMutation.isPending.value)
 const lastAutoSaveRelativeTime = computed(() => {
   if (!settingsStore.lastAutoSaveAt) return null
-  const now = new Date().getTime()
+  const now = autosaveNowMs.value
   const saved = new Date(settingsStore.lastAutoSaveAt).getTime()
-  const elapsedMs = now - saved
-  const elapsedSec = Math.round(elapsedMs / 1000)
-  const elapsedMin = Math.round(elapsedSec / 60)
-  const elapsedHr = Math.round(elapsedMin / 60)
+  const elapsedMs = Math.max(0, now - saved)
+  const elapsedSec = Math.floor(elapsedMs / 1000)
+  const elapsedMin = Math.floor(elapsedSec / 60)
+  const elapsedHr = Math.floor(elapsedMin / 60)
 
-  if (elapsedSec < 60) return 'Saved just now'
+  if (elapsedSec < 60) return `Saved ${elapsedSec}${elapsedSec === 1 ? ' sec' : ' secs'} ago`
   if (elapsedMin < 60) return `Saved ${elapsedMin}${elapsedMin === 1 ? ' min' : ' mins'} ago`
   if (elapsedHr < 24) return `Saved ${elapsedHr}${elapsedHr === 1 ? ' hr' : ' hrs'} ago`
   return 'Saved earlier'
@@ -502,6 +503,19 @@ function onReset() {
     'Also reset all network tests'
   )
 }
+
+onMounted(() => {
+  autosaveTicker = setInterval(() => {
+    autosaveNowMs.value = Date.now()
+  }, 1000)
+})
+
+onBeforeUnmount(() => {
+  if (autosaveTicker) {
+    clearInterval(autosaveTicker)
+    autosaveTicker = null
+  }
+})
 </script>
 
 <style scoped>
@@ -616,11 +630,6 @@ function onReset() {
 .status-icon {
   font-size: 0.85rem;
   vertical-align: middle;
-}
-
-.unsaved-indicator {
-  color: var(--warning);
-  font-weight: 700;
 }
 
 .autosave-time {

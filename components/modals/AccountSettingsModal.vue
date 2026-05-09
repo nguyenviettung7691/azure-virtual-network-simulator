@@ -101,7 +101,6 @@
             <Divider />
 
             <div class="danger-zone">
-              <span class="danger-zone-label">Session</span>
               <Button
                 label="Sign Out"
                 icon="pi pi-sign-out"
@@ -329,6 +328,10 @@ async function logout() {
   gap: 0.8rem;
 }
 
+.profile-section :deep(.p-divider-horizontal) {
+  margin: 0.2rem 0;
+}
+
 .settings-sync-status {
   align-items: center;
   color: var(--text-color-secondary);
@@ -394,6 +397,10 @@ async function logout() {
   padding: 0.9rem;
 }
 
+.profile-section .settings-card {
+  padding: 1rem;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -404,6 +411,11 @@ async function logout() {
   font-size: 0.84rem;
   font-weight: 700;
   color: var(--text-color-secondary);
+}
+
+.profile-section :deep(.p-inputtext),
+.profile-section :deep(.p-password-input) {
+  padding: 0.55rem 0.75rem;
 }
 
 .field-help {
@@ -431,17 +443,9 @@ h4 {
 
 .danger-zone {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  padding: 0.15rem 0.2rem 0;
-}
-
-.danger-zone-label {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--text-color-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  padding: 0;
 }
 
 .theme-grid {

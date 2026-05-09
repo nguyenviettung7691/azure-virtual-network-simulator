@@ -34,6 +34,7 @@
           <span class="setup-name">{{ setup.name }}</span>
           <span class="setup-date">{{ formatDate(setup.createdAt) }}</span>
           <span class="setup-nodes">{{ setup.diagram?.nodes?.length || 0 }} components</span>
+          <span class="setup-tests">{{ setup.tests?.length || 0 }} tests</span>
         </div>
         <div class="setup-actions">
           <Button
@@ -124,10 +125,10 @@ function deleteSetup(setup: SavedSetup) {
 .setup-card { border: 1px solid var(--surface-border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; background: var(--surface-ground); transition: box-shadow 0.2s; }
 .setup-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
 .setup-thumbnail { height: 120px; background: var(--surface-section); display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.setup-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.setup-thumbnail img { width: 100%; height: 100%; object-fit: contain; object-position: center; }
 .no-thumbnail { font-size: 2rem; color: var(--text-color-secondary); opacity: 0.3; }
 .setup-info { padding: 0.5rem; display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
 .setup-name { font-weight: 700; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.setup-date, .setup-nodes { font-size: 0.72rem; color: var(--text-color-secondary); }
+.setup-date, .setup-nodes, .setup-tests { font-size: 0.72rem; color: var(--text-color-secondary); }
 .setup-actions { display: flex; gap: 0.3rem; padding: 0.4rem; border-top: 1px solid var(--surface-border); }
 </style>

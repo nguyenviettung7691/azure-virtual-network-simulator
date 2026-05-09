@@ -1,6 +1,5 @@
 import { serializeDomElementToSvg } from '~/lib/export/domSnapshot'
 import { buildPdfFromPngBytes } from '~/lib/export/pdf'
-import { renderDiagramToPngDataUrlInMainThread } from '~/lib/export/diagramRaster'
 import { finalizeSvgMarkup } from '~/lib/export/svg'
 import type { SvgSnapshot } from '~/lib/export/domSnapshot'
 import type {
@@ -133,6 +132,15 @@ export const useExport = () => {
     context.drawImage(img, 0, 0, snapshot.width, snapshot.height)
     return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('Failed to encode PNG'))), 'image/png')
+    })
+  }
+
+  async function readImageFromUrl(url: string): Promise<HTMLImageElement> {
+    return await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = () => reject(new Error('Failed to decode image for thumbnail rendering'))
+      image.src = url
     })
   }
 
@@ -356,11 +364,42 @@ export const useExport = () => {
 
   async function captureThumbnail(): Promise<string | null> {
     try {
-      return await renderDiagramToPngDataUrlInMainThread(diagramStore.diagramState, {
-        targetWidth: 320,
-        targetHeight: 200,
-        backgroundColor: getCanvasBackgroundColor(),
-      })
+      const snapshot = await captureExactSvgSnapshot()
+      if (!snapshot) return null
+
+      const thumbnailWidth = 320
+      const thumbnailHeight = 200
+      const thumbnailScale = 2
+      const backgroundColor = getCanvasBackgroundColor()
+
+      const rasterBlob = await rasterizeSnapshotToPngBlob(snapshot, thumbnailScale)
+      const objectUrl = URL.createObjectURL(rasterBlob)
+
+      try {
+        const image = await readImageFromUrl(objectUrl)
+        const canvas = document.createElement('canvas')
+        canvas.width = thumbnailWidth
+        canvas.height = thumbnailHeight
+        const context = canvas.getContext('2d')
+        if (!context) throw new Error('Unable to acquire 2D context for thumbnail rendering')
+
+        context.fillStyle = backgroundColor
+        context.fillRect(0, 0, thumbnailWidth, thumbnailHeight)
+
+        const scale = Math.min(thumbnailWidth / image.width, thumbnailHeight / image.height)
+        const drawWidth = Math.max(1, Math.round(image.width * scale))
+        const drawHeight = Math.max(1, Math.round(image.height * scale))
+        const offsetX = Math.floor((thumbnailWidth - drawWidth) / 2)
+        const offsetY = Math.floor((thumbnailHeight - drawHeight) / 2)
+
+        context.imageSmoothingEnabled = true
+        context.imageSmoothingQuality = 'high'
+        context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
+
+        return canvas.toDataURL('image/png', 0.92)
+      } finally {
+        URL.revokeObjectURL(objectUrl)
+      }
     } catch {
       return null
     }
