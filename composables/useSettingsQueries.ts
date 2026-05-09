@@ -4,7 +4,7 @@ import type { MaybeRefOrGetter } from 'vue'
 import { getUserSettings, saveUserSettings } from '~/lib/mongodb'
 import type { UserSettings } from '~/types/settings'
 
-const MIN_SETTINGS_SYNC_DELAY_MS = 1000
+const SETTINGS_SYNC_DEBOUNCE_MS = 1000
 
 export function userSettingsQueryKey(userId: string) {
   return ['settings', 'remote', userId] as const
@@ -102,10 +102,6 @@ export function useSettingsSync(enabled: MaybeRefOrGetter<boolean>) {
   const settingsStore = useSettingsStore()
   const currentUserId = computed(() => settingsStore.currentUserId)
   const syncEnabled = computed(() => Boolean(toValue(enabled) && currentUserId.value))
-  const syncDelayMs = computed(() => Math.max(
-    MIN_SETTINGS_SYNC_DELAY_MS,
-    Math.round(settingsStore.autoSaveInterval * 1000),
-  ))
   const settingsQuery = useUserSettingsQuery(currentUserId, syncEnabled)
   const saveMutation = useSaveUserSettingsMutation()
   const settingsSnapshot = computed(() => serializeSettings(settingsStore.settings))
@@ -187,7 +183,7 @@ export function useSettingsSync(enabled: MaybeRefOrGetter<boolean>) {
         } finally {
           saveTimer = null
         }
-      }, syncDelayMs.value)
+      }, SETTINGS_SYNC_DEBOUNCE_MS)
     },
   )
 

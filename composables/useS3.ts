@@ -10,6 +10,7 @@ import type { SavedSetup } from '~/types/diagram'
 export const useS3 = () => {
   const authStore = useAuthStore()
   const diagramStore = useDiagramStore()
+  const testsStore = useTestsStore()
   const userId = computed(() => authStore.userId)
   const savedSetupsQuery = useSavedSetupsQuery(userId, computed(() => authStore.isAuthenticated))
   const saveCurrentSetupMutation = useSaveCurrentSetupMutation()
@@ -68,6 +69,7 @@ export const useS3 = () => {
 
       if (setup) {
         diagramStore.loadDiagram(setup.diagram)
+        testsStore.replaceTests(setup.tests ?? [])
         return true
       }
 

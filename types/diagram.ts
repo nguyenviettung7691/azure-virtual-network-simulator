@@ -1,5 +1,6 @@
 import type { Node, Edge } from '@vue-flow/core'
 import type { AnyNetworkComponent } from './network'
+import type { NetworkTest } from './test'
 
 export interface DiagramNode extends Node {
   data: AnyNetworkComponent
@@ -55,5 +56,6 @@ export interface SavedSetup {
   updatedAt: string
   thumbnail?: string
   diagram: DiagramState
+  tests?: NetworkTest[]
   tags?: string[]
 }

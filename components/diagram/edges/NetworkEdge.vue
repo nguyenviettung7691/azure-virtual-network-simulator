@@ -50,8 +50,10 @@ interface NetworkEdgeProps extends EdgeProps {
 }
 
 const props = defineProps<NetworkEdgeProps>()
+const settingsStore = useSettingsStore()
+const isDarkMode = computed(() => settingsStore.isDarkMode)
 
-function resolveEdgeColor(): string {
+function resolveEdgeColor(isDarkMode: boolean): string {
   if (typeof document === 'undefined') return '#323130'
 
   const root = document.documentElement
@@ -59,10 +61,12 @@ function resolveEdgeColor(): string {
   const explicit = computedStyles.getPropertyValue('--diagram-edge-color').trim()
   if (explicit) return explicit
 
-  return root.classList.contains('dark-mode') ? '#f3f2f1' : '#323130'
+  return isDarkMode ? '#d2e7fb' : '#1e2a36'
 }
 
-const edgeColor = computed(() => resolveEdgeColor())
+const edgeColor = computed(() => {
+  return props.data?.color || resolveEdgeColor(isDarkMode.value)
+})
 
 const path = computed(() => {
   const [edgePath] = getSmoothStepPath({
@@ -79,9 +83,10 @@ const path = computed(() => {
 
 const edgeStyle = computed(() => ({
   stroke: edgeColor.value,
-  strokeWidth: 1.5,
+  strokeWidth: 2.2,
   strokeDasharray: props.data.animated ? '5,5' : undefined,
   animation: props.data.animated ? 'dashdraw 0.5s linear infinite' : undefined,
+  filter: isDarkMode.value ? 'drop-shadow(0 0 2px rgba(210, 231, 251, 0.28))' : undefined,
   ...(props.style || {}),
 }))
 </script>

@@ -18,7 +18,7 @@
   --text: #323130;
   --text-muted: #605e5c;
   --border: #edebe9;
-  --diagram-edge-color: #121212;
+  --diagram-edge-color: #1e2a36;
   --success: #107c10;
   --warning: #ff8c00;
   --danger: #d13438;
@@ -63,7 +63,7 @@
   --text: #f3f2f1;
   --text-muted: #a19f9d;
   --border: #3b3a39;
-  --diagram-edge-color: #f3f2f1;
+  --diagram-edge-color: #d2e7fb;
   --shadow: rgba(0, 0, 0, 0.4);
   --shadow-md: rgba(0, 0, 0, 0.5);
   --group-card-bg: rgba(255, 255, 255, 0.1);

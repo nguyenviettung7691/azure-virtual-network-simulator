@@ -48,6 +48,7 @@ export function useSavedSetupsQuery(
 export function useSaveCurrentSetupMutation() {
   const authStore = useAuthStore()
   const diagramStore = useDiagramStore()
+  const testsStore = useTestsStore()
   const { captureThumbnail } = useExport()
   const queryClient = useQueryClient()
 
@@ -66,6 +67,7 @@ export function useSaveCurrentSetupMutation() {
         updatedAt: timestamp,
         thumbnail: (await captureThumbnail()) || undefined,
         diagram: diagramStore.diagramState,
+        tests: testsStore.tests.map(test => ({ ...test })),
       }
 
       await saveSavedSetup(authStore.userId, setup)

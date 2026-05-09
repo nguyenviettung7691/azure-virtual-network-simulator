@@ -11,6 +11,11 @@
       <p>Loading setups...</p>
     </div>
 
+    <div v-else-if="isUsingAnySetup" class="loading-state applying-state">
+      <ProgressSpinner style="width: 22px; height: 22px" strokeWidth="6" />
+      <p>Loading selected setup...</p>
+    </div>
+
     <div v-else-if="setups.length === 0" class="empty-state">
       <Icon icon="mdi:folder-open-outline" class="empty-icon" />
       <p>No saved setups yet</p>
@@ -31,7 +36,14 @@
           <span class="setup-nodes">{{ setup.diagram?.nodes?.length || 0 }} components</span>
         </div>
         <div class="setup-actions">
-          <Button label="Use" icon="pi pi-check" size="small" @click="useSetup(setup)" />
+          <Button
+            label="Use"
+            icon="pi pi-check"
+            size="small"
+            :loading="usingSetupId === setup.id"
+            :disabled="isUsingAnySetup"
+            @click="useSetup(setup)"
+          />
           <Button label="Delete" icon="pi pi-trash" size="small" severity="danger" text :loading="deleteSavedSetupMutation.isPending.value" :disabled="deleteSavedSetupMutation.isPending.value" @click="deleteSetup(setup)" />
         </div>
       </div>
@@ -48,6 +60,8 @@ import type { SavedSetup } from '~/types/diagram'
 const authStore = useAuthStore()
 const savedSetupsStore = useSavedSetupsStore()
 const diagramStore = useDiagramStore()
+const testsStore = useTestsStore()
+const usingSetupId = ref<string | null>(null)
 const savedSetupsQuery = useSavedSetupsQuery(
   computed(() => authStore.userId),
   computed(() => savedSetupsStore.showModal && authStore.isAuthenticated),
@@ -56,6 +70,7 @@ const deleteSavedSetupMutation = useDeleteSavedSetupMutation()
 
 const setups = computed(() => savedSetupsQuery.data.value ?? [])
 const isLoading = computed(() => savedSetupsQuery.isPending.value)
+const isUsingAnySetup = computed(() => usingSetupId.value !== null)
 const errorMessage = computed(() => {
   if (deleteSavedSetupMutation.error.value) {
     return resolveSavedSetupErrorMessage(deleteSavedSetupMutation.error.value, 'Failed to delete setup')
@@ -75,9 +90,19 @@ function formatDate(iso: string) {
 function useSetup(setup: SavedSetup) {
   diagramStore.confirmAction(
     `Load "${setup.name}"? This will replace your current diagram.`,
-    () => {
+    async () => {
+      usingSetupId.value = setup.id
+
+      const renderReady = diagramStore.waitForNextLoadRender()
       diagramStore.loadDiagram(setup.diagram)
-      savedSetupsStore.closeModal()
+      testsStore.replaceTests(setup.tests ?? [])
+
+      try {
+        await renderReady
+        savedSetupsStore.closeModal()
+      } finally {
+        usingSetupId.value = null
+      }
     },
   )
 }

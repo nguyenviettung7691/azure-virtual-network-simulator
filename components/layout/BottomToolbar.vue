@@ -152,6 +152,10 @@
 
     <div class="toolbar-status">
       <span v-if="diagramStore.isDirty" class="unsaved-indicator">● Unsaved</span>
+      <span v-if="lastAutoSaveRelativeTime" class="autosave-time">
+        <Icon icon="mdi:content-save-check" class="autosave-icon" />
+        {{ lastAutoSaveRelativeTime }}
+      </span>
       <span class="status-text">
         <Icon icon="mdi:vector-polygon" class="status-icon" />
         {{ diagramStore.nodeCount }} nodes · {{ diagramStore.edgeCount }} edges
@@ -191,6 +195,7 @@ const diagramStore = useDiagramStore()
 const authStore = useAuthStore()
 const challengesStore = useChallengesStore()
 const testsStore = useTestsStore()
+const settingsStore = useSettingsStore()
 const saveCurrentSetupMutation = useSaveCurrentSetupMutation()
 
 const { exportToPng, exportToSvgFile, exportToPdf, exportToDrawioFile } = useExport()
@@ -201,6 +206,20 @@ const showSaveDialog = ref(false)
 const setupName = ref('')
 const saveError = ref('')
 const isSaving = computed(() => saveCurrentSetupMutation.isPending.value)
+const lastAutoSaveRelativeTime = computed(() => {
+  if (!settingsStore.lastAutoSaveAt) return null
+  const now = new Date().getTime()
+  const saved = new Date(settingsStore.lastAutoSaveAt).getTime()
+  const elapsedMs = now - saved
+  const elapsedSec = Math.round(elapsedMs / 1000)
+  const elapsedMin = Math.round(elapsedSec / 60)
+  const elapsedHr = Math.round(elapsedMin / 60)
+
+  if (elapsedSec < 60) return 'Saved just now'
+  if (elapsedMin < 60) return `Saved ${elapsedMin}${elapsedMin === 1 ? ' min' : ' mins'} ago`
+  if (elapsedHr < 24) return `Saved ${elapsedHr}${elapsedHr === 1 ? ' hr' : ' hrs'} ago`
+  return 'Saved earlier'
+})
 const exportDurationEstimatesMs = ref<Record<ExportFormat, number>>({
   drawio: 7000,
   png: 4500,
@@ -601,7 +620,31 @@ function onReset() {
 
 .unsaved-indicator {
   color: var(--warning);
-  font-weight: 600;
+  font-weight: 700;
+}
+
+.autosave-time {
+  align-items: center;
+  color: var(--success);
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 500;
+  gap: 0.3rem;
+}
+
+.autosave-icon {
+  font-size: 0.95rem;
+}
+
+.status-text {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.status-icon {
+  font-size: 1rem;
 }
 
 .save-form {

@@ -10,13 +10,29 @@
       <TabList>
         <Tab value="profile">Profile</Tab>
         <Tab value="appearance">Appearance</Tab>
-        <Tab value="layout">Layout</Tab>
+        <Tab value="diagram">Diagram</Tab>
       </TabList>
+
+      <div v-if="settingsStore.isSyncing || settingsStore.syncError" class="settings-sync-status" :class="{ error: Boolean(settingsStore.syncError) }">
+        <ProgressSpinner v-if="settingsStore.isSyncing" style="width: 14px; height: 14px" strokeWidth="7" />
+        <i v-else class="pi pi-exclamation-triangle" />
+        <span>{{ settingsStore.isSyncing ? 'Syncing account settings...' : settingsStore.syncError }}</span>
+      </div>
 
       <TabPanels>
         <TabPanel value="profile">
           <div class="settings-section profile-section">
-            <div class="settings-card">
+            <div class="profile-header-card">
+              <div class="profile-avatar">
+                <i class="pi pi-user" />
+              </div>
+              <div class="profile-meta">
+                <h4 class="profile-title">Signed in account</h4>
+                <span class="profile-subtitle">Manage your identity, password, and session security.</span>
+              </div>
+            </div>
+
+            <div class="settings-card highlighted-card">
               <div class="field">
                 <label for="account-email">Email</label>
                 <InputText id="account-email" :value="authStore.user?.email || ''" disabled class="w-full" />
@@ -26,6 +42,17 @@
             <Divider />
 
             <form class="settings-card" @submit.prevent="changePassword">
+              <input
+                type="text"
+                name="username"
+                :value="authStore.user?.email || ''"
+                autocomplete="username"
+                readonly
+                tabindex="-1"
+                aria-hidden="true"
+                class="sr-only-username"
+              />
+
               <div class="section-title-row">
                 <h4>Change Password</h4>
                 <span class="section-hint">Use a strong password with at least 8 characters.</span>
@@ -60,13 +87,15 @@
               <Message v-if="pwError" severity="error" :closable="false">{{ pwError }}</Message>
               <Message v-if="pwSuccess" severity="success" :closable="false">Password changed successfully</Message>
 
-              <Button
-                label="Change Password"
-                size="small"
-                type="submit"
-                :disabled="!canSubmitPasswordChange"
-                :loading="changePasswordMutation.isPending.value"
-              />
+              <div class="password-action-row">
+                <Button
+                  label="Change Password"
+                  size="small"
+                  type="submit"
+                  :disabled="!canSubmitPasswordChange"
+                  :loading="changePasswordMutation.isPending.value"
+                />
+              </div>
             </form>
 
             <Divider />
@@ -109,7 +138,8 @@
             </div>
 
             <div class="field settings-card">
-              <label>Dark Mode</label>
+              <label>Color Mode</label>
+              <span class="field-help">Follow system mode or force the app into light or dark appearance.</span>
               <SelectButton
                 v-model="darkModeValue"
                 :options="darkModeOptions"
@@ -126,17 +156,19 @@
 
             <div class="field settings-card">
               <label>Show Grid</label>
+              <span class="field-help">Show or hide the diagram background grid used for visual alignment.</span>
               <ToggleSwitch v-model="showGridValue" />
             </div>
 
             <div class="field settings-card">
               <label>Show Minimap</label>
+              <span class="field-help">Display a mini-map in the canvas corner for quick panning on large topologies.</span>
               <ToggleSwitch v-model="showMinimapValue" />
             </div>
           </div>
         </TabPanel>
 
-        <TabPanel value="layout">
+        <TabPanel value="diagram">
           <div class="settings-section">
             <div class="field settings-card">
               <label>Default Azure Region</label>
@@ -228,7 +260,7 @@ const darkModeOptions = [
   { label: 'System', value: 'system' },
 ]
 
-const themes = [
+const themes: Array<{ value: ThemeType; label: string; color: string }> = [
   { value: 'ocean-blue', label: 'Ocean Blue', color: '#0078d4' },
   { value: 'azure-dark', label: 'Azure Dark', color: '#004578' },
   { value: 'forest-green', label: 'Forest Green', color: '#107c10' },
@@ -289,19 +321,77 @@ async function logout() {
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.9rem;
   padding: 0.5rem 0;
 }
 
 .profile-section {
-  gap: 0.75rem;
+  gap: 0.8rem;
+}
+
+.settings-sync-status {
+  align-items: center;
+  color: var(--text-color-secondary);
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 600;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0.2rem;
+}
+
+.settings-sync-status.error {
+  color: var(--danger);
+}
+
+.profile-header-card {
+  align-items: center;
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--primary) 24%, transparent) 0%, transparent 54%),
+    color-mix(in srgb, var(--surface-card) 90%, var(--primary) 10%);
+  border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--surface-border) 74%);
+  border-radius: 0.8rem;
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.9rem;
+}
+
+.profile-avatar {
+  align-items: center;
+  background: color-mix(in srgb, var(--primary) 22%, var(--surface) 78%);
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  border-radius: 999px;
+  color: var(--primary);
+  display: flex;
+  flex-shrink: 0;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.profile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.profile-title {
+  margin: 0;
+}
+
+.profile-subtitle {
+  color: var(--text-color-secondary);
+  font-size: 0.76rem;
+}
+
+.highlighted-card {
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--surface-border) 78%);
 }
 
 .settings-card {
   border: 1px solid var(--surface-border);
-  border-radius: 0.7rem;
+  border-radius: 0.8rem;
   background: color-mix(in srgb, var(--surface-card) 86%, var(--surface-ground) 14%);
-  padding: 0.85rem;
+  padding: 0.9rem;
 }
 
 .field {
@@ -325,7 +415,7 @@ async function logout() {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.3rem;
 }
 
 h4 {
@@ -343,7 +433,7 @@ h4 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.2rem 0.2rem 0;
+  padding: 0.15rem 0.2rem 0;
 }
 
 .danger-zone-label {
@@ -376,6 +466,22 @@ h4 {
 .theme-swatch.active { border-color: var(--text-color); }
 
 .check-icon { color: #fff; font-size: 1rem; }
+
+.password-action-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.sr-only-username {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+}
 
 :deep(.p-password) {
   display: flex;

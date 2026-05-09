@@ -46,7 +46,7 @@
       />
       <Button
         v-else
-        v-tooltip.bottom="authStore.user?.email"
+        v-tooltip.bottom="'Account Settings'"
         icon="pi pi-user"
         text
         size="small"

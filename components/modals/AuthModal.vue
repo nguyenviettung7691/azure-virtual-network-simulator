@@ -7,6 +7,11 @@
     :header="dialogTitle"
     @hide="authStore.closeAuthModal()"
   >
+    <div v-if="isAuthRequestPending" class="auth-loading-state">
+      <ProgressSpinner style="width: 14px; height: 14px" strokeWidth="7" />
+      <span>Processing request...</span>
+    </div>
+
     <!-- Login -->
     <form v-if="authStore.authMode === 'login' && !authStore.confirmingSignUp" class="auth-form" @submit.prevent="doLogin">
       <div class="field">
@@ -110,6 +115,14 @@ const dialogTitle = computed(() => {
   return 'Reset Password'
 })
 
+const isAuthRequestPending = computed(() => {
+  return loginMutation.isPending.value
+    || registerMutation.isPending.value
+    || confirmRegistrationMutation.isPending.value
+    || forgotPasswordMutation.isPending.value
+    || confirmForgotPasswordMutation.isPending.value
+})
+
 watch(() => authStore.showAuthModal, (v) => {
   if (v) {
     email.value = ''
@@ -183,6 +196,16 @@ async function doConfirmForgot() {
 .auth-links a { color: var(--primary-color); text-decoration: none; font-weight: 500; transition: opacity 0.2s ease; }
 .auth-links a:hover { opacity: 0.8; text-decoration: underline; }
 .confirm-info { font-size: 0.9rem; color: var(--text-color-secondary); margin: 0; line-height: 1.5; }
+
+.auth-loading-state {
+  align-items: center;
+  color: var(--text-color-secondary);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 600;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
 
 /* Ensure PrimeVue Password component fills the width properly */
 :deep(.p-password) { display: flex; width: 100%; }

@@ -1,5 +1,6 @@
 import { uploadData, downloadData, list, remove } from 'aws-amplify/storage'
 import type { DiagramState, SavedSetup } from '~/types/diagram'
+import type { NetworkTest } from '~/types/test'
 import { isS3Configured } from '~/lib/aws'
 
 function assertS3Configured(): void {
@@ -21,6 +22,7 @@ interface LegacySavedSetupRecord {
   thumbnailUrl?: string
   diagram?: DiagramState
   state?: DiagramState
+  tests?: NetworkTest[]
   tags?: string[]
 }
 
@@ -98,6 +100,9 @@ function normalizeSavedSetupRecord(raw: unknown, setupId: string, thumbnail?: st
 
   const createdAt = getTimestamp(record.createdAt, fallbackTimestamp)
   const updatedAt = getTimestamp(record.updatedAt, createdAt)
+  const tests = Array.isArray(record.tests)
+    ? record.tests.filter((test): test is NetworkTest => isRecord(test)) as NetworkTest[]
+    : undefined
 
   return {
     id: typeof record.id === 'string' && record.id ? record.id : setupId,
@@ -107,6 +112,7 @@ function normalizeSavedSetupRecord(raw: unknown, setupId: string, thumbnail?: st
     updatedAt,
     thumbnail: thumbnail || inlineThumbnail,
     diagram,
+    tests,
     tags: Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === 'string') : undefined,
   }
 }
@@ -146,6 +152,7 @@ export async function saveSavedSetup(userId: string, setup: SavedSetup): Promise
     createdAt: setup.createdAt,
     updatedAt: setup.updatedAt,
     diagram: setup.diagram,
+    tests: setup.tests,
     tags: setup.tags,
   }
 

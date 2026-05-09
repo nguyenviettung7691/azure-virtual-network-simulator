@@ -147,6 +147,24 @@ export const useTestsStore = defineStore('tests', {
     clearAllTests() {
       this.tests = []
     },
+
+    replaceTests(tests: NetworkTest[]) {
+      this.tests = tests.map((test) => {
+        const status = test.status || test.result?.status || 'pending'
+        const result = test.result || {
+          status,
+          message: status === 'pending' ? 'Not yet run' : 'Restored from saved setup',
+          timestamp: test.runAt || test.createdAt || new Date().toISOString(),
+        }
+
+        return {
+          ...test,
+          status,
+          result,
+          createdAt: test.createdAt || new Date().toISOString(),
+        }
+      })
+    },
   },
 })
 

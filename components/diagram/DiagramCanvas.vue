@@ -29,7 +29,13 @@
       @edges-change="onEdgesChange"
       @viewport-change="onViewportChange"
     >
-      <Background v-if="showGrid" :variant="BackgroundVariant.Dots" :gap="20" :size="1" />
+      <Background
+        v-if="showGrid"
+        :variant="BackgroundVariant.Lines"
+        :gap="gridGap"
+        :size="1"
+        :pattern-color="gridColor"
+      />
       <Controls>
         <template #control-zoom-in>
           <ControlButton v-tooltip.right="'Zoom In'" @click="zoomIn()">
@@ -198,9 +204,12 @@ const settingsStore = useSettingsStore()
 const { fitView, zoomIn, zoomOut, setNodes, setEdges, setViewport, nodesDraggable, elementsSelectable } = useVueFlow()
 const isInteractive = computed(() => nodesDraggable.value || elementsSelectable.value)
 const isAnimationMode = computed(() => diagramStore.viewMode === 'animation')
+const isDarkMode = computed(() => settingsStore.isDarkMode)
 const showGrid = computed(() => settingsStore.showGrid)
 const showMinimap = computed(() => settingsStore.showMinimap)
 const animateInfrastructureEdges = computed(() => settingsStore.animateEdges)
+const gridGap = computed(() => Math.max(8, settingsStore.gridSize || 20))
+const gridColor = computed(() => isDarkMode.value ? 'rgba(210, 231, 251, 0.26)' : 'rgba(30, 42, 54, 0.18)')
 
 const canvasWrapper = ref<HTMLElement | null>(null)
 const snapToGrid = ref(false)
