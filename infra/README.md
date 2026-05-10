@@ -20,6 +20,17 @@ This stack provisions the deployment edge and eventing glue for this repository'
 - EventBridge rule for Amplify deployment success events
 - EventBridge target and Lambda invoke permission
 
+## Application AWS Services Setup
+
+This Terraform stack provisions only the **deployment edge infrastructure** (CloudFront, ACM, Route 53, EventBridge, Lambda). The application's core AWS integrations — **Cognito, S3, Bedrock, and MongoDB** — are set up manually via the AWS Console.
+
+See [docs/aws-services-integration.md](../../docs/aws-services-integration.md) for complete setup instructions for:
+
+- **Amazon Cognito** — User authentication (user pool, app client, identity pool, authenticated IAM role)
+- **Amazon S3** — Saved setup persistence
+- **Amazon Bedrock** — AI-generated challenges
+- **MongoDB Atlas** — Application settings storage
+
 ## Prerequisites
 
 1. Terraform CLI 1.6+ installed and verified
