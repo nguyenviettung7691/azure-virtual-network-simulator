@@ -290,7 +290,9 @@ A reactive dashboard reflecting the live diagram state.
   - The Amazon Bedrock Model access page has been retired. Serverless foundation models are automatically enabled across all commercial regions when first invoked.
   - **Amazon Nova 2 Lite** is a first-party Amazon model. It is not sold through AWS Marketplace — no `aws-marketplace:*` permissions or Anthropic FTU form are required. The model activates automatically on first `InvokeModel` call.
   - `ap-southeast-1` (Singapore) does not support in-region or geo cross-region inference for Nova 2 Lite. The app uses the global inference profile (`global.amazon.nova-2-lite-v1:0`) which routes to the optimal region worldwide and is fully supported from `ap-southeast-1`.
-- The authenticated IAM role (Cognito Identity Pool) must have an explicit `bedrock:InvokeModel` allow policy scoped to the model ARN with a region wildcard to cover global cross-region routing: `arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0`.
+- The authenticated IAM role (Cognito Identity Pool) must have an explicit `bedrock:InvokeModel` allow policy for both the global inference-profile ARN `arn:aws:bedrock:*:ACCOUNT_ID:inference-profile/global.amazon.nova-2-lite-v1:0` and the underlying foundation-model ARN `arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0`.
+- Scope the foundation-model allow with the `bedrock:InferenceProfileArn` condition so the role can invoke Nova 2 Lite only through the intended global inference profile.
+- The model ID in the SDK call remains `global.amazon.nova-2-lite-v1:0`, but Bedrock authorizes both the `inference-profile` resource and the selected `foundation-model` resource during the global route.
 - The request body format follows the Amazon Nova messages API (`messages` + `inferenceConfig`); the response is parsed at `output.message.content[0].text`. This differs from the legacy Anthropic format — do not revert to `anthropic_version`/`content[0].text` response parsing.
 
 ### 7.4 User Settings Persistence (MongoDB Atlas)

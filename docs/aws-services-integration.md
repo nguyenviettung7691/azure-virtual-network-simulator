@@ -266,7 +266,7 @@ Simply attach the IAM permission in Part B and invoke the model. It activates au
 
 ### Part B — Grant `bedrock:InvokeModel` to the authenticated IAM role
 
-The Cognito Identity Pool (created in the [Amazon Cognito setup](#amazon-cognito)) provides temporary AWS credentials to signed-in users via the authenticated IAM role. You must attach a `bedrock:InvokeModel` permission to that role, scoped to the Nova 2 Lite model ARN.
+The Cognito Identity Pool (created in the [Amazon Cognito setup](#amazon-cognito)) provides temporary AWS credentials to signed-in users via the authenticated IAM role. For inference profiles, Bedrock requires permission on both the global inference-profile ARN and the underlying foundation-model ARN that the profile resolves to at runtime.
 
 1. Open the [IAM console](https://console.aws.amazon.com/iam/) and choose **Roles** in the left navigation.
 
@@ -274,7 +274,7 @@ The Cognito Identity Pool (created in the [Amazon Cognito setup](#amazon-cognito
 
 3. On the role detail page, choose **Add permissions → Create inline policy**.
 
-4. In the **Policy editor**, switch to **JSON** mode and paste the following:
+4. In the **Policy editor**, switch to **JSON** mode and paste the following, replacing `ACCOUNT_ID` with your AWS account ID:
 
 ```json
 {
@@ -283,13 +283,25 @@ The Cognito Identity Pool (created in the [Amazon Cognito setup](#amazon-cognito
     {
       "Effect": "Allow",
       "Action": "bedrock:InvokeModel",
-      "Resource": "arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0"
+      "Resource": "arn:aws:bedrock:*:ACCOUNT_ID:inference-profile/global.amazon.nova-2-lite-v1:0"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": "arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0",
+      "Condition": {
+        "ArnLike": {
+          "bedrock:InferenceProfileArn": "arn:aws:bedrock:*:ACCOUNT_ID:inference-profile/global.amazon.nova-2-lite-v1:0"
+        }
+      }
     }
   ]
 }
 ```
 
-> **Why `*` for region:** The global cross-region inference profile routes requests through multiple AWS regions at runtime. Using a region wildcard in the ARN ensures the permission covers the actual compute region Bedrock selects, while still restricting access exclusively to this model.
+> **Why there are two resources:** AWS requires both permissions for inference profiles. Bedrock first evaluates the global `inference-profile` resource and then evaluates the underlying `foundation-model` resource in the Region it selects for the request.
+
+> **Why the condition matters:** the `bedrock:InferenceProfileArn` condition keeps the foundation-model allow scoped to requests that come through the global Nova 2 Lite inference profile, instead of granting direct model access outside that path.
 
 5. Choose **Next**, enter a descriptive **Policy name** (e.g. `BedrockChallengeAccess`), then choose **Create policy**.
 

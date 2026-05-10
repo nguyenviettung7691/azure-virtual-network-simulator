@@ -56,6 +56,7 @@
 
 <script setup lang="ts">
 import { ChallengeDifficulty } from '~/types/challenge'
+import { NetworkComponentType } from '~/types/network'
 
 const challengesStore = useChallengesStore()
 const diagramStore = useDiagramStore()
@@ -73,8 +74,15 @@ const difficultyOptions = [
 ]
 
 async function generate() {
+  const existingComponents = (diagramStore.nodes as any[])
+    .map(node => node.data?.type)
+    .filter((componentType): componentType is NetworkComponentType => (
+      Object.values(NetworkComponentType).includes(componentType)
+      && componentType !== NetworkComponentType.INTERNET
+    ))
+
   diagramStore.resetDiagram()
-  await challengesStore.generateChallenge(difficulty.value, [])
+  await challengesStore.generateChallenge(difficulty.value, existingComponents)
 }
 </script>
 
