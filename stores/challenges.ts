@@ -1,7 +1,110 @@
 import { defineStore } from 'pinia'
-import type { Challenge, ChallengeTask } from '~/types/challenge'
+import type {
+  Challenge,
+  ChallengeGenerationDefaults,
+  ChallengeGenerationOptions,
+  ChallengeTask,
+} from '~/types/challenge'
 import { ChallengeDifficulty } from '~/types/challenge'
 import { NetworkComponentType } from '~/types/network'
+
+type ChallengeOutcome = 'won' | 'lost' | null
+type ChallengeEndReason = 'completed' | 'timeout' | null
+
+const MIN_TASK_COUNT = 1
+const MAX_TASK_COUNT = 10
+const MIN_COMPONENT_COUNT = 2
+const MAX_COMPONENT_COUNT = 15
+const MIN_TIME_LIMIT_SECONDS = 60
+const MAX_TIME_LIMIT_SECONDS = 7200
+
+export const CHALLENGE_DIFFICULTY_DEFAULTS: Record<ChallengeDifficulty, ChallengeGenerationDefaults> = {
+  [ChallengeDifficulty.BEGINNER]: {
+    timeLimitSeconds: 600,
+    taskCount: 3,
+    componentCount: 4,
+  },
+  [ChallengeDifficulty.INTERMEDIATE]: {
+    timeLimitSeconds: 900,
+    taskCount: 5,
+    componentCount: 6,
+  },
+  [ChallengeDifficulty.ADVANCED]: {
+    timeLimitSeconds: 1200,
+    taskCount: 6,
+    componentCount: 8,
+  },
+  [ChallengeDifficulty.EXPERT]: {
+    timeLimitSeconds: 1800,
+    taskCount: 7,
+    componentCount: 10,
+  },
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return value
+}
+
+export function getChallengeDefaults(difficulty: ChallengeDifficulty): ChallengeGenerationDefaults {
+  return { ...CHALLENGE_DIFFICULTY_DEFAULTS[difficulty] }
+}
+
+function resolveGenerationOptions(
+  difficulty: ChallengeDifficulty,
+  options?: ChallengeGenerationOptions,
+): ChallengeGenerationDefaults {
+  const defaults = getChallengeDefaults(difficulty)
+  if (!options?.useCustom) {
+    return defaults
+  }
+
+  const resolvedTimeLimit = asFiniteNumber(options.timeLimitSeconds)
+  const resolvedTaskCount = asFiniteNumber(options.taskCount)
+  const resolvedComponentCount = asFiniteNumber(options.componentCount)
+
+  return {
+    timeLimitSeconds: clamp(
+      Math.round(resolvedTimeLimit ?? defaults.timeLimitSeconds),
+      MIN_TIME_LIMIT_SECONDS,
+      MAX_TIME_LIMIT_SECONDS,
+    ),
+    taskCount: clamp(
+      Math.round(resolvedTaskCount ?? defaults.taskCount),
+      MIN_TASK_COUNT,
+      MAX_TASK_COUNT,
+    ),
+    componentCount: clamp(
+      Math.round(resolvedComponentCount ?? defaults.componentCount),
+      MIN_COMPONENT_COUNT,
+      MAX_COMPONENT_COUNT,
+    ),
+  }
+}
+
+function normalizeChallenge(
+  challenge: Challenge,
+  difficulty: ChallengeDifficulty,
+  options: ChallengeGenerationDefaults,
+): Challenge {
+  const tasks = Array.isArray(challenge.tasks)
+    ? challenge.tasks.slice(0, Math.max(MIN_TASK_COUNT, options.taskCount)).map(task => ({ ...task, completed: false }))
+    : []
+
+  const totalPoints = tasks.reduce((sum, task) => sum + (task.points || 0), 0)
+
+  return {
+    ...challenge,
+    difficulty,
+    tasks,
+    totalPoints,
+    timeLimit: options.timeLimitSeconds,
+  }
+}
 
 interface ChallengesState {
   currentChallenge: Challenge | null
@@ -9,6 +112,9 @@ interface ChallengesState {
   showChallengePanel: boolean
   showSetupModal: boolean
   showCongratulations: boolean
+  challengeOutcome: ChallengeOutcome
+  challengeEndReason: ChallengeEndReason
+  finalPoints: number
   error: string | null
   elapsedSeconds: number
   timerInterval: ReturnType<typeof setInterval> | null
@@ -21,6 +127,9 @@ export const useChallengesStore = defineStore('challenges', {
     showChallengePanel: false,
     showSetupModal: false,
     showCongratulations: false,
+    challengeOutcome: null,
+    challengeEndReason: null,
+    finalPoints: 0,
     error: null,
     elapsedSeconds: 0,
     timerInterval: null,
@@ -53,22 +162,43 @@ export const useChallengesStore = defineStore('challenges', {
       if (!this.currentChallenge?.timeLimit) return 0
       return Math.max(0, this.currentChallenge.timeLimit - this.elapsedSeconds)
     },
+    isActive(): boolean {
+      return Boolean(this.currentChallenge)
+        && this.challengeOutcome === null
+        && this.showChallengePanel
+    },
   },
 
   actions: {
-    async generateChallenge(difficulty: ChallengeDifficulty, existingComponents: NetworkComponentType[]) {
+    async generateChallenge(
+      difficulty: ChallengeDifficulty,
+      existingComponents: NetworkComponentType[],
+      options?: ChallengeGenerationOptions,
+    ) {
+      this.stopTimer()
       this.isGenerating = true
       this.error = null
+      this.challengeOutcome = null
+      this.challengeEndReason = null
+      this.finalPoints = 0
+      this.showCongratulations = false
+
+      const resolvedOptions = resolveGenerationOptions(difficulty, options)
+
       try {
         const { generateChallenge } = await import('~/lib/bedrock')
-        const challenge = await generateChallenge({ difficulty, existingComponents })
-        this.currentChallenge = challenge
+        const challenge = await generateChallenge({
+          difficulty,
+          existingComponents,
+          options: resolvedOptions,
+        })
+        this.currentChallenge = normalizeChallenge(challenge, difficulty, resolvedOptions)
         this.showChallengePanel = true
         this.showSetupModal = false
         this.startTimer()
       } catch (err: any) {
         this.error = err.message || 'Failed to generate challenge'
-        this.currentChallenge = generateLocalChallenge(difficulty)
+        this.currentChallenge = generateLocalChallenge(difficulty, resolvedOptions)
         this.showChallengePanel = true
         this.showSetupModal = false
         this.startTimer()
@@ -78,7 +208,7 @@ export const useChallengesStore = defineStore('challenges', {
     },
 
     evaluateCompletion(nodes: any[], edges: any[]) {
-      if (!this.currentChallenge) return
+      if (!this.currentChallenge || this.challengeOutcome !== null) return
 
       const nodeTypes = nodes.map(n => n.data?.type as NetworkComponentType)
       const updatedTasks = this.currentChallenge.tasks.map(task => {
@@ -101,9 +231,27 @@ export const useChallengesStore = defineStore('challenges', {
       this.currentChallenge = { ...this.currentChallenge, tasks: updatedTasks }
 
       if (this.isCompleted && !this.showCongratulations) {
+        this.challengeOutcome = 'won'
+        this.challengeEndReason = 'completed'
+        this.finalPoints = this.earnedPoints
         this.showCongratulations = true
+        this.showChallengePanel = false
         this.stopTimer()
       }
+    },
+
+    handleTimeExpired() {
+      if (!this.currentChallenge || this.challengeOutcome !== null) {
+        this.stopTimer()
+        return
+      }
+
+      this.challengeOutcome = 'lost'
+      this.challengeEndReason = 'timeout'
+      this.finalPoints = this.earnedPoints
+      this.showCongratulations = true
+      this.showChallengePanel = false
+      this.stopTimer()
     },
 
     quitChallenge() {
@@ -111,6 +259,9 @@ export const useChallengesStore = defineStore('challenges', {
       this.currentChallenge = null
       this.showChallengePanel = false
       this.showCongratulations = false
+      this.challengeOutcome = null
+      this.challengeEndReason = null
+      this.finalPoints = 0
       this.elapsedSeconds = 0
     },
 
@@ -132,7 +283,7 @@ export const useChallengesStore = defineStore('challenges', {
       this.timerInterval = setInterval(() => {
         this.elapsedSeconds++
         if (this.currentChallenge?.timeLimit && this.elapsedSeconds >= this.currentChallenge.timeLimit) {
-          this.stopTimer()
+          this.handleTimeExpired()
         }
       }, 1000)
     },
@@ -146,7 +297,10 @@ export const useChallengesStore = defineStore('challenges', {
   },
 })
 
-function generateLocalChallenge(difficulty: ChallengeDifficulty): Challenge {
+function generateLocalChallenge(
+  difficulty: ChallengeDifficulty,
+  options: ChallengeGenerationDefaults,
+): Challenge {
   const taskSets: Record<ChallengeDifficulty, ChallengeTask[]> = {
     [ChallengeDifficulty.BEGINNER]: [
       { id: 'task-1', description: 'Create a Virtual Network', type: 'add_component', componentType: NetworkComponentType.VNET, completed: false, points: 10 },
@@ -179,14 +333,8 @@ function generateLocalChallenge(difficulty: ChallengeDifficulty): Challenge {
     ],
   }
 
-  const tasks = taskSets[difficulty]
+  const tasks = taskSets[difficulty].slice(0, Math.max(MIN_TASK_COUNT, options.taskCount))
   const totalPoints = tasks.reduce((sum, t) => sum + t.points, 0)
-  const timeLimitMap: Record<ChallengeDifficulty, number> = {
-    [ChallengeDifficulty.BEGINNER]: 300,
-    [ChallengeDifficulty.INTERMEDIATE]: 600,
-    [ChallengeDifficulty.ADVANCED]: 900,
-    [ChallengeDifficulty.EXPERT]: 1800,
-  }
 
   return {
     id: `challenge-${Date.now()}`,
@@ -201,6 +349,6 @@ function generateLocalChallenge(difficulty: ChallengeDifficulty): Challenge {
     },
     tasks,
     totalPoints,
-    timeLimit: timeLimitMap[difficulty],
+    timeLimit: options.timeLimitSeconds,
   }
 }

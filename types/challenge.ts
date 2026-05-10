@@ -7,6 +7,19 @@ export enum ChallengeDifficulty {
   EXPERT = 'EXPERT',
 }
 
+export interface ChallengeGenerationDefaults {
+  timeLimitSeconds: number
+  taskCount: number
+  componentCount: number
+}
+
+export interface ChallengeGenerationOptions {
+  useCustom?: boolean
+  timeLimitSeconds?: number
+  taskCount?: number
+  componentCount?: number
+}
+
 export interface ChallengeTask {
   id: string
   description: string

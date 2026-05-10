@@ -1,5 +1,5 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
-import type { Challenge } from '~/types/challenge'
+import type { Challenge, ChallengeGenerationDefaults } from '~/types/challenge'
 import { getBrowserAwsCredentials } from '~/lib/aws'
 import { ChallengeDifficulty } from '~/types/challenge'
 import { NetworkComponentType } from '~/types/network'
@@ -175,6 +175,7 @@ function getBedrockClient(): BedrockRuntimeClient {
 export async function generateChallenge(params: {
   difficulty: ChallengeDifficulty
   existingComponents: NetworkComponentType[]
+  options: ChallengeGenerationDefaults
 }): Promise<Challenge> {
   const client = getBedrockClient()
 
@@ -204,6 +205,9 @@ Important constraints:
 - Do not include INTERNET in required components or tasks. Public Internet is system-managed.
 - Use realistic Azure networking relationships in requiredConnections.
 - The difficulty field must be exactly "${params.difficulty}".
+- Target approximately ${params.options.taskCount} tasks.
+- Prefer around ${params.options.componentCount} distinct components in the scenario.
+- Set timeLimit to exactly ${params.options.timeLimitSeconds} seconds.
 
 Generate a challenge as a JSON object with this exact structure:
 {
@@ -228,7 +232,7 @@ Generate a challenge as a JSON object with this exact structure:
     }
   ],
   "totalPoints": 50,
-  "timeLimit": 300
+  "timeLimit": ${params.options.timeLimitSeconds}
 }
 
 Return ONLY a valid JSON object.

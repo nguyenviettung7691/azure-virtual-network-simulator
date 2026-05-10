@@ -367,9 +367,13 @@ export const useExport = () => {
       const snapshot = await captureExactSvgSnapshot()
       if (!snapshot) return null
 
-      const thumbnailWidth = 320
-      const thumbnailHeight = 200
-      const thumbnailScale = 2
+      const thumbnailWidth = 960
+      const thumbnailHeight = 600
+      const thumbnailScale = 2.5
+      const maxThumbnailPixels = 1_600_000
+      const safePixelScale = Math.min(1, Math.sqrt(maxThumbnailPixels / (thumbnailWidth * thumbnailHeight)))
+      const outputWidth = Math.max(320, Math.round(thumbnailWidth * safePixelScale))
+      const outputHeight = Math.max(200, Math.round(thumbnailHeight * safePixelScale))
       const backgroundColor = getCanvasBackgroundColor()
 
       const rasterBlob = await rasterizeSnapshotToPngBlob(snapshot, thumbnailScale)
@@ -378,19 +382,19 @@ export const useExport = () => {
       try {
         const image = await readImageFromUrl(objectUrl)
         const canvas = document.createElement('canvas')
-        canvas.width = thumbnailWidth
-        canvas.height = thumbnailHeight
+        canvas.width = outputWidth
+        canvas.height = outputHeight
         const context = canvas.getContext('2d')
         if (!context) throw new Error('Unable to acquire 2D context for thumbnail rendering')
 
         context.fillStyle = backgroundColor
-        context.fillRect(0, 0, thumbnailWidth, thumbnailHeight)
+        context.fillRect(0, 0, outputWidth, outputHeight)
 
-        const scale = Math.min(thumbnailWidth / image.width, thumbnailHeight / image.height)
+        const scale = Math.min(outputWidth / image.width, outputHeight / image.height)
         const drawWidth = Math.max(1, Math.round(image.width * scale))
         const drawHeight = Math.max(1, Math.round(image.height * scale))
-        const offsetX = Math.floor((thumbnailWidth - drawWidth) / 2)
-        const offsetY = Math.floor((thumbnailHeight - drawHeight) / 2)
+        const offsetX = Math.floor((outputWidth - drawWidth) / 2)
+        const offsetY = Math.floor((outputHeight - drawHeight) / 2)
 
         context.imageSmoothingEnabled = true
         context.imageSmoothingQuality = 'high'
@@ -401,7 +405,39 @@ export const useExport = () => {
         URL.revokeObjectURL(objectUrl)
       }
     } catch {
-      return null
+      try {
+        const snapshot = await captureExactSvgSnapshot()
+        if (!snapshot) return null
+        const fallbackBlob = await rasterizeSnapshotToPngBlob(snapshot, 2)
+        const fallbackUrl = URL.createObjectURL(fallbackBlob)
+
+        try {
+          const image = await readImageFromUrl(fallbackUrl)
+          const canvas = document.createElement('canvas')
+          canvas.width = 320
+          canvas.height = 200
+          const context = canvas.getContext('2d')
+          if (!context) return null
+
+          context.fillStyle = getCanvasBackgroundColor()
+          context.fillRect(0, 0, canvas.width, canvas.height)
+
+          const scale = Math.min(canvas.width / image.width, canvas.height / image.height)
+          const drawWidth = Math.max(1, Math.round(image.width * scale))
+          const drawHeight = Math.max(1, Math.round(image.height * scale))
+          const offsetX = Math.floor((canvas.width - drawWidth) / 2)
+          const offsetY = Math.floor((canvas.height - drawHeight) / 2)
+
+          context.imageSmoothingEnabled = true
+          context.imageSmoothingQuality = 'high'
+          context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
+          return canvas.toDataURL('image/png', 0.92)
+        } finally {
+          URL.revokeObjectURL(fallbackUrl)
+        }
+      } catch {
+        return null
+      }
     }
   }
 

@@ -10,6 +10,9 @@
       <div class="field">
         <label>Difficulty</label>
         <SelectButton v-model="difficulty" :options="difficultyOptions" option-label="label" option-value="value" />
+        <small class="difficulty-defaults">
+          Defaults: {{ defaultsSummary.timeLimitMinutes }} min, {{ defaultsSummary.taskCount }} tasks, {{ defaultsSummary.componentCount }} components
+        </small>
       </div>
 
       <Divider />
@@ -17,6 +20,10 @@
       <div class="field">
         <label>Custom Parameters (optional)</label>
         <div class="custom-params">
+          <div class="param-row">
+            <label>Time Limit (minutes)</label>
+            <InputNumber v-model="timeLimitMinutes" :min="1" :max="120" showButtons :disabled="!useCustom" />
+          </div>
           <div class="param-row">
             <label>Number of Components</label>
             <InputNumber v-model="componentCount" :min="2" :max="15" showButtons :disabled="!useCustom" />
@@ -57,13 +64,15 @@
 <script setup lang="ts">
 import { ChallengeDifficulty } from '~/types/challenge'
 import { NetworkComponentType } from '~/types/network'
+import { getChallengeDefaults } from '~/stores/challenges'
 
 const challengesStore = useChallengesStore()
 const diagramStore = useDiagramStore()
 
 const difficulty = ref(ChallengeDifficulty.BEGINNER)
-const componentCount = ref(5)
+const componentCount = ref(4)
 const taskCount = ref(3)
+const timeLimitMinutes = ref(10)
 const useCustom = ref(false)
 
 const difficultyOptions = [
@@ -72,6 +81,40 @@ const difficultyOptions = [
   { label: 'Advanced', value: ChallengeDifficulty.ADVANCED },
   { label: 'Expert', value: ChallengeDifficulty.EXPERT },
 ]
+
+const resolvedDefaults = computed(() => getChallengeDefaults(difficulty.value))
+
+const defaultsSummary = computed(() => {
+  const defaults = resolvedDefaults.value
+  return {
+    timeLimitMinutes: Math.max(1, Math.round(defaults.timeLimitSeconds / 60)),
+    taskCount: defaults.taskCount,
+    componentCount: defaults.componentCount,
+  }
+})
+
+watch(difficulty, () => {
+  if (!useCustom.value) {
+    applyDifficultyDefaults()
+  }
+})
+
+watch(useCustom, (enabled) => {
+  if (!enabled) {
+    applyDifficultyDefaults()
+  }
+})
+
+onMounted(() => {
+  applyDifficultyDefaults()
+})
+
+function applyDifficultyDefaults() {
+  const defaults = defaultsSummary.value
+  timeLimitMinutes.value = defaults.timeLimitMinutes
+  taskCount.value = defaults.taskCount
+  componentCount.value = defaults.componentCount
+}
 
 async function generate() {
   const existingComponents = (diagramStore.nodes as any[])
@@ -82,7 +125,12 @@ async function generate() {
     ))
 
   diagramStore.resetDiagram()
-  await challengesStore.generateChallenge(difficulty.value, existingComponents)
+  await challengesStore.generateChallenge(difficulty.value, existingComponents, {
+    useCustom: useCustom.value,
+    timeLimitSeconds: Math.round(timeLimitMinutes.value * 60),
+    taskCount: Math.round(taskCount.value),
+    componentCount: Math.round(componentCount.value),
+  })
 }
 </script>
 
@@ -90,6 +138,7 @@ async function generate() {
 .setup-form { display: flex; flex-direction: column; gap: 1rem; }
 .field { display: flex; flex-direction: column; gap: 0.4rem; }
 .field > label { font-size: 0.85rem; font-weight: 600; color: var(--text-color-secondary); }
+.difficulty-defaults { color: var(--text-color-secondary); }
 .custom-params { display: flex; flex-direction: column; gap: 0.6rem; }
 .param-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; }
 </style>

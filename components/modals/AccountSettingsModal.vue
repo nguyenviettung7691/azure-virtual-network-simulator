@@ -8,9 +8,9 @@
   >
     <Tabs v-model:value="activeTab">
       <TabList>
-        <Tab value="profile">Profile</Tab>
         <Tab value="appearance">Appearance</Tab>
         <Tab value="diagram">Diagram</Tab>
+        <Tab value="profile">Profile</Tab>
       </TabList>
 
       <div v-if="settingsStore.isSyncing || settingsStore.syncError" class="settings-sync-status" :class="{ error: Boolean(settingsStore.syncError) }">
@@ -45,57 +45,85 @@
               <input
                 type="text"
                 name="username"
-                :value="authStore.user?.email || ''"
+                value=""
                 autocomplete="username"
                 readonly
                 tabindex="-1"
                 aria-hidden="true"
                 class="sr-only-username"
               />
+              <input
+                type="password"
+                name="fake-current-password"
+                value=""
+                autocomplete="current-password"
+                readonly
+                tabindex="-1"
+                aria-hidden="true"
+                class="sr-only-username"
+              />
 
-              <div class="section-title-row">
-                <h4>Change Password</h4>
-                <span class="section-hint">Use a strong password with at least 8 characters.</span>
-              </div>
-
-              <div class="field">
-                <label for="current-password">Current Password</label>
-                <Password
-                  id="current-password"
-                  v-model="oldPassword"
-                  :feedback="false"
-                  toggleMask
-                  inputClass="w-full"
-                  class="w-full"
-                  :inputProps="{ autocomplete: 'current-password' }"
-                />
-              </div>
-
-              <div class="field">
-                <label for="new-password">New Password</label>
-                <Password
-                  id="new-password"
-                  v-model="newPassword"
-                  :feedback="false"
-                  toggleMask
-                  inputClass="w-full"
-                  class="w-full"
-                  :inputProps="{ autocomplete: 'new-password' }"
-                />
-              </div>
-
-              <Message v-if="pwError" severity="error" :closable="false">{{ pwError }}</Message>
-              <Message v-if="pwSuccess" severity="success" :closable="false">Password changed successfully</Message>
-
-              <div class="password-action-row">
+              <div class="section-title-row section-title-row-inline">
+                <div class="section-title-copy">
+                  <h4>Change Password</h4>
+                  <span class="section-hint">Use a strong password with at least 8 characters.</span>
+                </div>
                 <Button
-                  label="Change Password"
+                  type="button"
+                  :label="showPasswordSection ? 'Hide' : 'Show'"
+                  :icon="showPasswordSection ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                  text
                   size="small"
-                  type="submit"
-                  :disabled="!canSubmitPasswordChange"
-                  :loading="changePasswordMutation.isPending.value"
+                  @click="showPasswordSection = !showPasswordSection"
                 />
               </div>
+
+              <template v-if="showPasswordSection">
+                <div class="field">
+                  <label for="current-password">Current Password</label>
+                  <Password
+                    id="current-password"
+                    v-model="oldPassword"
+                    :feedback="false"
+                    toggleMask
+                    inputClass="w-full"
+                    class="w-full"
+                    :inputProps="{
+                      autocomplete: 'off',
+                      name: 'account-current-password',
+                    }"
+                  />
+                </div>
+
+                <div class="field">
+                  <label for="new-password">New Password</label>
+                  <Password
+                    id="new-password"
+                    v-model="newPassword"
+                    :feedback="false"
+                    toggleMask
+                    inputClass="w-full"
+                    class="w-full"
+                    :inputProps="{
+                      autocomplete: 'new-password',
+                      name: 'account-new-password',
+                    }"
+                  />
+                </div>
+
+                <Message v-if="pwError" severity="error" :closable="false">{{ pwError }}</Message>
+                <Message v-if="pwSuccess" severity="success" :closable="false">Password changed successfully</Message>
+
+                <div class="password-action-row">
+                  <Button
+                    label="Change Password"
+                    size="small"
+                    type="submit"
+                    :disabled="!canSubmitPasswordChange"
+                    :loading="changePasswordMutation.isPending.value"
+                  />
+                </div>
+              </template>
             </form>
 
             <Divider />
@@ -199,9 +227,10 @@ const authStore = useAuthStore()
 const changePasswordMutation = useChangePasswordMutation()
 const logoutMutation = useLogoutMutation()
 
-const activeTab = ref('profile')
+const activeTab = ref('appearance')
 const oldPassword = ref('')
 const newPassword = ref('')
+const showPasswordSection = ref(false)
 const pwError = ref('')
 const pwSuccess = ref(false)
 
@@ -276,13 +305,14 @@ watch(() => settingsStore.showSettingsModal, (visible) => {
     return
   }
 
-  activeTab.value = 'profile'
+  activeTab.value = 'appearance'
   resetPasswordSection()
 })
 
 function resetPasswordSection() {
   oldPassword.value = ''
   newPassword.value = ''
+  showPasswordSection.value = false
   pwError.value = ''
   pwSuccess.value = false
 }
@@ -428,6 +458,18 @@ async function logout() {
   flex-direction: column;
   gap: 0.2rem;
   margin-bottom: 0.3rem;
+}
+
+.section-title-row-inline {
+  align-items: center;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.section-title-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
 h4 {
