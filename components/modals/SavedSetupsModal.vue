@@ -44,9 +44,23 @@
         </div>
         <div class="setup-info">
           <span class="setup-name">{{ setup.name }}</span>
-          <span class="setup-date">{{ formatDate(setup.createdAt) }}</span>
-          <span class="setup-nodes">{{ setup.diagram?.nodes?.length || 0 }} components</span>
-          <span class="setup-tests">{{ setup.tests?.length || 0 }} tests</span>
+          <div class="setup-meta-grid">
+            <span class="setup-meta-row">
+              <Icon icon="mdi:calendar-month-outline" class="setup-meta-icon" />
+              <span class="setup-meta-label">Saved</span>
+              <span class="setup-meta-value">{{ formatDate(setup.createdAt) }}</span>
+            </span>
+            <span class="setup-meta-row">
+              <Icon icon="mdi:vector-arrange-above" class="setup-meta-icon" />
+              <span class="setup-meta-label">Components</span>
+              <span class="setup-meta-value">{{ setup.diagram?.nodes?.length || 0 }}</span>
+            </span>
+            <span class="setup-meta-row">
+              <Icon icon="mdi:clipboard-check-outline" class="setup-meta-icon" />
+              <span class="setup-meta-label">Tests</span>
+              <span class="setup-meta-value">{{ setup.tests?.length || 0 }}</span>
+            </span>
+          </div>
         </div>
         <div class="setup-actions">
           <Button
@@ -82,10 +96,17 @@ interface ActiveZoomState {
   src: string
   xPercent: number
   yPercent: number
+  pointerX: number
+  pointerY: number
+  imageOffsetX: number
+  imageOffsetY: number
+  imageWidth: number
+  imageHeight: number
 }
 
 const activeZoom = ref<ActiveZoomState | null>(null)
 const MAGNIFIER_ZOOM_FACTOR = 2.4
+const MAGNIFIER_SIZE_PX = 130
 const savedSetupsQuery = useSavedSetupsQuery(
   computed(() => authStore.userId),
   computed(() => savedSetupsStore.showModal && authStore.isAuthenticated),
@@ -116,11 +137,16 @@ const magnifierStyle = computed<Record<string, string>>(() => {
     return {}
   }
 
+  const lensRadius = MAGNIFIER_SIZE_PX / 2
+  const backgroundX = lensRadius - ((activeZoom.value.pointerX - activeZoom.value.imageOffsetX) * MAGNIFIER_ZOOM_FACTOR)
+  const backgroundY = lensRadius - ((activeZoom.value.pointerY - activeZoom.value.imageOffsetY) * MAGNIFIER_ZOOM_FACTOR)
+
   return {
     '--zoom-x': `${activeZoom.value.xPercent}`,
     '--zoom-y': `${activeZoom.value.yPercent}`,
-    '--zoom-factor': String(MAGNIFIER_ZOOM_FACTOR),
     backgroundImage: `url(${activeZoom.value.src})`,
+    backgroundSize: `${activeZoom.value.imageWidth * MAGNIFIER_ZOOM_FACTOR}px ${activeZoom.value.imageHeight * MAGNIFIER_ZOOM_FACTOR}px`,
+    backgroundPosition: `${backgroundX}px ${backgroundY}px`,
   }
 })
 
@@ -132,16 +158,47 @@ function updateZoomPosition(setupId: string, event: MouseEvent) {
   const target = event.currentTarget as HTMLElement | null
   if (!target) return
 
+  const preview = target.querySelector('img') as HTMLImageElement | null
+  if (!preview || !preview.naturalWidth || !preview.naturalHeight) return
+
   const rect = target.getBoundingClientRect()
   if (!rect.width || !rect.height) return
 
-  const xPercent = Math.min(100, Math.max(0, ((event.clientX - rect.left) / rect.width) * 100))
-  const yPercent = Math.min(100, Math.max(0, ((event.clientY - rect.top) / rect.height) * 100))
+  const imageAspect = preview.naturalWidth / preview.naturalHeight
+  const containerAspect = rect.width / rect.height
+
+  let imageWidth = rect.width
+  let imageHeight = rect.height
+  let imageOffsetX = 0
+  let imageOffsetY = 0
+
+  if (imageAspect > containerAspect) {
+    imageHeight = rect.width / imageAspect
+    imageOffsetY = (rect.height - imageHeight) / 2
+  } else {
+    imageWidth = rect.height * imageAspect
+    imageOffsetX = (rect.width - imageWidth) / 2
+  }
+
+  const pointerX = Math.min(rect.width, Math.max(0, event.clientX - rect.left))
+  const pointerY = Math.min(rect.height, Math.max(0, event.clientY - rect.top))
+
+  const imageX = Math.min(imageWidth, Math.max(0, pointerX - imageOffsetX))
+  const imageY = Math.min(imageHeight, Math.max(0, pointerY - imageOffsetY))
+
+  const xPercent = imageWidth > 0 ? (imageX / imageWidth) * 100 : 50
+  const yPercent = imageHeight > 0 ? (imageY / imageHeight) * 100 : 50
 
   activeZoom.value = {
     ...activeZoom.value,
     xPercent,
     yPercent,
+    pointerX,
+    pointerY,
+    imageOffsetX,
+    imageOffsetY,
+    imageWidth,
+    imageHeight,
   }
 }
 
@@ -153,6 +210,12 @@ function onThumbnailEnter(setupId: string, event: MouseEvent, src?: string) {
     src,
     xPercent: 50,
     yPercent: 50,
+    pointerX: 0,
+    pointerY: 0,
+    imageOffsetX: 0,
+    imageOffsetY: 0,
+    imageWidth: 0,
+    imageHeight: 0,
   }
 
   updateZoomPosition(setupId, event)
@@ -228,15 +291,17 @@ function deleteSetup(setup: SavedSetup) {
   border: 2px solid color-mix(in srgb, var(--surface-0) 70%, transparent);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.26);
   background-repeat: no-repeat;
-  background-size: calc(var(--zoom-factor) * 100%) calc(var(--zoom-factor) * 100%);
-  background-position: calc(var(--zoom-x) * (var(--zoom-factor) - 1) * -1%) calc(var(--zoom-y) * (var(--zoom-factor) - 1) * -1%);
   backdrop-filter: saturate(1.15);
   pointer-events: none;
 }
 .no-thumbnail { font-size: 2.2rem; color: var(--text-color-secondary); opacity: 0.3; }
-.setup-info { padding: 0.7rem 0.72rem; display: flex; flex-direction: column; gap: 0.25rem; flex: 1; }
+.setup-info { padding: 0.74rem 0.72rem; display: flex; flex-direction: column; gap: 0.42rem; flex: 1; }
 .setup-name { font-weight: 700; font-size: 0.96rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.setup-date, .setup-nodes, .setup-tests { font-size: 0.8rem; color: var(--text-color-secondary); }
+.setup-meta-grid { display: flex; flex-direction: column; gap: 0.24rem; }
+.setup-meta-row { display: grid; grid-template-columns: 0.9rem auto 1fr; align-items: center; gap: 0.36rem; font-size: 0.78rem; color: var(--text-color-secondary); }
+.setup-meta-icon { font-size: 0.84rem; opacity: 0.86; }
+.setup-meta-label { font-weight: 600; color: color-mix(in srgb, var(--text-color-secondary) 82%, var(--text-color)); }
+.setup-meta-value { text-align: right; color: var(--text-color); }
 .setup-actions { display: flex; gap: 0.35rem; padding: 0.55rem 0.6rem; border-top: 1px solid var(--surface-border); }
 
 @media (max-width: 900px) {

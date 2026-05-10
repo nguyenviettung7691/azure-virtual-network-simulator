@@ -155,11 +155,30 @@
         class="autosave-time"
         :class="autosaveStatusClass"
         v-tooltip.top="autosaveTooltipText"
+        tabindex="0"
+        role="button"
+        @focus="showBadgeTooltip"
+        @blur="hideBadgeTooltip"
+        @click="toggleBadgeTooltip"
+        @keydown.enter.prevent="toggleBadgeTooltip"
+        @keydown.space.prevent="toggleBadgeTooltip"
+        @keydown.escape.prevent="hideBadgeTooltip"
       >
         <Icon :icon="autosaveIcon" class="autosave-icon" />
         {{ autosaveStatusText }}
       </span>
-      <span class="status-text" v-tooltip.top="statusTooltipText">
+      <span
+        class="status-text"
+        v-tooltip.top="statusTooltipText"
+        tabindex="0"
+        role="button"
+        @focus="showBadgeTooltip"
+        @blur="hideBadgeTooltip"
+        @click="toggleBadgeTooltip"
+        @keydown.enter.prevent="toggleBadgeTooltip"
+        @keydown.space.prevent="toggleBadgeTooltip"
+        @keydown.escape.prevent="hideBadgeTooltip"
+      >
         <Icon icon="mdi:vector-polygon" class="status-icon" />
         Status
       </span>
@@ -216,12 +235,26 @@ const LOCAL_WORKSPACE_KEY = 'vnet-workspace-v1'
 interface LocalWorkspaceSnapshot {
   version: 1
   savedAt: string
-  diagram: {
-    nodes: unknown[]
-    edges: unknown[]
-    viewport: { x: number; y: number; zoom: number }
-  }
+  diagram: unknown
   tests: unknown[]
+}
+
+interface DiagramComparable {
+  nodes: Array<{
+    id: string
+    parentNode: string | null
+    type: unknown
+    position: { x: number; y: number }
+    data: unknown
+  }>
+  edges: Array<{
+    id: string
+    source: string
+    target: string
+    type: unknown
+    data: unknown
+  }>
+  viewport: { x: number; y: number; zoom: number }
 }
 
 const currentWorkspaceSnapshot = computed(() => {
@@ -239,14 +272,16 @@ const currentWorkspaceSnapshot = computed(() => {
 })
 
 const currentDiagramSerialized = computed(() => {
-  autosaveNowMs.value
-  return JSON.stringify(diagramStore.diagramState)
+  const comparable = toComparableDiagram(diagramStore.diagramState)
+  return comparable ? stableStringify(comparable) : ''
 })
 
 const isDiagramSyncedWithAutosave = computed(() => {
   const snapshot = currentWorkspaceSnapshot.value
   if (!snapshot?.diagram) return false
-  return currentDiagramSerialized.value === JSON.stringify(snapshot.diagram)
+  const savedComparable = toComparableDiagram(snapshot.diagram)
+  if (!savedComparable) return false
+  return currentDiagramSerialized.value === stableStringify(savedComparable)
 })
 
 const autosaveStatusText = computed(() => isDiagramSyncedWithAutosave.value ? 'Saved' : 'Unsaved')
@@ -280,6 +315,122 @@ const autosaveTooltipText = computed(() => {
 })
 
 const statusTooltipText = computed(() => `${diagramStore.nodeCount} nodes · ${diagramStore.edgeCount} edges`)
+
+function roundPosition(value: unknown) {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return Math.round(numeric * 100) / 100
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function toComparableDiagram(value: unknown): DiagramComparable | null {
+  const record = asRecord(value)
+  if (!record) return null
+
+  const rawNodes = Array.isArray(record.nodes) ? record.nodes : []
+  const rawEdges = Array.isArray(record.edges) ? record.edges : []
+  const viewportRecord = asRecord(record.viewport) || {}
+
+  const nodes = rawNodes
+    .map((rawNode) => {
+      const node = asRecord(rawNode)
+      if (!node || typeof node.id !== 'string') return null
+      const position = asRecord(node.position) || {}
+      const data = asRecord(node.data)
+
+      return {
+        id: node.id,
+        parentNode: typeof node.parentNode === 'string' ? node.parentNode : null,
+        type: data?.type ?? null,
+        position: {
+          x: roundPosition(position.x),
+          y: roundPosition(position.y),
+        },
+        data: data ?? null,
+      }
+    })
+    .filter((node): node is DiagramComparable['nodes'][number] => Boolean(node))
+    .sort((a, b) => a.id.localeCompare(b.id))
+
+  const edges = rawEdges
+    .map((rawEdge) => {
+      const edge = asRecord(rawEdge)
+      if (!edge || typeof edge.id !== 'string' || typeof edge.source !== 'string' || typeof edge.target !== 'string') return null
+
+      return {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: edge.type ?? null,
+        data: asRecord(edge.data) ?? null,
+      }
+    })
+    .filter((edge): edge is DiagramComparable['edges'][number] => Boolean(edge))
+    .sort((a, b) => `${a.source}->${a.target}->${a.id}`.localeCompare(`${b.source}->${b.target}->${b.id}`))
+
+  return {
+    nodes,
+    edges,
+    viewport: {
+      x: roundPosition(viewportRecord.x),
+      y: roundPosition(viewportRecord.y),
+      zoom: roundPosition(viewportRecord.zoom),
+    },
+  }
+}
+
+function normalizeStable(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(item => normalizeStable(item))
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+
+  const record = value as Record<string, unknown>
+  const sortedKeys = Object.keys(record).sort((a, b) => a.localeCompare(b))
+  const normalized: Record<string, unknown> = {}
+
+  for (const key of sortedKeys) {
+    normalized[key] = normalizeStable(record[key])
+  }
+
+  return normalized
+}
+
+function stableStringify(value: unknown) {
+  return JSON.stringify(normalizeStable(value))
+}
+
+function showBadgeTooltip(event: Event) {
+  const target = event.currentTarget as HTMLElement | null
+  if (!target) return
+  target.dataset.tooltipPinned = 'true'
+  target.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+}
+
+function hideBadgeTooltip(event: Event) {
+  const target = event.currentTarget as HTMLElement | null
+  if (!target) return
+  target.dataset.tooltipPinned = 'false'
+  target.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+}
+
+function toggleBadgeTooltip(event: Event) {
+  const target = event.currentTarget as HTMLElement | null
+  if (!target) return
+
+  if (target.dataset.tooltipPinned === 'true') {
+    hideBadgeTooltip(event)
+    return
+  }
+
+  showBadgeTooltip(event)
+}
 const exportDurationEstimatesMs = ref<Record<ExportFormat, number>>({
   drawio: 7000,
   png: 4500,
@@ -564,6 +715,7 @@ function onReset() {
 }
 
 onMounted(() => {
+  autosaveNowMs.value = Date.now()
   autosaveTicker = setInterval(() => {
     autosaveNowMs.value = Date.now()
   }, 1000)
@@ -701,7 +853,14 @@ onBeforeUnmount(() => {
   gap: 0.3rem;
   line-height: 1;
   padding: 0.28rem 0.5rem;
+  cursor: pointer;
+  outline: none;
   white-space: nowrap;
+}
+
+.autosave-time:focus-visible,
+.status-text:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 45%, transparent);
 }
 
 .autosave-icon {
@@ -731,6 +890,8 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--surface-border) 70%, transparent);
   background: color-mix(in srgb, var(--surface-200) 70%, transparent);
   color: var(--text-color-secondary);
+  cursor: pointer;
+  outline: none;
   white-space: nowrap;
 }
 
