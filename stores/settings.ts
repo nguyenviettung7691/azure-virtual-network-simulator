@@ -27,6 +27,7 @@ export const useSettingsStore = defineStore('settings', {
     isSyncing: false,
     syncError: null as string | null,
     currentUserId: null as string | null,
+    lastAutoSaveAttemptAt: null as string | null,
     lastAutoSaveAt: null as string | null,
   }),
 
@@ -175,6 +176,10 @@ export const useSettingsStore = defineStore('settings', {
 
     setLastAutoSaveTime() {
       this.lastAutoSaveAt = new Date().toISOString()
+    },
+
+    setLastAutoSaveAttemptTime() {
+      this.lastAutoSaveAttemptAt = new Date().toISOString()
     },
   },
 })

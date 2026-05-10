@@ -90,6 +90,8 @@ function createWorkspaceSnapshot(): LocalWorkspaceSnapshot {
 function persistWorkspaceSnapshot(force = false) {
   if (typeof localStorage === 'undefined') return
 
+  settingsStore.setLastAutoSaveAttemptTime()
+
   const serialized = JSON.stringify(createWorkspaceSnapshot())
   if (!force && latestWorkspaceSnapshot.value === serialized) {
     return

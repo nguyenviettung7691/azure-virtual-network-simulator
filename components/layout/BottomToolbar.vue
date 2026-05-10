@@ -151,13 +151,17 @@
     <div class="toolbar-spacer" />
 
     <div class="toolbar-status">
-      <span v-if="lastAutoSaveRelativeTime" class="autosave-time">
-        <Icon icon="mdi:content-save-check" class="autosave-icon" />
-        {{ lastAutoSaveRelativeTime }}
+      <span
+        class="autosave-time"
+        :class="autosaveStatusClass"
+        v-tooltip.top="autosaveTooltipText"
+      >
+        <Icon :icon="autosaveIcon" class="autosave-icon" />
+        {{ autosaveStatusText }}
       </span>
-      <span class="status-text">
+      <span class="status-text" v-tooltip.top="statusTooltipText">
         <Icon icon="mdi:vector-polygon" class="status-icon" />
-        {{ diagramStore.nodeCount }} nodes · {{ diagramStore.edgeCount }} edges
+        Status
       </span>
     </div>
   </footer>
@@ -207,20 +211,75 @@ const saveError = ref('')
 const autosaveNowMs = ref(Date.now())
 let autosaveTicker: ReturnType<typeof setInterval> | null = null
 const isSaving = computed(() => saveCurrentSetupMutation.isPending.value)
-const lastAutoSaveRelativeTime = computed(() => {
-  if (!settingsStore.lastAutoSaveAt) return null
-  const now = autosaveNowMs.value
-  const saved = new Date(settingsStore.lastAutoSaveAt).getTime()
-  const elapsedMs = Math.max(0, now - saved)
-  const elapsedSec = Math.floor(elapsedMs / 1000)
-  const elapsedMin = Math.floor(elapsedSec / 60)
-  const elapsedHr = Math.floor(elapsedMin / 60)
+const LOCAL_WORKSPACE_KEY = 'vnet-workspace-v1'
 
-  if (elapsedSec < 60) return `Saved ${elapsedSec}${elapsedSec === 1 ? ' sec' : ' secs'} ago`
-  if (elapsedMin < 60) return `Saved ${elapsedMin}${elapsedMin === 1 ? ' min' : ' mins'} ago`
-  if (elapsedHr < 24) return `Saved ${elapsedHr}${elapsedHr === 1 ? ' hr' : ' hrs'} ago`
-  return 'Saved earlier'
+interface LocalWorkspaceSnapshot {
+  version: 1
+  savedAt: string
+  diagram: {
+    nodes: unknown[]
+    edges: unknown[]
+    viewport: { x: number; y: number; zoom: number }
+  }
+  tests: unknown[]
+}
+
+const currentWorkspaceSnapshot = computed(() => {
+  autosaveNowMs.value
+  if (typeof localStorage === 'undefined') return null
+
+  const raw = localStorage.getItem(LOCAL_WORKSPACE_KEY)
+  if (!raw) return null
+
+  try {
+    return JSON.parse(raw) as LocalWorkspaceSnapshot
+  } catch {
+    return null
+  }
 })
+
+const currentDiagramSerialized = computed(() => {
+  autosaveNowMs.value
+  return JSON.stringify(diagramStore.diagramState)
+})
+
+const isDiagramSyncedWithAutosave = computed(() => {
+  const snapshot = currentWorkspaceSnapshot.value
+  if (!snapshot?.diagram) return false
+  return currentDiagramSerialized.value === JSON.stringify(snapshot.diagram)
+})
+
+const autosaveStatusText = computed(() => isDiagramSyncedWithAutosave.value ? 'Saved' : 'Unsaved')
+
+const autosaveIcon = computed(() => isDiagramSyncedWithAutosave.value ? 'mdi:content-save-check' : 'mdi:content-save-alert')
+
+const autosaveStatusClass = computed(() => isDiagramSyncedWithAutosave.value ? 'autosave-success' : 'autosave-warning')
+
+function formatTimestampLabel(iso: string | null) {
+  if (!iso) return 'Unavailable'
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return 'Unavailable'
+  return parsed.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+const autosaveTooltipText = computed(() => {
+  if (isDiagramSyncedWithAutosave.value) {
+    const lastSavedAt = settingsStore.lastAutoSaveAt ?? currentWorkspaceSnapshot.value?.savedAt ?? null
+    return `Last saved: ${formatTimestampLabel(lastSavedAt)}`
+  }
+
+  const lastAttempt = settingsStore.lastAutoSaveAttemptAt
+  return `Last auto-save attempt: ${formatTimestampLabel(lastAttempt)}`
+})
+
+const statusTooltipText = computed(() => `${diagramStore.nodeCount} nodes · ${diagramStore.edgeCount} edges`)
 const exportDurationEstimatesMs = ref<Record<ExportFormat, number>>({
   drawio: 7000,
   png: 4500,
@@ -634,26 +693,49 @@ onBeforeUnmount(() => {
 
 .autosave-time {
   align-items: center;
-  color: var(--success);
+  border: 1px solid transparent;
+  border-radius: 999px;
   display: flex;
-  font-size: 0.78rem;
-  font-weight: 500;
+  font-size: 0.74rem;
+  font-weight: 600;
   gap: 0.3rem;
+  line-height: 1;
+  padding: 0.28rem 0.5rem;
+  white-space: nowrap;
 }
 
 .autosave-icon {
-  font-size: 0.95rem;
+  font-size: 0.88rem;
+}
+
+.autosave-success {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+  color: var(--success);
+}
+
+.autosave-warning {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 36%, transparent);
+  color: var(--warning);
 }
 
 .status-text {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.28rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--surface-border) 70%, transparent);
+  background: color-mix(in srgb, var(--surface-200) 70%, transparent);
+  color: var(--text-color-secondary);
+  white-space: nowrap;
 }
 
 .status-icon {
-  font-size: 1rem;
+  font-size: 0.92rem;
 }
 
 .save-form {
