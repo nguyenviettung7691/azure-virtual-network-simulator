@@ -34,9 +34,22 @@
 </template>
 <script setup lang="ts">
 import { NetworkComponentType } from '~/types/network'
+import { getValidator } from '~/lib/componentValidators'
+import type { FieldError } from '~/types/validation'
+
 const props = defineProps<{ modelValue: any; nodes: any[] }>()
 const emit = defineEmits(['update:modelValue'])
 const model = computed({ get: () => props.modelValue, set: v => emit('update:modelValue', v) })
+
+const validationErrors = computed(() => {
+  const validator = getValidator(model.value.type!)
+  if (!validator) return []
+  return validator(model.value, props.nodes || []).errors
+})
+
+function getError(fieldName: string): string | undefined {
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+}
 const subnetOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.SUBNET).map(n => ({ label: n.data.name, value: n.id, inputId: `kv-subnet-${n.id}` })))
 const allNodeOptions = computed(() => (props.nodes || []).filter(n => n.data?.type !== NetworkComponentType.INTERNET).map(n => ({ label: `${n.data.name} (${n.data.type})`, value: n.id })))
 const identityTypes = [
@@ -58,4 +71,11 @@ const selectedVnetRules = computed({
 .helper-text { font-size: 0.72rem; color: var(--text-muted); }
 .checkbox-list { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
 .checkbox-row { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; color: var(--text); }
+.input-wrapper { position: relative; }
+.input-wrapper.has-error :deep(.p-select),
+.input-wrapper.has-error :deep(.p-select-trigger) {
+  border-color: var(--red-500) !important;
+  background-color: var(--red-50);
+}
+.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 </style>

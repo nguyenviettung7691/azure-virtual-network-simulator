@@ -53,7 +53,7 @@ NUXT_PUBLIC_MONGODB_COLLECTION=user_settings
 npm run dev
 ```
 
-The development server starts at `http://localhost:3000` with hot-module replacement and Nuxt DevTools enabled.
+The development server starts at `http://localhost:3000` with hot-module replacement. (Nuxt DevTools are currently disabled in `nuxt.config.ts`.)
 
 ## Building for Production
 

@@ -7,7 +7,12 @@
 
     <!-- VM fields -->
     <template v-if="isVM">
-      <div class="field"><label>VM Size</label><InputText v-model="model.size" class="w-full" placeholder="Standard_D2s_v3" /></div>
+      <div class="field"><label>VM Size</label>
+        <div :class="{ 'has-error': getError('size') }" class="input-wrapper">
+          <InputText v-model="model.size" class="w-full" placeholder="Standard_D2s_v3" />
+        </div>
+        <small v-if="getError('size')" class="error-text">{{ getError('size') }}</small>
+      </div>
       <div class="field"><label>OS</label><SelectButton v-model="model.os" :options="['Windows','Linux']" /></div>
       <div class="field"><label>Image Publisher</label><InputText v-model="model.imagePublisher" class="w-full" placeholder="Canonical" /></div>
       <div class="field"><label>Image Offer</label><InputText v-model="model.imageOffer" class="w-full" placeholder="UbuntuServer" /></div>
@@ -16,7 +21,10 @@
         <Select v-model="model.diskType" :options="['Standard_LRS','StandardSSD_LRS','Premium_LRS']" class="w-full" />
       </div>
       <div class="field"><label>Subnet</label>
-        <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        <div :class="{ 'has-error': getError('subnetId') }" class="input-wrapper">
+          <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        </div>
+        <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
       </div>
       <div class="field"><label>Availability Zone</label>
         <Select v-model="model.availabilityZone" :options="['1','2','3','No zone']" class="w-full" />
@@ -25,7 +33,12 @@
 
     <!-- VMSS fields -->
     <template v-if="isVMSS">
-      <div class="field"><label>SKU (VM Size)</label><InputText v-model="model.sku" class="w-full" placeholder="Standard_D2s_v3" /></div>
+      <div class="field"><label>SKU (VM Size)</label>
+        <div :class="{ 'has-error': getError('sku') }" class="input-wrapper">
+          <InputText v-model="model.sku" class="w-full" placeholder="Standard_D2s_v3" />
+        </div>
+        <small v-if="getError('sku')" class="error-text">{{ getError('sku') }}</small>
+      </div>
       <div class="field"><label>OS</label><SelectButton v-model="model.os" :options="['Windows','Linux']" /></div>
       <div class="field"><label>Image Publisher</label><InputText v-model="model.imagePublisher" class="w-full" placeholder="Canonical" /></div>
       <div class="field"><label>Image Offer</label><InputText v-model="model.imageOffer" class="w-full" placeholder="UbuntuServer" /></div>
@@ -40,14 +53,22 @@
         <div class="field"><label>Max Capacity</label><InputNumber v-model="model.maxCapacity" :min="1" :max="1000" class="w-full" /></div>
       </template>
       <div class="field"><label>Subnet</label>
-        <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        <div :class="{ 'has-error': getError('subnetId') }" class="input-wrapper">
+          <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        </div>
+        <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
       </div>
     </template>
 
     <!-- AKS fields -->
     <template v-if="isAKS">
       <div class="field"><label>Kubernetes Version</label><InputText v-model="model.kubernetesVersion" class="w-full" placeholder="1.29.0" /></div>
-      <div class="field"><label>Node Count</label><InputNumber v-model="model.nodeCount" :min="1" :max="1000" class="w-full" /></div>
+      <div class="field"><label>Node Count</label>
+        <div :class="{ 'has-error': getError('nodeCount') }" class="input-wrapper">
+          <InputNumber v-model="model.nodeCount" :min="1" :max="1000" class="w-full" />
+        </div>
+        <small v-if="getError('nodeCount')" class="error-text">{{ getError('nodeCount') }}</small>
+      </div>
       <div class="field"><label>Node VM Size</label><InputText v-model="model.nodeVmSize" class="w-full" placeholder="Standard_D4s_v3" /></div>
       <div class="field"><label>Network Plugin</label>
         <Select v-model="model.networkPlugin" :options="['azure','kubenet','none']" class="w-full" />
@@ -56,7 +77,10 @@
       <div class="field checkbox-field"><label>Enable RBAC</label><ToggleSwitch v-model="model.enableRbac" /></div>
       <div class="field checkbox-field"><label>Private Cluster</label><ToggleSwitch v-model="model.enablePrivateCluster" /></div>
       <div class="field"><label>Subnet</label>
-        <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        <div :class="{ 'has-error': getError('subnetId') }" class="input-wrapper">
+          <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        </div>
+        <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
       </div>
     </template>
 
@@ -95,9 +119,22 @@
 
 <script setup lang="ts">
 import { NetworkComponentType } from '~/types/network'
+import { getValidator } from '~/lib/componentValidators'
+import type { FieldError } from '~/types/validation'
+
 const props = defineProps<{ modelValue: any; nodes: any[] }>()
 const emit = defineEmits(['update:modelValue'])
 const model = computed({ get: () => props.modelValue, set: v => emit('update:modelValue', v) })
+
+const validationErrors = computed(() => {
+  const validator = getValidator(model.value.type!)
+  if (!validator) return []
+  return validator(model.value, props.nodes || []).errors
+})
+
+function getError(fieldName: string): string | undefined {
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+}
 const subnetOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.SUBNET).map(n => ({ label: n.data.name, value: n.id })))
 const storageOptions = computed(() => (props.nodes || []).filter(n => [NetworkComponentType.STORAGE_ACCOUNT, NetworkComponentType.BLOB_STORAGE].includes(n.data?.type)).map(n => ({ label: n.data.name, value: n.id })))
 const computeTypes = [
@@ -118,4 +155,13 @@ const isFunctions = computed(() => model.value.type === NetworkComponentType.FUN
 .field { display: flex; flex-direction: column; gap: 0.3rem; }
 .field label { font-size: 0.82rem; font-weight: 600; color: var(--text-color-secondary); }
 .checkbox-field { flex-direction: row; align-items: center; justify-content: space-between; }
+.input-wrapper { position: relative; }
+.input-wrapper.has-error :deep(input),
+.input-wrapper.has-error :deep(.p-select),
+.input-wrapper.has-error :deep(.p-select-trigger),
+.input-wrapper.has-error :deep(.p-inputnumber-input) {
+  border-color: var(--red-500) !important;
+  background-color: var(--red-50);
+}
+.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 </style>

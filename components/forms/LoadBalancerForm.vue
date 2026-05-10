@@ -4,18 +4,29 @@
     <div class="field"><label>SKU</label><SelectButton v-model="model.sku" :options="['Basic','Standard','Gateway']" /></div>
     <div class="field"><label>Type</label><SelectButton v-model="model.loadBalancerType" :options="['Public','Internal']" /></div>
     <div class="field"><label>Tier</label><SelectButton v-model="model.tier" :options="['Regional','Global']" /></div>
+    <div class="field">
+      <label>Capacity</label>
+      <div :class="{ 'has-error': getError('capacity') }" class="input-wrapper">
+        <InputNumber v-model="model.capacity" :min="1" class="w-full" placeholder="Auto" />
+      </div>
+      <small v-if="getError('capacity')" class="error-text">{{ getError('capacity') }}</small>
+    </div>
 
     <!-- Frontend IP Configuration -->
     <div class="section">
       <div class="section-title">Frontend IP Configuration</div>
       <template v-if="model.loadBalancerType === 'Public'">
         <div class="field"><label>Frontend Public IP</label>
-          <Select v-model="frontendPublicIpId" :options="ipOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Public IP" showClear />
+          <div :class="{ 'has-error': getError('frontendIpConfigs')?.includes('not exist') }" class="input-wrapper">
+            <Select v-model="frontendPublicIpId" :options="ipOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Public IP" showClear />
+          </div>
         </div>
       </template>
       <template v-else>
         <div class="field"><label>Frontend Subnet</label>
-          <Select v-model="frontendSubnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Subnet" showClear />
+          <div :class="{ 'has-error': getError('frontendIpConfigs')?.includes('not exist') }" class="input-wrapper">
+            <Select v-model="frontendSubnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Subnet" showClear />
+          </div>
         </div>
         <div class="field"><label>Frontend Private IP</label>
           <InputText v-model="frontendPrivateIp" class="w-full" placeholder="10.0.1.10 (empty = Dynamic)" />
@@ -43,19 +54,28 @@
         <Button icon="pi pi-plus" size="small" text rounded @click="addProbe" aria-label="Add probe" />
       </div>
       <div v-if="probes.length === 0" class="helper-text">No health probes configured.</div>
-      <div v-for="(probe, i) in probes" :key="i" class="rule-card">
+      <div v-for="(probe, i) in probes" :key="i" class="rule-card" :class="{ 'has-error': getProbeErrors(i).length > 0 }">
         <div class="rule-row">
           <InputText v-model="probe.name" class="flex-1" placeholder="probe-name" />
           <Select v-model="probe.protocol" :options="['Http','Https','Tcp']" class="w-5rem" />
-          <InputNumber v-model="probe.port" :min="1" :max="65535" class="w-5rem" placeholder="Port" />
+          <div :class="{ 'has-error': hasProbeFieldError(i, 'port') }" class="input-wrapper" style="width:5rem">
+            <InputNumber v-model="probe.port" :min="1" :max="65535" placeholder="Port" />
+          </div>
           <Button icon="pi pi-trash" size="small" text rounded severity="danger" @click="removeProbe(i)" />
         </div>
         <div class="rule-row">
           <label class="caption">Interval (s)</label>
-          <InputNumber v-model="probe.intervalInSeconds" :min="5" :max="2147483647" class="w-5rem" />
+          <div :class="{ 'has-error': hasProbeFieldError(i, 'intervalInSeconds') }" class="input-wrapper" style="width:5rem">
+            <InputNumber v-model="probe.intervalInSeconds" :min="5" :max="2147483647" />
+          </div>
           <label class="caption">Unhealthy threshold</label>
-          <InputNumber v-model="probe.numberOfProbes" :min="1" :max="2147483647" class="w-5rem" />
+          <div :class="{ 'has-error': hasProbeFieldError(i, 'numberOfProbes') }" class="input-wrapper" style="width:5rem">
+            <InputNumber v-model="probe.numberOfProbes" :min="1" :max="2147483647" />
+          </div>
           <InputText v-if="probe.protocol !== 'Tcp'" v-model="probe.requestPath" class="flex-1" placeholder="/health" />
+        </div>
+        <div v-if="getProbeErrors(i).length > 0" class="probe-errors">
+          <small v-for="(err, j) in getProbeErrors(i)" :key="j" class="error-text">{{ err }}</small>
         </div>
       </div>
     </div>
@@ -85,9 +105,12 @@
     <div class="field"><label>Description</label><Textarea v-model="model.description" rows="2" class="w-full" /></div>
   </div>
 </template>
+
 <script setup lang="ts">
 import type { LoadBalancerComponent } from '~/types/network'
 import { NetworkComponentType } from '~/types/network'
+import { getValidator } from '~/lib/componentValidators'
+import type { FieldError } from '~/types/validation'
 
 const props = defineProps<{ modelValue: Partial<LoadBalancerComponent>; nodes: any[] }>()
 const emit = defineEmits(['update:modelValue'])
@@ -150,8 +173,28 @@ const rules = computed({
   get: () => (model.value.loadBalancingRules as any[]) || [],
   set: (v: any[]) => { model.value = { ...model.value, loadBalancingRules: v } },
 })
-function addRule() { rules.value = [...rules.value, { name: 'rule', protocol: 'Tcp', frontendPort: 80, backendPort: 80 }] }
+function addRule() { rules.value = [...rules.value, { id: `rule-${Date.now()}`, name: 'new-rule', protocol: 'Tcp', frontendPort: 80, backendPort: 80 }] }
 function removeRule(i: number) { rules.value = rules.value.filter((_: any, idx: number) => idx !== i) }
+
+const validationErrors = computed(() => {
+  const validator = getValidator(model.value.type!)
+  if (!validator) return []
+  return validator(model.value, props.nodes || []).errors
+})
+
+function getError(fieldName: string): string | undefined {
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+}
+
+function getProbeErrors(probeIdx: number): string[] {
+  return validationErrors.value
+    .filter((e: FieldError) => e.fieldName.startsWith(`healthProbes[${probeIdx}]`))
+    .map((e: FieldError) => e.message)
+}
+
+function hasProbeFieldError(probeIdx: number, fieldName: string): boolean {
+  return validationErrors.value.some((e: FieldError) => e.fieldName === `healthProbes[${probeIdx}].${fieldName}`)
+}
 </script>
 <style scoped>
 .component-form { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -164,5 +207,16 @@ function removeRule(i: number) { rules.value = rules.value.filter((_: any, idx: 
 .checkbox-list { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
 .checkbox-row { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; color: var(--text); }
 .rule-card { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
+.rule-card.has-error { border-color: var(--red-500); background-color: var(--red-50); }
 .rule-row { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+.input-wrapper { position: relative; }
+.input-wrapper.has-error :deep(input),
+.input-wrapper.has-error :deep(.p-select),
+.input-wrapper.has-error :deep(.p-select-trigger),
+.input-wrapper.has-error :deep(.p-inputnumber-input) {
+  border-color: var(--red-500) !important;
+  background-color: var(--red-50);
+}
+.probe-errors { display: flex; flex-direction: column; gap: 0.2rem; }
+.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 </style>

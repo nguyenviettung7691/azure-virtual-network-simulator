@@ -10,7 +10,10 @@
       <div class="field"><label>Private IP</label><InputText v-model="model.privateIpAddress" class="w-full" placeholder="10.0.1.4" /></div>
       <div class="field"><label>Allocation Method</label><SelectButton v-model="model.privateIpAllocationMethod" :options="['Dynamic','Static']" /></div>
       <div class="field"><label>Subnet</label>
-        <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" showClear />
+        <div :class="{ 'has-error': getError('subnetId') }" class="input-wrapper">
+          <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" showClear />
+        </div>
+        <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
       </div>
       <div class="field"><label>Public IP Address</label>
         <Select v-model="model.publicIpId" :options="ipOptions" option-label="label" option-value="value" class="w-full" placeholder="None" showClear />
@@ -35,10 +38,16 @@
     <!-- Service Endpoint-specific fields -->
     <template v-if="isServiceEndpoint">
       <div class="field"><label>Service</label>
-        <Select v-model="model.service" :options="serviceOptions" class="w-full" />
+        <div :class="{ 'has-error': getError('service') }" class="input-wrapper">
+          <Select v-model="model.service" :options="serviceOptions" class="w-full" />
+        </div>
+        <small v-if="getError('service')" class="error-text">{{ getError('service') }}</small>
       </div>
       <div class="field"><label>Subnet</label>
-        <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        <div :class="{ 'has-error': getError('subnetId') }" class="input-wrapper">
+          <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        </div>
+        <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
       </div>
     </template>
 
@@ -47,7 +56,10 @@
       <div class="field"><label>Connection Name</label><InputText v-model="model.connectionName" class="w-full" placeholder="my-pe-connection" /></div>
       <div class="field"><label>Private IP Address</label><InputText v-model="model.privateIpAddress" class="w-full" placeholder="10.0.1.5" /></div>
       <div class="field"><label>Subnet</label>
-        <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        <div :class="{ 'has-error': getError('subnetId') }" class="input-wrapper">
+          <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+        </div>
+        <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
       </div>
       <div class="field"><label>Target Resource (Private Link Service)</label>
         <Select v-model="model.privateLinkServiceId" :options="privateLinkOptions" option-label="label" option-value="value" class="w-full" placeholder="Select target resource" showClear />
@@ -56,7 +68,10 @@
         <InputText v-model="groupIdsStr" class="w-full" placeholder="blob, vault, sqlServer" />
       </div>
       <div class="field"><label>Private DNS Zone Group</label>
-        <Select v-model="model.dnsZoneGroupId" :options="dnsZoneOptions" option-label="label" option-value="value" class="w-full" placeholder="None" showClear />
+        <div :class="{ 'has-error': getError('dnsZoneGroupId') }" class="input-wrapper">
+          <Select v-model="model.dnsZoneGroupId" :options="dnsZoneOptions" option-label="label" option-value="value" class="w-full" placeholder="None" showClear />
+        </div>
+        <small v-if="getError('dnsZoneGroupId')" class="error-text">{{ getError('dnsZoneGroupId') }}</small>
       </div>
     </template>
   </div>
@@ -65,9 +80,22 @@
 <script setup lang="ts">
 import { NetworkComponentType } from '~/types/network'
 
+import { getValidator } from '~/lib/componentValidators'
+import type { FieldError } from '~/types/validation'
+
 const props = defineProps<{ modelValue: any; nodes: any[] }>()
 const emit = defineEmits(['update:modelValue'])
 const model = computed({ get: () => props.modelValue, set: v => emit('update:modelValue', v) })
+
+const validationErrors = computed(() => {
+  const validator = getValidator(model.value.type!)
+  if (!validator) return []
+  return validator(model.value, props.nodes || []).errors
+})
+
+function getError(fieldName: string): string | undefined {
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+}
 
 const subnetOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.SUBNET).map(n => ({ label: n.data.name, value: n.id })))
 const nsgOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.NSG).map(n => ({ label: n.data.name, value: n.id })))
@@ -119,4 +147,12 @@ const groupIdsStr = computed({
 .helper-text { font-size: 0.72rem; color: var(--text-muted); }
 .checkbox-list { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
 .checkbox-row { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; color: var(--text); }
+.input-wrapper { position: relative; }
+.input-wrapper.has-error :deep(input),
+.input-wrapper.has-error :deep(.p-select),
+.input-wrapper.has-error :deep(.p-select-trigger) {
+  border-color: var(--red-500) !important;
+  background-color: var(--red-50);
+}
+.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 </style>

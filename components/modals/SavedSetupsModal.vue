@@ -27,20 +27,26 @@
       <div v-for="setup in setups" :key="setup.id" class="setup-card">
         <div
           class="setup-thumbnail"
-          @mouseenter="onThumbnailEnter(setup.id, $event, setup.thumbnail)"
-          @mousemove="onThumbnailMove(setup.id, $event)"
-          @mouseleave="onThumbnailLeave"
         >
           <img v-if="setup.thumbnail" :src="setup.thumbnail" alt="Setup preview" />
           <div v-else class="no-thumbnail">
             <Icon icon="mdi:image-off" />
           </div>
-          <div
-            v-if="activeZoom?.setupId === setup.id"
-            class="thumbnail-magnifier"
-            :style="magnifierStyle"
-            aria-hidden="true"
-          />
+          <Button
+            v-if="setup.thumbnail"
+            class="thumbnail-fullsize-btn"
+            severity="secondary"
+            text
+            rounded
+            size="small"
+            v-tooltip.left="'Open full size preview'"
+            :aria-label="`Open full size preview for ${setup.name}`"
+            @click="openThumbnailPreview(setup)"
+          >
+            <template #icon>
+              <Icon icon="mdi:fullscreen" />
+            </template>
+          </Button>
         </div>
         <div class="setup-info">
           <span class="setup-name">{{ setup.name }}</span>
@@ -78,6 +84,26 @@
 
     <Message v-if="errorMessage" severity="error" :closable="false">{{ errorMessage }}</Message>
   </Dialog>
+
+  <Dialog
+    v-model:visible="showThumbnailPreview"
+    modal
+    header="Setup Preview"
+    :style="{ width: 'min(1400px, 96vw)' }"
+    :breakpoints="{ '1200px': '98vw', '900px': '98vw', '640px': '99vw' }"
+  >
+    <div class="thumbnail-preview-wrap">
+      <img
+        v-if="selectedThumbnailSrc"
+        class="thumbnail-preview-image"
+        :src="selectedThumbnailSrc"
+        :alt="selectedThumbnailAlt"
+      />
+      <div v-else class="thumbnail-preview-empty">
+        <Icon icon="mdi:image-off" />
+      </div>
+    </div>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
@@ -89,24 +115,9 @@ const savedSetupsStore = useSavedSetupsStore()
 const diagramStore = useDiagramStore()
 const testsStore = useTestsStore()
 const usingSetupId = ref<string | null>(null)
-const hoverMagnifierEnabled = ref(false)
-
-interface ActiveZoomState {
-  setupId: string
-  src: string
-  xPercent: number
-  yPercent: number
-  pointerX: number
-  pointerY: number
-  imageOffsetX: number
-  imageOffsetY: number
-  imageWidth: number
-  imageHeight: number
-}
-
-const activeZoom = ref<ActiveZoomState | null>(null)
-const MAGNIFIER_ZOOM_FACTOR = 2.4
-const MAGNIFIER_SIZE_PX = 130
+const showThumbnailPreview = ref(false)
+const selectedThumbnailSrc = ref<string | null>(null)
+const selectedThumbnailAlt = ref('Setup preview')
 const savedSetupsQuery = useSavedSetupsQuery(
   computed(() => authStore.userId),
   computed(() => savedSetupsStore.showModal && authStore.isAuthenticated),
@@ -132,115 +143,15 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-const magnifierStyle = computed<Record<string, string>>(() => {
-  if (!activeZoom.value) {
-    return {}
-  }
-
-  const lensRadius = MAGNIFIER_SIZE_PX / 2
-  const backgroundX = lensRadius - ((activeZoom.value.pointerX - activeZoom.value.imageOffsetX) * MAGNIFIER_ZOOM_FACTOR)
-  const backgroundY = lensRadius - ((activeZoom.value.pointerY - activeZoom.value.imageOffsetY) * MAGNIFIER_ZOOM_FACTOR)
-
-  return {
-    '--zoom-x': `${activeZoom.value.xPercent}`,
-    '--zoom-y': `${activeZoom.value.yPercent}`,
-    backgroundImage: `url(${activeZoom.value.src})`,
-    backgroundSize: `${activeZoom.value.imageWidth * MAGNIFIER_ZOOM_FACTOR}px ${activeZoom.value.imageHeight * MAGNIFIER_ZOOM_FACTOR}px`,
-    backgroundPosition: `${backgroundX}px ${backgroundY}px`,
-  }
-})
-
-function updateZoomPosition(setupId: string, event: MouseEvent) {
-  if (!hoverMagnifierEnabled.value || !activeZoom.value || activeZoom.value.setupId !== setupId) {
+function openThumbnailPreview(setup: SavedSetup) {
+  if (!setup.thumbnail) {
     return
   }
 
-  const target = event.currentTarget as HTMLElement | null
-  if (!target) return
-
-  const preview = target.querySelector('img') as HTMLImageElement | null
-  if (!preview || !preview.naturalWidth || !preview.naturalHeight) return
-
-  const rect = target.getBoundingClientRect()
-  if (!rect.width || !rect.height) return
-
-  const imageAspect = preview.naturalWidth / preview.naturalHeight
-  const containerAspect = rect.width / rect.height
-
-  let imageWidth = rect.width
-  let imageHeight = rect.height
-  let imageOffsetX = 0
-  let imageOffsetY = 0
-
-  if (imageAspect > containerAspect) {
-    imageHeight = rect.width / imageAspect
-    imageOffsetY = (rect.height - imageHeight) / 2
-  } else {
-    imageWidth = rect.height * imageAspect
-    imageOffsetX = (rect.width - imageWidth) / 2
-  }
-
-  const pointerX = Math.min(rect.width, Math.max(0, event.clientX - rect.left))
-  const pointerY = Math.min(rect.height, Math.max(0, event.clientY - rect.top))
-
-  const imageX = Math.min(imageWidth, Math.max(0, pointerX - imageOffsetX))
-  const imageY = Math.min(imageHeight, Math.max(0, pointerY - imageOffsetY))
-
-  const xPercent = imageWidth > 0 ? (imageX / imageWidth) * 100 : 50
-  const yPercent = imageHeight > 0 ? (imageY / imageHeight) * 100 : 50
-
-  activeZoom.value = {
-    ...activeZoom.value,
-    xPercent,
-    yPercent,
-    pointerX,
-    pointerY,
-    imageOffsetX,
-    imageOffsetY,
-    imageWidth,
-    imageHeight,
-  }
+  selectedThumbnailSrc.value = setup.thumbnail
+  selectedThumbnailAlt.value = `${setup.name} preview`
+  showThumbnailPreview.value = true
 }
-
-function onThumbnailEnter(setupId: string, event: MouseEvent, src?: string) {
-  if (!hoverMagnifierEnabled.value || !src) return
-
-  activeZoom.value = {
-    setupId,
-    src,
-    xPercent: 50,
-    yPercent: 50,
-    pointerX: 0,
-    pointerY: 0,
-    imageOffsetX: 0,
-    imageOffsetY: 0,
-    imageWidth: 0,
-    imageHeight: 0,
-  }
-
-  updateZoomPosition(setupId, event)
-}
-
-function onThumbnailMove(setupId: string, event: MouseEvent) {
-  updateZoomPosition(setupId, event)
-}
-
-function onThumbnailLeave() {
-  activeZoom.value = null
-}
-
-onMounted(() => {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    hoverMagnifierEnabled.value = false
-    return
-  }
-
-  hoverMagnifierEnabled.value = window.matchMedia('(hover: hover) and (pointer: fine)').matches
-})
-
-onBeforeUnmount(() => {
-  activeZoom.value = null
-})
 
 function useSetup(setup: SavedSetup) {
   diagramStore.confirmAction(
@@ -280,19 +191,42 @@ function deleteSetup(setup: SavedSetup) {
 .setup-card:hover { box-shadow: 0 8px 22px rgba(0,0,0,0.16); transform: translateY(-1px); }
 .setup-thumbnail { height: 180px; background: var(--surface-section); display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
 .setup-thumbnail img { width: 100%; height: 100%; object-fit: contain; object-position: center; }
-.thumbnail-magnifier {
-  width: 130px;
-  height: 130px;
+.thumbnail-fullsize-btn {
   position: absolute;
-  left: calc(var(--zoom-x) * 1%);
-  top: calc(var(--zoom-y) * 1%);
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--surface-0) 70%, transparent);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.26);
-  background-repeat: no-repeat;
-  backdrop-filter: saturate(1.15);
-  pointer-events: none;
+  top: 0.45rem;
+  right: 0.45rem;
+  width: 2rem;
+  height: 2rem;
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--surface-0) 88%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--surface-border) 65%, transparent);
+  backdrop-filter: blur(1.2px);
+}
+.thumbnail-fullsize-btn :deep(.iconify) {
+  font-size: 1rem;
+}
+.thumbnail-preview-wrap {
+  min-height: min(80vh, 740px);
+  max-height: min(80vh, 740px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--surface-section) 75%, var(--surface-ground));
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  padding: 0.7rem;
+}
+.thumbnail-preview-image {
+  max-width: 100%;
+  max-height: calc(min(80vh, 740px) - 1.4rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.thumbnail-preview-empty {
+  font-size: 2.2rem;
+  color: var(--text-color-secondary);
+  opacity: 0.35;
 }
 .no-thumbnail { font-size: 2.2rem; color: var(--text-color-secondary); opacity: 0.3; }
 .setup-info { padding: 0.74rem 0.72rem; display: flex; flex-direction: column; gap: 0.42rem; flex: 1; }
@@ -312,10 +246,6 @@ function deleteSetup(setup: SavedSetup) {
 
   .setup-thumbnail {
     height: 158px;
-  }
-
-  .thumbnail-magnifier {
-    display: none;
   }
 }
 </style>

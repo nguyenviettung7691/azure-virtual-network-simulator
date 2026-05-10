@@ -251,10 +251,10 @@ A reactive dashboard reflecting the live diagram state.
 - **Export Formats:** Configured to serialize canvas state to PNG, SVG, PDF, or `.drawio`.
 - **Image export rendering strategy:**
   - `SVG` export is produced by an app-owned DOM-to-SVG serializer that captures the live Vue Flow viewport without relying on third-party DOM snapshot libraries.
-  - `PNG` and `PDF` export render from diagram state using a canvas-based raster pipeline (worker-first with main-thread fallback), avoiding `foreignObject`-dependent rasterization.
-  - If worker conversion is unavailable, PNG/PDF fallback to the compatible main-thread conversion path.
+  - `PNG` and `PDF` export render from that snapshot through the app's main-thread raster/PDF path, avoiding `foreignObject`-dependent rasterization.
   - Save thumbnails reuse the same diagram-state raster pipeline so export previews and saved-setup thumbnails stay visually aligned.
   - `.drawio` export uses a structured diagram-state serializer in a lazy worker helper so XML generation stays off the UI thread.
+  - `SVG` and `.drawio` use worker conversion when available, with built-in fallback paths.
   - Known limitations (current raster pipeline): PNG/PDF/thumbnail output is intentionally topology-first and may not yet match all live-template visual details (icons, gradients, and CSS-only effects) pixel-for-pixel.
 - **Export Controls:** Bottom toolbar exposes format buttons (`.drawio`, `PNG`, `PDF`, `SVG`) and an inline custom filename input.
 - **Filename Policy:** Default name is generated as `azure-vnet-YYYYMMDD-HHmmss`; user input is sanitized and extension-normalized to match the selected format.
@@ -301,9 +301,9 @@ A reactive dashboard reflecting the live diagram state.
 - On authenticated bootstrap, remote settings are queried after AWS/session initialization. If a remote document exists, it overwrites the local snapshot and then rewrites the warmed `localStorage` cache.
 - After bootstrap, subsequent authenticated settings changes are persisted through a debounced Vue Query mutation (`1500 ms`) so rapid toggles collapse into a single upsert.
 - When no authenticated user is present, remote sync is disabled and `localStorage` remains the only persistence layer.
-- **Transport:** The browser calls an **AWS Lambda Function URL** (`NUXT_PUBLIC_MONGODB_ENDPOINT`) authenticated with the user's Cognito ID token (`Authorization: Bearer <id-token>`). The Lambda verifies the JWT against Cognito's JWKS endpoint and executes `findOne` / `updateOne` using the native Node.js MongoDB driver. MongoDB credentials never leave the Lambda environment.
+- **Transport:** The browser calls an **AWS Lambda Function URL** (`NUXT_PUBLIC_MONGODB_ENDPOINT`) authenticated with the user's Cognito ID token (`Authorization: Bearer <id-token>`). The Lambda performs structural JWT decode checks (expiry and issuer), validates that the JWT `kid` exists in the Cognito JWKS set, and executes `findOne` / `updateOne` using the native Node.js MongoDB driver. MongoDB credentials never leave the Lambda environment.
 - **Deprecation note:** The former Atlas App Services Data API (HTTPS Endpoints) was deprecated and reached end-of-life in 2025. The Lambda proxy replaces it. The `mongodbApiKey` runtime config key has been removed — only `mongodbEndpoint`, `mongodbDatabase`, and `mongodbCollection` remain as public build-time config values.
-- **Lambda source:** `infra/lambda/mongodb-settings.mjs`. Required environment variables: `MONGODB_URI`, `MONGODB_DATABASE`, `MONGODB_COLLECTION`, `COGNITO_USER_POOL_ID`, `COGNITO_REGION`, and optionally `ALLOWED_ORIGIN` for CORS.
+- **Lambda source:** `infra/lambda/mongodb-settings.mjs`. Required environment variables: `MONGODB_URI`, `MONGODB_DATABASE`, `MONGODB_COLLECTION`, `COGNITO_USER_POOL_ID`, `COGNITO_REGION`.
 - **JWT verification:** The reference Lambda performs structural decode plus expiry/issuer checks. For production, add the `aws-jwt-verify` npm package for full RS256 signature validation.
 
 ---

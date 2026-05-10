@@ -3,16 +3,27 @@
     <div class="field"><label>Name *</label><InputText v-model="model.name" class="w-full" placeholder="my-app-gw" /></div>
     <div class="field"><label>SKU</label><Select v-model="model.sku" :options="['Standard_v2','WAF_v2','Standard','WAF']" class="w-full" /></div>
     <div class="field"><label>Frontend Type</label><SelectButton v-model="model.frontendType" :options="['Public','Internal']" /></div>
-    <div class="field"><label>Capacity</label><InputNumber v-model="model.capacity" :min="1" :max="32" class="w-full" /></div>
+    <div class="field"><label>Capacity</label>
+      <div :class="{ 'has-error': getError('capacity') }" class="input-wrapper">
+        <InputNumber v-model="model.capacity" :min="1" :max="32" class="w-full" />
+      </div>
+      <small v-if="getError('capacity')" class="error-text">{{ getError('capacity') }}</small>
+    </div>
     <div class="field checkbox-field"><label>Enable HTTP/2</label><ToggleSwitch v-model="model.enableHttp2" /></div>
     <div class="field checkbox-field"><label>Enable WAF</label><ToggleSwitch v-model="model.enableWaf" /></div>
     <div class="field" v-if="model.enableWaf"><label>WAF Mode</label><SelectButton v-model="model.wafMode" :options="['Detection','Prevention']" /></div>
     <div class="field"><label>Subnet</label>
-      <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+      <div :class="{ 'has-error': getError('subnetId') }" class="input-wrapper">
+        <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
+      </div>
+      <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
     </div>
     <div class="field" v-if="model.frontendType === 'Public'">
       <label>Frontend Public IP</label>
-      <Select v-model="model.frontendIpId" :options="ipOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Public IP" showClear />
+      <div :class="{ 'has-error': getError('frontendIpId') }" class="input-wrapper">
+        <Select v-model="model.frontendIpId" :options="ipOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Public IP" showClear />
+      </div>
+      <small v-if="getError('frontendIpId')" class="error-text">{{ getError('frontendIpId') }}</small>
     </div>
     <div class="backend-section">
       <div class="backend-header">
@@ -32,6 +43,8 @@
 <script setup lang="ts">
 import type { AppGatewayComponent } from '~/types/network'
 import { NetworkComponentType } from '~/types/network'
+import { getValidator } from '~/lib/componentValidators'
+import type { FieldError } from '~/types/validation'
 const props = defineProps<{ modelValue: Partial<AppGatewayComponent>; nodes: any[] }>()
 const emit = defineEmits(['update:modelValue'])
 const model = computed({ get: () => props.modelValue as AppGatewayComponent, set: v => emit('update:modelValue', v) })
@@ -55,6 +68,16 @@ const selectedBackendIds = computed({
   get: () => Array.isArray(model.value.backendPools) ? model.value.backendPools as string[] : [],
   set: (ids: string[]) => { model.value = { ...model.value, backendPools: ids } },
 })
+
+const validationErrors = computed(() => {
+  const validator = getValidator(model.value.type!)
+  if (!validator) return []
+  return validator(model.value, props.nodes || []).errors
+})
+
+function getError(fieldName: string): string | undefined {
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+}
 </script>
 <style scoped>
 .component-form { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -67,4 +90,13 @@ const selectedBackendIds = computed({
 .backend-caption, .helper-text { font-size: 0.72rem; color: var(--text-muted); }
 .checkbox-list { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
 .checkbox-row { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; color: var(--text); }
+.input-wrapper { position: relative; }
+.input-wrapper.has-error :deep(input),
+.input-wrapper.has-error :deep(.p-select),
+.input-wrapper.has-error :deep(.p-select-trigger),
+.input-wrapper.has-error :deep(.p-inputnumber-input) {
+  border-color: var(--red-500) !important;
+  background-color: var(--red-50);
+}
+.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 </style>

@@ -102,7 +102,7 @@ Keep these lifecycles decoupled: app releases continue through Amplify, while in
 
 ## Environment Strategy
 
-Use isolated AWS resources per environment (`dev`, `staging`, `production`) for Cognito, S3, Bedrock region config, and MongoDB endpoint/API key.
+Use isolated AWS resources per environment (`dev`, `staging`, `production`) for Cognito, S3, Bedrock region config, and MongoDB Lambda Function URL/database configuration.
 
 **Where to configure variables per context:**
 

@@ -272,9 +272,9 @@ Export behavior details:
   - While any export is running, all export buttons are disabled until that export completes or fails.
 - Rendering behavior:
   - `SVG` export uses an app-owned DOM-to-SVG serializer to capture an exact serialized snapshot of the live diagram canvas.
-  - `PNG` and `PDF` render from diagram state via a canvas-based raster path (worker-first, with a main-thread fallback) to avoid `foreignObject`-dependent rasterization.
+  - `PNG` and `PDF` render from a DOM-to-SVG snapshot through the app's main-thread raster/PDF path (no `foreignObject`-dependent rasterization).
   - `.drawio` export serializes structured diagram state in a worker-side format helper instead of serializing the live DOM.
-  - If worker conversion is unavailable, PNG/PDF fallback to the compatible main-thread path.
+  - `SVG` and `.drawio` use worker conversion when available, with built-in fallback paths.
   - Save thumbnails reuse the same diagram-state raster pipeline so export and cloud-save previews stay visually aligned.
 - Import behavior:
   - Import parser accepts `.drawio` and `.xml` and replaces the current diagram state after a successful parse.

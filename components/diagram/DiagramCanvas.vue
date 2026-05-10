@@ -691,6 +691,7 @@ function loadQuickSampleDiagram() {
     sku: 'Standard',
     tier: 'Regional',
     loadBalancerType: 'Public',
+    capacity: 2,
     frontendIpConfigs: [{
       id: 'sample-lb-frontend-1',
       name: 'public-frontend',
@@ -1194,6 +1195,7 @@ function loadFullSampleDiagram() {
     sku: 'Standard',
     tier: 'Regional',
     loadBalancerType: 'Internal',
+    capacity: 2,
     frontendIpConfigs: [{
       id: 'sample-intlb-frontend-1',
       name: 'intlb-frontend',

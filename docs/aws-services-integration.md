@@ -1,6 +1,6 @@
 # AWS Services Integration
 
-This document describes the app-side AWS dependencies as they exist in the current repository. The Terraform stack in `infra/` provisions the deployment edge (CloudFront, ACM, Route 53, EventBridge, Lambda invalidation) but does **not** provision Cognito, S3, or Bedrock resources for the application itself.
+This document describes the app-side AWS dependencies as they exist in the current repository. The Terraform stack in `infra/` provisions the deployment edge (CloudFront, ACM, Route 53, EventBridge, Lambda invalidation) but does **not** provision Cognito, S3, Bedrock, or MongoDB application resources.
 
 ---
 

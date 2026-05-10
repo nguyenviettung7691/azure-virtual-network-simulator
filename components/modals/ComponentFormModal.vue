@@ -8,6 +8,12 @@
   >
     <div v-if="activeForm" class="form-wrapper">
       <component :is="activeForm" v-model="formData" :nodes="diagramStore.nodes" />
+      <div v-if="submitErrors.length > 0" class="validation-summary">
+        <strong>Fix these validation errors before saving:</strong>
+        <ul>
+          <li v-for="(err, idx) in submitErrors" :key="idx">{{ err }}</li>
+        </ul>
+      </div>
     </div>
     <div v-else class="no-form">
       <p>Unknown component type: {{ currentType }}</p>
@@ -26,11 +32,14 @@
 import { NetworkComponentType, getComponentLabel } from '~/types/network'
 import type { AnyNetworkComponent } from '~/types/network'
 import type { VNetComponent } from '~/types/network'
+import { getValidator } from '~/lib/componentValidators'
+import type { FieldError } from '~/types/validation'
 
 const diagramStore = useDiagramStore()
 const settingsStore = useSettingsStore()
 
 const formData = ref<Partial<AnyNetworkComponent>>({})
+const submitErrors = ref<string[]>([])
 
 const isEditing = computed(() => !!diagramStore.editingComponent)
 const currentType = computed(() => diagramStore.editingComponent?.type || diagramStore.addingComponentType)
@@ -43,6 +52,7 @@ const modalTitle = computed(() => {
 
 watch(() => diagramStore.showComponentModal, (visible) => {
   if (visible) {
+    submitErrors.value = []
     if (diagramStore.editingComponent) {
       formData.value = { ...diagramStore.editingComponent }
     } else {
@@ -68,6 +78,33 @@ function buildInitialComponentData(type: NetworkComponentType): Partial<AnyNetwo
       resourceGroup: settingsStore.defaultResourceGroup,
     }
     return { ...base, ...vnetDefaults }
+  }
+
+  if (type === NetworkComponentType.LOAD_BALANCER) {
+    return {
+      ...base,
+      sku: 'Standard',
+      loadBalancerType: 'Public',
+      tier: 'Regional',
+      capacity: 2,
+      frontendIpConfigs: [],
+      backendPools: [],
+      loadBalancingRules: [],
+      healthProbes: [],
+    }
+  }
+
+  if (type === NetworkComponentType.APP_GATEWAY) {
+    return {
+      ...base,
+      sku: 'WAF_v2',
+      tier: 'WAF_v2',
+      capacity: 2,
+      frontendType: 'Public',
+      backendPools: [],
+      enableWaf: true,
+      wafMode: 'Prevention',
+    }
   }
 
   return base
@@ -107,16 +144,35 @@ const activeForm = computed(() => currentType.value ? formMap[currentType.value]
 
 function onSubmit() {
   const data = formData.value as AnyNetworkComponent
+  submitErrors.value = []
   if (data.type === NetworkComponentType.INTERNET) {
     diagramStore.closeComponentModal()
     return
   }
-  if (!data.name?.trim()) return
+  if (!data.name?.trim()) {
+    submitErrors.value = ['Name is required.']
+    return
+  }
+
+  const validator = getValidator(data.type)
+  if (validator) {
+    const result = validator(data, diagramStore.nodes)
+    if (!result.isValid) {
+      const uniqueErrors = new Set<string>()
+      result.errors
+        .filter((err: FieldError) => err.severity !== 'warning')
+        .forEach((err: FieldError) => uniqueErrors.add(err.message))
+      submitErrors.value = Array.from(uniqueErrors)
+      if (submitErrors.value.length > 0) return
+    }
+  }
+
   if (isEditing.value) {
     diagramStore.updateNode(data.id, data)
   } else {
     diagramStore.addNode(data)
   }
+  submitErrors.value = []
   diagramStore.closeComponentModal()
 }
 
@@ -150,4 +206,17 @@ function onDelete() {
   font-size: 0.92rem;
 }
 .no-form { padding: 1.25rem 1.5rem; color: var(--text-color-secondary); }
+.validation-summary {
+  margin-top: 0.85rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--red-300);
+  background: var(--red-50);
+  color: var(--red-900);
+  font-size: 0.84rem;
+}
+.validation-summary ul {
+  margin: 0.45rem 0 0;
+  padding-left: 1.1rem;
+}
 </style>

@@ -1,7 +1,12 @@
 <template>
   <div class="component-form">
     <div class="field"><label>Name *</label><InputText v-model="model.name" class="w-full" placeholder="my-dns-zone" /></div>
-    <div class="field"><label>Zone Name *</label><InputText v-model="model.zoneName" class="w-full" placeholder="example.com" /></div>
+    <div class="field"><label>Zone Name *</label>
+      <div :class="{ 'has-error': getError('zoneName') }" class="input-wrapper">
+        <InputText v-model="model.zoneName" class="w-full" placeholder="example.com" />
+      </div>
+      <small v-if="getError('zoneName')" class="error-text">{{ getError('zoneName') }}</small>
+    </div>
     <div class="field"><label>Zone Type</label><SelectButton v-model="model.zoneType" :options="['Public','Private']" /></div>
     <div v-if="model.zoneType === 'Private'" class="links-section">
       <div class="section-header">
@@ -43,9 +48,22 @@ import type { DnsZoneComponent } from '~/types/network'
 import type { DnsRecord } from '~/types/network'
 import { NetworkComponentType } from '~/types/network'
 
+import { getValidator } from '~/lib/componentValidators'
+import type { FieldError } from '~/types/validation'
+
 const props = defineProps<{ modelValue: Partial<DnsZoneComponent>; nodes: any[] }>()
 const emit = defineEmits(['update:modelValue'])
 const model = computed({ get: () => props.modelValue as DnsZoneComponent, set: v => emit('update:modelValue', v) })
+
+const validationErrors = computed(() => {
+  const validator = getValidator(model.value.type!)
+  if (!validator) return []
+  return validator(model.value, props.nodes || []).errors
+})
+
+function getError(fieldName: string): string | undefined {
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+}
 
 const recordTypes = ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SRV', 'TXT']
 
@@ -110,6 +128,14 @@ function updateRecordValues(idx: number, nextValue: string) {
 .section-caption, .helper-text { font-size: 0.72rem; color: var(--text-muted); }
 .checkbox-list { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
 .checkbox-row { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; color: var(--text); }
+.input-wrapper { position: relative; }
+.input-wrapper.has-error :deep(input),
+.input-wrapper.has-error :deep(.p-select),
+.input-wrapper.has-error :deep(.p-select-trigger) {
+  border-color: var(--red-500) !important;
+  background-color: var(--red-50);
+}
+.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 .records-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .record-row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
 </style>

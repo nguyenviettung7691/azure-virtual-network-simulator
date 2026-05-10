@@ -367,10 +367,10 @@ export const useExport = () => {
       const snapshot = await captureExactSvgSnapshot()
       if (!snapshot) return null
 
-      const thumbnailWidth = 960
-      const thumbnailHeight = 600
-      const thumbnailScale = 2.5
-      const maxThumbnailPixels = 1_600_000
+      const thumbnailWidth = 1280
+      const thumbnailHeight = 800
+      const thumbnailScale = 3
+      const maxThumbnailPixels = 3_200_000
       const safePixelScale = Math.min(1, Math.sqrt(maxThumbnailPixels / (thumbnailWidth * thumbnailHeight)))
       const outputWidth = Math.max(320, Math.round(thumbnailWidth * safePixelScale))
       const outputHeight = Math.max(200, Math.round(thumbnailHeight * safePixelScale))
@@ -414,8 +414,8 @@ export const useExport = () => {
         try {
           const image = await readImageFromUrl(fallbackUrl)
           const canvas = document.createElement('canvas')
-          canvas.width = 320
-          canvas.height = 200
+          canvas.width = 800
+          canvas.height = 500
           const context = canvas.getContext('2d')
           if (!context) return null
 

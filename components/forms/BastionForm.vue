@@ -5,15 +5,24 @@
     <div class="field">
       <label>Subnet</label>
       <small class="caption">Bastion must be deployed in a subnet named <strong>AzureBastionSubnet</strong>.</small>
-      <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="AzureBastionSubnet" />
+      <div :class="{ 'has-error': getError('subnetId') }" class="input-wrapper">
+        <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="AzureBastionSubnet" />
+      </div>
+      <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
     </div>
     <div class="field">
       <label>Public IP Address</label>
-      <Select v-model="model.publicIpId" :options="ipOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Public IP" />
+      <div :class="{ 'has-error': getError('publicIpId') }" class="input-wrapper">
+        <Select v-model="model.publicIpId" :options="ipOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Public IP" />
+      </div>
+      <small v-if="getError('publicIpId')" class="error-text">{{ getError('publicIpId') }}</small>
     </div>
     <div class="field" v-if="model.sku === 'Standard'">
       <label>Scale Units</label>
-      <InputNumber v-model="model.scaleUnits" :min="2" :max="50" class="w-full" />
+      <div :class="{ 'has-error': getError('scaleUnits') }" class="input-wrapper">
+        <InputNumber v-model="model.scaleUnits" :min="2" :max="50" class="w-full" />
+      </div>
+      <small v-if="getError('scaleUnits')" class="error-text">{{ getError('scaleUnits') }}</small>
     </div>
     <div class="field checkbox-field" v-if="model.sku === 'Standard'">
       <label>Enable Tunneling</label>
@@ -31,9 +40,22 @@
 import type { BastionComponent } from '~/types/network'
 import { NetworkComponentType } from '~/types/network'
 
+import { getValidator } from '~/lib/componentValidators'
+import type { FieldError } from '~/types/validation'
+
 const props = defineProps<{ modelValue: Partial<BastionComponent>; nodes: any[] }>()
 const emit = defineEmits(['update:modelValue'])
 const model = computed({ get: () => props.modelValue as BastionComponent, set: v => emit('update:modelValue', v) })
+
+const validationErrors = computed(() => {
+  const validator = getValidator(model.value.type!)
+  if (!validator) return []
+  return validator(model.value, props.nodes || []).errors
+})
+
+function getError(fieldName: string): string | undefined {
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+}
 
 const subnetOptions = computed(() =>
   (props.nodes || [])
@@ -54,4 +76,12 @@ const ipOptions = computed(() =>
 .field label { font-size: 0.82rem; font-weight: 600; color: var(--text-color-secondary); }
 .caption { font-size: 0.72rem; color: var(--text-muted); }
 .checkbox-field { flex-direction: row; align-items: center; justify-content: space-between; }
+.input-wrapper { position: relative; }
+.input-wrapper.has-error :deep(.p-select),
+.input-wrapper.has-error :deep(.p-select-trigger),
+.input-wrapper.has-error :deep(.p-inputnumber-input) {
+  border-color: var(--red-500) !important;
+  background-color: var(--red-50);
+}
+.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 </style>

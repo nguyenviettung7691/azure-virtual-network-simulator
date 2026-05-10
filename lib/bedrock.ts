@@ -208,6 +208,10 @@ Important constraints:
 - Target approximately ${params.options.taskCount} tasks.
 - Prefer around ${params.options.componentCount} distinct components in the scenario.
 - Set timeLimit to exactly ${params.options.timeLimitSeconds} seconds.
+- Every task must include a machine-checkable "conditions" JSON object. Do NOT rely on natural-language-only descriptions.
+- For each task, include at least one of: requiredComponents, requiredConnections, securityRequirements, networkRequirements, componentRequirements.
+- securityRequirements and networkRequirements must be structured objects (not plain strings).
+- Use task condition selectors with id/name/type where applicable; prefer type and name selectors so the frontend can resolve nodes.
 
 Generate a challenge as a JSON object with this exact structure:
 {
@@ -227,12 +231,48 @@ Generate a challenge as a JSON object with this exact structure:
       "description": "Create a Virtual Network with address space 10.0.0.0/16",
       "type": "add_component",
       "componentType": "VNET",
+      "conditions": {
+        "requiredComponents": [
+          { "type": "VNET", "count": 1 }
+        ],
+        "componentRequirements": [
+          {
+            "type": "VNET",
+            "properties": [{ "field": "addressSpace", "includes": "10.0.0.0/16" }]
+          }
+        ]
+      },
       "completed": false,
       "points": 10
     }
   ],
   "totalPoints": 50,
   "timeLimit": ${params.options.timeLimitSeconds}
+}
+
+Example for subnet-specific requirement (must be represented as JSON conditions, not text only):
+{
+  "id": "task-x",
+  "description": "Create three subnets in MyVNet: Subnet1 (10.0.1.0/24), Subnet2 (10.0.2.0/24), and Subnet3 (10.0.3.0/24)",
+  "type": "configure_component",
+  "componentType": "SUBNET",
+  "conditions": {
+    "requiredComponents": [
+      {
+        "type": "SUBNET",
+        "count": 3,
+        "names": ["Subnet1", "Subnet2", "Subnet3"],
+        "parentSelector": { "type": "VNET", "name": "MyVNet" }
+      }
+    ],
+    "networkRequirements": [
+      { "kind": "subnet_in_vnet", "subnetSelector": { "name": "Subnet1" }, "vnetSelector": { "name": "MyVNet" }, "addressPrefix": "10.0.1.0/24" },
+      { "kind": "subnet_in_vnet", "subnetSelector": { "name": "Subnet2" }, "vnetSelector": { "name": "MyVNet" }, "addressPrefix": "10.0.2.0/24" },
+      { "kind": "subnet_in_vnet", "subnetSelector": { "name": "Subnet3" }, "vnetSelector": { "name": "MyVNet" }, "addressPrefix": "10.0.3.0/24" }
+    ]
+  },
+  "completed": false,
+  "points": 20
 }
 
 Return ONLY a valid JSON object.
