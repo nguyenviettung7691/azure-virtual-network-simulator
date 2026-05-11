@@ -757,6 +757,7 @@ export const useChallengesStore = defineStore('challenges', {
     },
 
     openSetupModal() {
+      this.error = null
       this.showSetupModal = true
     },
 
