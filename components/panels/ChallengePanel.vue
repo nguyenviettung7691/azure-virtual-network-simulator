@@ -12,7 +12,7 @@
           <span class="timer">{{ formatTime(challengesStore.remainingTime) }}</span>
           <span class="timer-hint">left / {{ formatTime(challengesStore.currentChallenge.timeLimit) }}</span>
         </div>
-        <Button icon="pi pi-times" text size="small" v-tooltip="'Quit challenge'" @click.stop="quitChallenge" />
+        <Button icon="pi pi-times" text size="small" v-tooltip.left="'Quit challenge'" @click.stop="quitChallenge" />
         <Button :icon="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-up'" text size="small" />
       </div>
     </div>

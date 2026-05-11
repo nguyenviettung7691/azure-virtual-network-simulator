@@ -139,6 +139,7 @@ export interface UdrRoute {
   name: string
   addressPrefix: string
   nextHopType: 'VirtualNetworkGateway' | 'VnetLocal' | 'Internet' | 'VirtualAppliance' | 'None'
+  nextHopResourceId?: string
   nextHopIpAddress?: string
 }
 

@@ -217,17 +217,28 @@ function validateUdr(data: any, nodes: any[]): ValidationResult {
 
       // If next hop is VirtualAppliance, IP must be provided and valid
       if (route.nextHopType === 'VirtualAppliance') {
-        if (!route.nextHopIpAddress || route.nextHopIpAddress.trim() === '') {
+        const hasResourceRef = !!route.nextHopResourceId && nodeExists(route.nextHopResourceId, nodes)
+
+        if (!hasResourceRef && (!route.nextHopIpAddress || route.nextHopIpAddress.trim() === '')) {
           addError(
             errors,
             `routes[${i}].nextHopIpAddress`,
-            `${routeLabel}: Next hop IP is required for VirtualAppliance type`
+            `${routeLabel}: Next hop IP or appliance resource is required for VirtualAppliance type`
           )
-        } else {
+        } else if (route.nextHopIpAddress && route.nextHopIpAddress.trim() !== '') {
           const ipCheck = validateIPAddress(route.nextHopIpAddress)
           if (!ipCheck.valid) {
             addError(errors, `routes[${i}].nextHopIpAddress`, `${routeLabel}: ${ipCheck.error!}`)
           }
+        }
+
+        if (route.nextHopResourceId && !nodeExists(route.nextHopResourceId, nodes)) {
+          addError(
+            errors,
+            `routes[${i}].nextHopResourceId`,
+            `${routeLabel}: Referenced appliance resource does not exist`,
+            'warning'
+          )
         }
       }
     }

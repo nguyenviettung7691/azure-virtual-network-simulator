@@ -13,6 +13,16 @@
           <InputText v-model="route.addressPrefix" placeholder="0.0.0.0/0" style="width:120px" />
         </div>
         <Select v-model="route.nextHopType" :options="hopTypes" style="width:150px" />
+        <Select
+          v-if="route.nextHopType === 'VirtualAppliance'"
+          v-model="route.nextHopResourceId"
+          :options="virtualApplianceOptions"
+          option-label="label"
+          option-value="value"
+          placeholder="Select appliance"
+          showClear
+          style="width:170px"
+        />
         <div :class="{ 'has-error': hasRouteFieldError(idx, 'nextHopIpAddress') }" class="input-wrapper">
           <InputText v-if="route.nextHopType === 'VirtualAppliance'" v-model="route.nextHopIpAddress" placeholder="10.x.x.x" style="width:110px" />
         </div>
@@ -47,6 +57,11 @@ watch(routes, v => { model.value = { ...model.value, routes: v } }, { deep: true
 const hopTypes = ['VirtualNetworkGateway','VnetLocal','Internet','VirtualAppliance','None']
 function addRoute() { routes.value.push({ id: `r-${Date.now()}`, name: 'new-route', addressPrefix: '0.0.0.0/0', nextHopType: 'Internet' }) }
 function removeRoute(i: number) { routes.value.splice(i, 1) }
+const virtualApplianceOptions = computed(() =>
+  (props.nodes || [])
+    .filter((n: any) => [NetworkComponentType.FIREWALL, NetworkComponentType.NVA].includes(n.data?.type))
+    .map((n: any) => ({ label: `${n.data.name} (${n.data.type})`, value: n.id }))
+)
 const subnetOptions = computed(() => (props.nodes || []).filter((n: any) => n.data?.type === NetworkComponentType.SUBNET).map((n: any) => ({ label: n.data.name, value: n.id, inputId: `udr-subnet-${n.id}` })))
 const selectedSubnetIds = computed({
   get: () => model.value.subnetIds || [],

@@ -213,6 +213,12 @@ function buildRelationshipGraph(nodes: DiagramNodeLike[], edges: DiagramEdgeLike
       })
     }
 
+    if (Array.isArray(data.routes)) {
+      data.routes.forEach((route: any) => {
+        connect(node.id, route?.nextHopResourceId)
+      })
+    }
+
     connect(node.id, data.subnetId)
     connect(node.id, data.vnetId)
     connect(node.id, data.nsgId)
