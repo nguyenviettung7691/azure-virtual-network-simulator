@@ -33,7 +33,6 @@
   --bottom-toolbar-height: 44px;
   --panel-width: 330px;
   --right-panel-width: 370px;
-  --component-size: 180px;
   /* Toolbar component-group card appearance */
   --group-card-bg: rgba(0, 0, 0, 0.07);
   --group-card-border: rgba(0, 0, 0, 0.2);
@@ -51,6 +50,13 @@
   --green-500: var(--success);
   --p-primary-color: var(--primary);
   --p-primary-hover-color: var(--primary-dark);
+  /* Error state (red palette — Azure/Fluent scale) */
+  --red-50: #fdf3f3;
+  --red-200: #f4abab;
+  --red-500: #d13438;
+  --red-700: #a4262c;
+  --red-800: #8f2323;
+  --surface-0: var(--surface);
 }
 
 /* ============================================================
@@ -69,6 +75,12 @@
   --group-card-bg: rgba(255, 255, 255, 0.1);
   --group-card-border: rgba(255, 255, 255, 0.22);
   --group-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  /* Error state (red palette — dark mode overrides) */
+  --red-50: #3d1515;
+  --red-200: #7a3535;
+  --red-500: #f1707b;
+  --red-700: #fca5a5;
+  --red-800: #fecaca;
 }
 
 /* ============================================================
