@@ -68,4 +68,35 @@ function getError(fieldName: string): string | undefined {
 .field { display: flex; flex-direction: column; gap: 0.3rem; }
 .field label { font-size: 0.82rem; font-weight: 600; color: var(--text-color-secondary); }
 .checkbox-field { flex-direction: row; align-items: center; justify-content: space-between; }
+.input-wrapper { position: relative; }
+.input-wrapper.has-error :deep(input),
+.input-wrapper.has-error :deep(textarea),
+.input-wrapper.has-error :deep(.p-select),
+.input-wrapper.has-error :deep(.p-select-trigger) {
+  border-color: var(--red-500) !important;
+  background-color: var(--red-50);
+}
+.error-text {
+  font-size: 0.75rem;
+  color: var(--red-800);
+  background: linear-gradient(135deg, var(--red-50), var(--surface-0));
+  border: 1px solid var(--red-200);
+  border-left: 3px solid var(--red-500);
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  line-height: 1.35;
+  max-width: 100%;
+  word-break: break-word;
+  box-shadow: 0 1px 2px rgb(239 68 68 / 0.12);
+}
+.error-text::before {
+  content: '⚠';
+  font-size: 0.7rem;
+  line-height: 1.4;
+  margin-top: 0.05rem;
+  flex-shrink: 0;
+}
 </style>

@@ -135,7 +135,29 @@ function updateRecordValues(idx: number, nextValue: string) {
   border-color: var(--red-500) !important;
   background-color: var(--red-50);
 }
-.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
+.error-text {
+  font-size: 0.75rem;
+  color: var(--red-800);
+  background: linear-gradient(135deg, var(--red-50), var(--surface-0));
+  border: 1px solid var(--red-200);
+  border-left: 3px solid var(--red-500);
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  line-height: 1.35;
+  max-width: 100%;
+  word-break: break-word;
+  box-shadow: 0 1px 2px rgb(239 68 68 / 0.12);
+}
+.error-text::before {
+  content: '⚠';
+  font-size: 0.7rem;
+  line-height: 1.4;
+  margin-top: 0.05rem;
+  flex-shrink: 0;
+}
 .records-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .record-row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
 </style>
