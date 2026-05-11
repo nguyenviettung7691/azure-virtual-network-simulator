@@ -286,7 +286,7 @@ Do not include markdown code fences, comments, or extra prose.`
       },
     ],
     inferenceConfig: {
-      maxTokens: 2000,
+      maxTokens: 4096,
     },
   })
 
@@ -300,6 +300,11 @@ Do not include markdown code fences, comments, or extra prose.`
   const response = await client.send(command)
   const responseText = new TextDecoder().decode(response.body)
   const responseData = JSON.parse(responseText)
+
+  if (responseData?.stopReason === 'max_tokens') {
+    throw new Error('Bedrock response was truncated: challenge JSON exceeded the 4096 token output limit')
+  }
+
   const content = responseData?.output?.message?.content?.[0]?.text
 
   if (typeof content !== 'string' || !content.trim()) {
