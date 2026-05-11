@@ -117,5 +117,4 @@ function hasRuleFieldError(ruleIdx: number, fieldName: string): boolean {
   background-color: var(--red-50);
 }
 .rule-errors { display: flex; flex-direction: column; gap: 0.2rem; padding-top: 0.2rem; }
-.error-text { font-size: 0.7rem; color: var(--red-700); }
 </style>

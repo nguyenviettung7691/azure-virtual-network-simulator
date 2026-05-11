@@ -50,5 +50,4 @@ function getError(fieldName: string): string | undefined {
   border-color: var(--red-500) !important;
   background-color: var(--red-50);
 }
-.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 </style>

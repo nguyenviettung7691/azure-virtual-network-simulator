@@ -218,5 +218,4 @@ function hasProbeFieldError(probeIdx: number, fieldName: string): boolean {
   background-color: var(--red-50);
 }
 .probe-errors { display: flex; flex-direction: column; gap: 0.2rem; }
-.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 </style>

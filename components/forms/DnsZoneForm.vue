@@ -135,7 +135,6 @@ function updateRecordValues(idx: number, nextValue: string) {
   border-color: var(--red-500) !important;
   background-color: var(--red-50);
 }
-.error-text { font-size: 0.72rem; color: var(--red-700); background-color: var(--red-50); padding: 0.2rem 0.35rem; border-radius: 4px; display: inline-block; }
 .records-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .record-row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
 </style>

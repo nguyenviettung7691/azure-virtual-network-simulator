@@ -89,5 +89,4 @@ function hasRouteFieldError(routeIdx: number, fieldName: string): boolean {
   border-color: var(--red-500) !important;
   background-color: var(--red-50);
 }
-.error-text { font-size: 0.7rem; color: var(--red-700); }
 </style>

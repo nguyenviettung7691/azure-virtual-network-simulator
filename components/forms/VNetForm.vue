@@ -68,4 +68,12 @@ function getError(fieldName: string): string | undefined {
 .field { display: flex; flex-direction: column; gap: 0.3rem; }
 .field label { font-size: 0.82rem; font-weight: 600; color: var(--text-color-secondary); }
 .checkbox-field { flex-direction: row; align-items: center; justify-content: space-between; }
+.input-wrapper { position: relative; }
+.input-wrapper.has-error :deep(input),
+.input-wrapper.has-error :deep(textarea),
+.input-wrapper.has-error :deep(.p-select),
+.input-wrapper.has-error :deep(.p-select-trigger) {
+  border-color: var(--red-500) !important;
+  background-color: var(--red-50);
+}
 </style>
