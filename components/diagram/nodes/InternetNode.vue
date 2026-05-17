@@ -8,17 +8,17 @@
     <Handle type="target" :position="Position.Bottom" id="bottom-target" />
 
     <div class="internet-shell">
-      <Icon icon="mdi:web" class="internet-icon" />
+      <IconifyIcon icon="mdi:web" class="internet-icon" />
       <span class="internet-name">{{ data.name }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { Icon as IconifyIcon } from '@iconify/vue'
 import { Handle, Position } from '@vue-flow/core'
-import { Icon } from '@iconify/vue'
 import type { InternetComponent } from '~/types/network'
-
+import { NetworkComponentType } from '~/types/network'
 interface Props {
   id: string
   data: InternetComponent
@@ -59,8 +59,22 @@ defineProps<Props>()
 .internet-icon {
   width: 4.25rem;
   height: 4.25rem;
-  color: #0f6cbd;
+  /* Use a dark globe on light backgrounds, light globe on dark backgrounds */
+  color: var(--internet-icon-color, #0f6cbd);
   filter: drop-shadow(0 6px 12px rgba(15, 108, 189, 0.18));
+}
+.internet-icon :deep(svg) {
+  /* Force the globe to use a visible fill for all paths/circles */
+  fill: var(--internet-icon-color, #0f6cbd) !important;
+  color: var(--internet-icon-color, #0f6cbd) !important;
+}
+.diagram-canvas-wrapper .internet-icon {
+  /* Default: dark globe for light backgrounds */
+  --internet-icon-color: #0f6cbd;
+}
+.diagram-canvas-wrapper.dark .internet-icon {
+  /* Light globe for dark backgrounds */
+  --internet-icon-color: #e3f0ff;
 }
 
 .internet-name {

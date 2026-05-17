@@ -12,7 +12,7 @@
     <Handle type="target" :position="Position.Bottom" id="bottom-target" />
     <div class="generic-node-content" :style="{ borderColor: '#b4009e' }">
       <div class="generic-node-icon-wrap" :style="{ backgroundColor: '#b4009e20' }">
-        <Icon icon="mdi:account-group" :style="{ color: '#b4009e' }" class="generic-icon" />
+        <Icon :name="nodeIcon" mode="svg" class="generic-icon" />
       </div>
       <div class="generic-node-info">
         <span class="generic-node-type">App Security Group</span>
@@ -25,8 +25,9 @@
 
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
-import { Icon } from '@iconify/vue'
 import type { AsgComponent } from '~/types/network'
+import { NetworkComponentType } from '~/types/network'
+import { getAzureComponentIcon } from '~/lib/azureIcons'
 
 interface Props {
   id: string
@@ -36,6 +37,7 @@ interface Props {
 
 const props = defineProps<Props>()
 const diagramStore = useDiagramStore()
+const nodeIcon = getAzureComponentIcon(NetworkComponentType.ASG)
 
 function onDblClick() {
   diagramStore.openEditComponentModal(props.data)

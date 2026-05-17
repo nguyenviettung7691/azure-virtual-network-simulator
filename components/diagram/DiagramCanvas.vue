@@ -39,17 +39,17 @@
       <Controls>
         <template #control-zoom-in>
           <ControlButton v-tooltip.right="'Zoom In'" @click="zoomIn()">
-            <Icon icon="mdi:magnify-plus-outline" style="width:22px;height:22px" />
+            <Icon name="mdi:magnify-plus-outline" mode="svg" class="flow-control-icon mdi-themed-icon" />
           </ControlButton>
         </template>
         <template #control-zoom-out>
           <ControlButton v-tooltip.right="'Zoom Out'" @click="zoomOut()">
-            <Icon icon="mdi:magnify-minus-outline" style="width:22px;height:22px" />
+            <Icon name="mdi:magnify-minus-outline" mode="svg" class="flow-control-icon mdi-themed-icon" />
           </ControlButton>
         </template>
         <template #control-fit-view>
           <ControlButton v-tooltip.right="'Fit Content'" @click="fitView()">
-            <Icon icon="mdi:fit-to-page-outline" style="width:22px;height:22px" />
+            <Icon name="mdi:fit-to-page-outline" mode="svg" class="flow-control-icon mdi-themed-icon" />
           </ControlButton>
         </template>
         <template #control-interactive>
@@ -58,7 +58,7 @@
             :class="{ 'control-locked': !isInteractive }"
             @click="toggleInteractive()"
           >
-            <Icon :icon="isInteractive ? 'mdi:lock-open-outline' : 'mdi:lock-outline'" style="width:22px;height:22px" />
+            <Icon :name="isInteractive ? 'mdi:lock' : 'mdi:lock-open-variant'" mode="svg" class="flow-control-icon mdi-themed-icon" />
           </ControlButton>
         </template>
       </Controls>
@@ -77,16 +77,16 @@
 
     <!-- Empty state — lives outside VueFlow so it never inherits the pane grab cursor -->
     <div v-if="diagramStore.nodes.length === 0" class="canvas-empty-state">
-      <Icon icon="mdi:draw" class="empty-icon" />
+      <IconifyIcon icon="mdi:draw" class="empty-icon" />
       <p class="empty-title">Start building your Azure network</p>
-      <p class="empty-subtitle">Click component icons in the toolbar above to add components</p>
+      <p class="empty-subtitle">Use the command palette in the header to add components</p>
       <div class="empty-quick-start">
         <Button
           label="Add VNet"
           @click="diagramStore.openAddComponentModal(NetworkComponentType.VNET)"
         >
           <template #icon>
-            <Icon icon="mdi:network" class="p-button-icon p-button-icon-left" />
+            <IconifyIcon icon="mdi:network" class="p-button-icon p-button-icon-left" />
           </template>
         </Button>
         <Button
@@ -96,7 +96,7 @@
           @click="loadQuickSampleDiagram()"
         >
           <template #icon>
-            <Icon icon="mdi:lightning-bolt" class="p-button-icon p-button-icon-left" />
+            <IconifyIcon icon="mdi:lightning-bolt" class="p-button-icon p-button-icon-left" />
           </template>
         </Button>
         <Button
@@ -106,7 +106,7 @@
           @click="loadFullSampleDiagram()"
         >
           <template #icon>
-            <Icon icon="mdi:flask-outline" class="p-button-icon p-button-icon-left" />
+            <IconifyIcon icon="mdi:flask-outline" class="p-button-icon p-button-icon-left" />
           </template>
         </Button>
       </div>
@@ -120,7 +120,7 @@
         @click="exitAnimation"
       >
         <template #icon>
-          <Icon icon="mdi:close-circle-outline" class="p-button-icon p-button-icon-left" />
+          <IconifyIcon icon="mdi:close-circle-outline" class="p-button-icon p-button-icon-left" />
         </template>
       </Button>
     </div>
@@ -135,7 +135,7 @@
         @click="onAutoLayout"
       >
         <template #icon>
-          <Icon
+            <IconifyIcon
             icon="mdi:auto-fix"
             :style="{ width: '20px', height: '20px', color: isAnimationMode ? 'var(--text-muted)' : 'var(--primary)' }"
           />
@@ -149,7 +149,7 @@
         @click="snapToGrid = !snapToGrid"
       >
         <template #icon>
-          <Icon icon="mdi:grid" style="width:20px;height:20px" />
+          <IconifyIcon icon="mdi:grid" style="width:20px;height:20px" />
         </template>
       </Button>
       <Button
@@ -159,7 +159,7 @@
         @click="setViewport({ x: 0, y: 0, zoom: 1 }, { animation: true })"
       >
         <template #icon>
-          <Icon icon="mdi:fit-to-page" style="width:20px;height:20px" />
+          <IconifyIcon icon="mdi:fit-to-page" style="width:20px;height:20px" />
         </template>
       </Button>
     </div>
@@ -171,7 +171,7 @@ import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background, BackgroundVariant } from '@vue-flow/background'
 import { Controls, ControlButton } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
-import { Icon } from '@iconify/vue'
+import { Icon as IconifyIcon } from '@iconify/vue'
 import { Button } from 'primevue'
 import { markRaw } from 'vue'
 import { NetworkComponentType, getComponentColor } from '~/types/network'
@@ -252,31 +252,34 @@ onMounted(() => {
 import type { DiagramAnimationSession, DiagramEdge, DiagramNode } from '~/types/diagram'
 
 // ─── Memoization for summary identify decoration ─────────────────────────────
-const summaryDecorateCache = ref<{ nodes: DiagramNode[]; highlightKey: string } | null>(null)
+
+// --- Smoother highlight updates using requestAnimationFrame ---
+const highlightRafState = ref<{ nodes: DiagramNode[]; highlightKey: string }>({ nodes: [], highlightKey: '' })
+let highlightRafId: number | null = null
 
 function getSummaryDecorationCacheKey(highlightIds: string[]): string {
   return highlightIds.length === 0 ? '' : highlightIds.join(',')
 }
 
-function computeSummaryDecoratedNodes(srcNodes: DiagramNode[], highlightedNodeIds: Set<string>): DiagramNode[] {
+function scheduleHighlightUpdate(srcNodes: DiagramNode[], highlightedNodeIds: Set<string>) {
   const cacheKey = getSummaryDecorationCacheKey(Array.from(highlightedNodeIds))
-  const cache = summaryDecorateCache.value
-
-  // Return cached result if nodes array reference and highlight key match
-  if (cache && cache.nodes === srcNodes && cache.highlightKey === cacheKey) {
-    return cache.nodes
-  }
-
-  const decorated = srcNodes.map(node => decorateSummaryIdentifyNode(node, highlightedNodeIds))
-  summaryDecorateCache.value = { nodes: decorated, highlightKey: cacheKey }
-  return decorated
+  if (highlightRafState.value.highlightKey === cacheKey && highlightRafState.value.nodes === srcNodes) return
+  if (highlightRafId !== null) cancelAnimationFrame(highlightRafId)
+  highlightRafId = requestAnimationFrame(() => {
+    highlightRafState.value = {
+      nodes: srcNodes.map(node => decorateSummaryIdentifyNode(node, highlightedNodeIds)),
+      highlightKey: cacheKey,
+    }
+    highlightRafId = null
+  })
 }
 
 const nodes = computed({
   get: () => {
     if (!diagramStore.animationSession || !isAnimationMode.value) {
       const highlightedNodeIds = new Set(diagramStore.summaryHighlightNodeIds)
-      return computeSummaryDecoratedNodes(diagramStore.nodes, highlightedNodeIds)
+      scheduleHighlightUpdate(diagramStore.nodes, highlightedNodeIds)
+      return highlightRafState.value.nodes.length ? highlightRafState.value.nodes : diagramStore.nodes
     }
     return diagramStore.nodes.map(node => decorateAnimationNode(node, diagramStore.animationSession))
   },
@@ -331,6 +334,7 @@ const edgeTypes: EdgeTypesObject = {
   'animation-edge': markRaw(AnimationEdge) as any,
 }
 
+
 watch(isAnimationMode, (next, prev) => {
   if (next) {
     restoreInteractiveAfterAnimation.value = isInteractive.value
@@ -340,17 +344,16 @@ watch(isAnimationMode, (next, prev) => {
     nodesDraggable.value = restoreInteractiveAfterAnimation.value
     elementsSelectable.value = restoreInteractiveAfterAnimation.value
   }
-
-  // Clear summary decoration cache when entering/exiting animation mode
-  summaryDecorateCache.value = null
+  // Clear highlight cache when entering/exiting animation mode
+  highlightRafState.value = { nodes: [], highlightKey: '' }
   nextTick(() => syncRenderedGraph())
 })
 
 watch(
   () => diagramStore.nodes.length,
   () => {
-    // Invalidate cache when node count changes
-    summaryDecorateCache.value = null
+    // Invalidate highlight cache when node count changes
+    highlightRafState.value = { nodes: [], highlightKey: '' }
   }
 )
 
@@ -691,7 +694,8 @@ function loadQuickSampleDiagram() {
     sku: 'Standard',
     tier: 'Regional',
     loadBalancerType: 'Public',
-    capacity: 2,
+    availabilityZones: ['1', '2'],
+    idleTimeoutInMinutes: 4,
     frontendIpConfigs: [{
       id: 'sample-lb-frontend-1',
       name: 'public-frontend',
@@ -934,8 +938,11 @@ function loadFullSampleDiagram() {
     type: NetworkComponentType.APP_GATEWAY,
     name: 'Application Gateway',
     sku: 'WAF_v2',
-    tier: 'WAF_v2',
     capacity: 2,
+    minInstances: 2,
+    maxInstances: 10,
+    idleTimeoutInMinutes: 4,
+    availabilityZones: ['1', '2'],
     enableHttp2: true,
     enableWaf: true,
     wafMode: 'Prevention',
@@ -1043,8 +1050,11 @@ function loadFullSampleDiagram() {
     type: NetworkComponentType.FUNCTIONS,
     name: 'Functions Worker',
     storageAccountId: storage1Id,
+    hostingOption: 'Premium',
+    planSku: 'EP1',
     runtimeStack: 'node',
     runtimeVersion: '20',
+    os: 'Linux',
     hostingPlanSku: 'EP1',
     vnetIntegrationSubnetId: subnet3Id,
     subnetId: subnet3Id,
@@ -1137,10 +1147,12 @@ function loadFullSampleDiagram() {
     type: NetworkComponentType.FIREWALL,
     name: 'Azure Firewall',
     sku: 'Standard',
-    tier: 'Standard',
     vnetId: vnet1Id,
     publicIpIds: [firewallIpId],
     threatIntelMode: 'Alert',
+    dnsProxyEnabled: true,
+    customDnsServers: ['8.8.8.8', '1.1.1.1'],
+    availabilityZones: ['1', '2'],
     createdAt: now,
   } as any, { x: 1680, y: 1280 })
 
@@ -1244,8 +1256,11 @@ function loadFullSampleDiagram() {
     type: NetworkComponentType.APP_GATEWAY,
     name: 'Internal App Gateway',
     sku: 'Standard_v2',
-    tier: 'Standard_v2',
     capacity: 1,
+    minInstances: 1,
+    maxInstances: 3,
+    idleTimeoutInMinutes: 4,
+    availabilityZones: ['1', '2'],
     enableHttp2: true,
     enableWaf: false,
     frontendType: 'Internal',

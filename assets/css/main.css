@@ -361,11 +361,33 @@ body {
 
 .vue-flow__controls-button svg,
 .vue-flow__controls button svg {
-  fill: var(--text);
+  fill: currentColor;
+  color: inherit;
   width: 26px;
   height: 26px;
   max-width: 26px;
   max-height: 26px;
+}
+
+.vue-flow__controls-button .flow-control-icon,
+.vue-flow__controls button .flow-control-icon {
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
+}
+
+/* Theme-aware MDI icons (Nuxt Icon bundle + legacy Iconify) */
+.mdi-themed-icon,
+.mdi-themed-icon svg,
+.iconify,
+.iconify svg,
+span.iconify svg {
+  color: currentColor;
+}
+
+.mdi-themed-icon svg path,
+.iconify svg path {
+  fill: currentColor;
 }
 
 .vue-flow__minimap {

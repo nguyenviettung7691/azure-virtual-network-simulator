@@ -7,7 +7,7 @@
     @hide="diagramStore.cancelConfirmDialog()"
   >
     <div class="confirm-content">
-      <Icon icon="mdi:alert-circle-outline" class="confirm-icon" />
+      <IconifyIcon icon="mdi:alert-circle-outline" class="confirm-icon" />
       <div class="confirm-body">
         <p class="confirm-message">{{ diagramStore.confirmDialogMessage }}</p>
         <div v-if="diagramStore.confirmDialogCheckboxLabel" class="confirm-checkbox">
@@ -30,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
+import { Icon as IconifyIcon } from '@iconify/vue'
 const diagramStore = useDiagramStore()
 </script>
 

@@ -10,9 +10,11 @@
       <div v-for="(route, idx) in routes" :key="route.id" class="route-row" :class="{ 'has-route-error': getRouteErrors(idx).length > 0 }">
         <InputText v-model="route.name" placeholder="route-name" style="width:120px" />
         <div :class="{ 'has-error': hasRouteFieldError(idx, 'addressPrefix') }" class="input-wrapper">
-          <InputText v-model="route.addressPrefix" placeholder="0.0.0.0/0" style="width:120px" />
+          <InputText v-model="route.addressPrefix" placeholder="0.0.0.0/0 or Storage" style="width:140px" />
+          <small class="hint-text">CIDR or service tag</small>
         </div>
-        <Select v-model="route.nextHopType" :options="hopTypes" style="width:150px" />
+        <Select v-model="route.nextHopType" :options="hopTypesWithLabels" option-label="label" option-value="value" style="width:160px" />
+        <small :class="`next-hop-hint next-hop-hint-${route.nextHopType}`">{{ getNextHopHint(route.nextHopType) }}</small>
         <Select
           v-if="route.nextHopType === 'VirtualAppliance'"
           v-model="route.nextHopResourceId"
@@ -27,7 +29,9 @@
           <InputText v-if="route.nextHopType === 'VirtualAppliance'" v-model="route.nextHopIpAddress" placeholder="10.x.x.x" style="width:110px" />
         </div>
         <Button icon="pi pi-trash" text size="small" severity="danger" @click="removeRoute(idx)" />
-        <small v-for="(err, i) in getRouteErrors(idx)" :key="i" class="error-text">{{ err }}</small>
+        <div class="route-errors">
+          <small v-for="(err, i) in getRouteErrors(idx)" :key="i" class="error-text">{{ err }}</small>
+        </div>
       </div>
     </div>
     <div class="subnet-section">
@@ -54,7 +58,22 @@ const emit = defineEmits(['update:modelValue'])
 const model = computed({ get: () => props.modelValue as UdrComponent, set: v => emit('update:modelValue', v) })
 const routes = ref<UdrRoute[]>(model.value.routes || [])
 watch(routes, v => { model.value = { ...model.value, routes: v } }, { deep: true })
+
+// Legacy hopTypes for backward compat; hopTypesWithLabels provides enhanced UX
 const hopTypes = ['VirtualNetworkGateway','VnetLocal','Internet','VirtualAppliance','None']
+const hopTypesWithLabels = [
+  { label: 'Virtual Network Gateway', value: 'VirtualNetworkGateway', hint: 'Routes via VPN/ExpressRoute gateway (on-premises)' },
+  { label: 'Virtual Network', value: 'VnetLocal', hint: 'Routes within the VNet (system-managed)' },
+  { label: 'Internet', value: 'Internet', hint: 'Routes to the internet (default for 0.0.0.0/0)' },
+  { label: 'Virtual Appliance', value: 'VirtualAppliance', hint: 'Routes via NVA or Firewall (requires IP forwarding)' },
+  { label: 'None', value: 'None', hint: 'Drops traffic to this destination (blocks routing)' },
+]
+
+function getNextHopHint(nextHopType: string): string {
+  const item = hopTypesWithLabels.find(h => h.value === nextHopType)
+  return item?.hint || ''
+}
+
 function addRoute() { routes.value.push({ id: `r-${Date.now()}`, name: 'new-route', addressPrefix: '0.0.0.0/0', nextHopType: 'Internet' }) }
 function removeRoute(i: number) { routes.value.splice(i, 1) }
 const virtualApplianceOptions = computed(() =>
@@ -94,6 +113,10 @@ function hasRouteFieldError(routeIdx: number, fieldName: string): boolean {
 .section-title { font-size: 0.82rem; font-weight: 600; color: var(--text-color-secondary); }
 .route-row { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; padding: 0.35rem 0.45rem; border-radius: 6px; }
 .route-row.has-route-error { background-color: var(--red-50); border: 1px solid var(--red-200); }
+.hint-text { font-size: 0.65rem; color: var(--text-muted); margin-top: -0.2rem; display: block; }
+.next-hop-hint { font-size: 0.7rem; color: var(--text-muted); font-style: italic; display: inline-block; margin: 0 0.3rem; min-width: 180px; }
+.route-errors { display: flex; flex-direction: column; width: 100%; gap: 0.2rem; }
+.error-text { color: var(--red-500); font-weight: 500; display: block; }
 .subnet-section { display: flex; flex-direction: column; gap: 0.45rem; }
 .section-header { display: flex; align-items: center; justify-content: space-between; }
 .helper-text { font-size: 0.72rem; color: var(--text-muted); }

@@ -12,7 +12,7 @@
     <Handle type="target" :position="Position.Bottom" id="bottom-target" />
     <div class="generic-node-content" :style="{ borderColor: 'var(--primary)' }">
       <div class="generic-node-icon-wrap" :style="{ backgroundColor: 'color-mix(in srgb, var(--primary) 20%, transparent)' }">
-        <Icon icon="mdi:scale-balance" :style="{ color: 'var(--primary)' }" class="generic-icon" />
+        <Icon :name="nodeIcon" mode="svg" class="generic-icon" />
       </div>
       <div class="generic-node-info">
         <span class="generic-node-type">Load Balancer</span>
@@ -25,8 +25,9 @@
 
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
-import { Icon } from '@iconify/vue'
 import type { LoadBalancerComponent } from '~/types/network'
+import { NetworkComponentType } from '~/types/network'
+import { getAzureComponentIcon } from '~/lib/azureIcons'
 
 interface Props {
   id: string
@@ -36,6 +37,7 @@ interface Props {
 
 const props = defineProps<Props>()
 const diagramStore = useDiagramStore()
+const nodeIcon = getAzureComponentIcon(NetworkComponentType.LOAD_BALANCER)
 
 function onDblClick() {
   diagramStore.openEditComponentModal(props.data)

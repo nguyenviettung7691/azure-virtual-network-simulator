@@ -3,7 +3,7 @@
     <div class="panel-header" @click="toggle">
       <Button :icon="isCollapsed ? 'pi pi-chevron-left' : 'pi pi-chevron-right'" text size="small" class="collapse-btn" />
       <div class="panel-title" v-if="!isCollapsed">
-        <Icon icon="mdi:sitemap-outline" class="panel-icon" />
+        <IconifyIcon icon="mdi:sitemap-outline" class="panel-icon" />
         <span>Network Summary</span>
       </div>
     </div>
@@ -13,7 +13,7 @@
         <AccordionPanel value="components">
           <AccordionHeader>
             <div class="section-title">
-              <Icon icon="mdi:vector-polygon" />
+              <IconifyIcon icon="mdi:vector-polygon" />
               Components ({{ summaryNodes.length }})
             </div>
           </AccordionHeader>
@@ -33,10 +33,10 @@
                     @mouseenter="setHoveredComponentGroup(group.type)"
                     @mouseleave="setHoveredComponentGroup(null)"
                   >
-                    <Icon :icon="getIcon(group.type)" :style="{ color: getColor(group.type) }" class="group-type-icon" />
+                    <Icon :name="getIcon(group.type)" mode="svg" :style="{ color: getColor(group.type) }" class="group-type-icon" />
                     <span class="group-label">{{ getLabel(group.type) }}</span>
                     <Tag :value="String(group.nodes.length)" severity="info" />
-                    <Icon :icon="collapsedComponentTypes.has(group.type) ? 'mdi:chevron-right' : 'mdi:chevron-down'" class="group-chevron" />
+                    <IconifyIcon :icon="collapsedComponentTypes.has(group.type) ? 'mdi:chevron-right' : 'mdi:chevron-down'" class="group-chevron" />
                   </div>
                   <div class="component-list" v-show="!collapsedComponentTypes.has(group.type)">
                     <div
@@ -56,7 +56,7 @@
         <AccordionPanel value="connectivity">
           <AccordionHeader>
             <div class="section-title">
-              <Icon icon="mdi:transit-connection" />
+              <IconifyIcon icon="mdi:transit-connection" />
               Connectivity ({{ diagramStore.edges.length }})
             </div>
           </AccordionHeader>
@@ -76,9 +76,9 @@
                     @mouseenter="setHoveredConnectionGroup(group.targetId)"
                     @mouseleave="setHoveredConnectionGroup(null)"
                   >
-                    <Icon :icon="collapsedConnTargets.has(group.targetId) ? 'mdi:chevron-right' : 'mdi:chevron-down'" class="conn-chevron" />
+                    <IconifyIcon :icon="collapsedConnTargets.has(group.targetId) ? 'mdi:chevron-right' : 'mdi:chevron-down'" class="conn-chevron" />
                     <div class="conn-cell-content" style="flex: 1">
-                      <Icon v-if="getNodeType(group.targetId)" :icon="getNodeIcon(group.targetId)" :style="{ color: getNodeColor(group.targetId) }" class="conn-cell-icon" v-tooltip="getNodeTypeLabel(group.targetId)" />
+                      <Icon v-if="getNodeType(group.targetId)" :name="getNodeIcon(group.targetId)" mode="svg" :style="{ color: getNodeColor(group.targetId) }" class="conn-cell-icon" v-tooltip="getNodeTypeLabel(group.targetId)" />
                       <span class="conn-target-label">{{ group.targetName }}</span>
                     </div>
                     <span class="conn-source-count">{{ group.edges.length }}</span>
@@ -90,7 +90,7 @@
                       :class="['conn-source-row', { 'identify-active': isIdentifyEnabled && hoveredConnectionTargetId === group.targetId }]"
                     >
                       <div class="conn-cell-content">
-                        <Icon v-if="getNodeType(edge.source)" :icon="getNodeIcon(edge.source)" :style="{ color: getNodeColor(edge.source) }" class="conn-cell-icon" v-tooltip="getNodeTypeLabel(edge.source)" />
+                        <Icon v-if="getNodeType(edge.source)" :name="getNodeIcon(edge.source)" mode="svg" :style="{ color: getNodeColor(edge.source) }" class="conn-cell-icon" v-tooltip="getNodeTypeLabel(edge.source)" />
                         <span>{{ getNodeName(edge.source) }}</span>
                       </div>
                     </div>
@@ -104,7 +104,7 @@
         <AccordionPanel value="security">
           <AccordionHeader>
             <div class="section-title">
-              <Icon icon="mdi:shield-check" />
+              <IconifyIcon icon="mdi:shield-check" />
               Security
             </div>
           </AccordionHeader>
@@ -126,7 +126,7 @@
               </div>
               <div v-if="summaryNodes.length === 0" class="empty-section">No components to audit</div>
               <div v-else-if="securityFindings.length === 0" class="audit-ok">
-                <Icon icon="mdi:check-circle" class="sec-icon ok" />
+                <IconifyIcon icon="mdi:check-circle" class="sec-icon ok" />
                 <span class="ok-text">No security issues found</span>
               </div>
               <div v-else class="audit-findings">
@@ -142,7 +142,7 @@
         <AccordionPanel value="performance">
           <AccordionHeader>
             <div class="section-title">
-              <Icon icon="mdi:speedometer" />
+              <IconifyIcon icon="mdi:speedometer" />
               Performance
             </div>
           </AccordionHeader>
@@ -172,7 +172,7 @@
               </div>
               <div v-if="summaryNodes.length === 0" class="empty-section">No components to audit</div>
               <div v-else-if="performanceFindings.length === 0" class="audit-ok">
-                <Icon icon="mdi:check-circle" class="sec-icon ok" />
+                <IconifyIcon icon="mdi:check-circle" class="sec-icon ok" />
                 <span class="ok-text">No performance issues found</span>
               </div>
               <div v-else class="audit-findings">
@@ -190,16 +190,16 @@
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
+import { Icon as IconifyIcon } from '@iconify/vue'
 import {
   NetworkComponentType,
   COMPONENT_CATEGORY_ORDER,
   getComponentCategory,
-  getComponentIcon,
   getComponentLabel,
   getComponentColor,
   type ComponentCategory,
 } from '~/types/network'
+import { getAzureComponentIcon } from '~/lib/azureIcons'
 
 const diagramStore = useDiagramStore()
 
@@ -284,7 +284,7 @@ const isCollapsed = computed({
 })
 
 function toggle() { isCollapsed.value = !isCollapsed.value }
-function getIcon(type: NetworkComponentType) { return getComponentIcon(type) }
+function getIcon(type: NetworkComponentType) { return getAzureComponentIcon(type) }
 function getLabel(type: NetworkComponentType) { return getComponentLabel(type) }
 function getColor(type: NetworkComponentType) { return getComponentColor(type) }
 
@@ -743,10 +743,40 @@ const performanceFindings = computed((): AuditFinding[] => {
     }
   })
 
-  // VPN Gateways on Basic SKU
+  // VPN Gateways: SKU and migration checks
   vpnNodes.forEach((vpn: any) => {
-    if (String(vpn.data?.sku || '').toLowerCase() === 'basic') {
-      findings.push({ severity: 'warning', message: `VPN Gateway "${vpn.data.name}" uses the Basic SKU which has no SLA.`, relatedTypes: [NetworkComponentType.VPN_GATEWAY] })
+    const vpnSku = String(vpn.data?.sku || '').toLowerCase()
+    const vpnName = vpn.data?.name || 'Unknown'
+
+    // Basic SKU - no SLA (critical severity)
+    if (vpnSku === 'basic') {
+      findings.push({
+        severity: 'critical',
+        message: `VPN Gateway "${vpnName}" uses Basic SKU which has no SLA. Upgrade to VpnGw1 or higher.`,
+        relatedTypes: [NetworkComponentType.VPN_GATEWAY],
+      })
+    }
+
+    // Non-AZ SKU - retiring Sep 30, 2026 (warning severity)
+    const nonAzSkus = ['vpngw1', 'vpngw2', 'vpngw3', 'vpngw4', 'vpngw5']
+    if (nonAzSkus.includes(vpnSku)) {
+      findings.push({
+        severity: 'warning',
+        message: `VPN Gateway "${vpnName}" uses non-AZ SKU retiring Sep 30, 2026. Plan upgrade to VpnGw*AZ.`,
+        relatedTypes: [NetworkComponentType.VPN_GATEWAY],
+      })
+    }
+
+    // Basic public IP - migration required (warning severity)
+    if (vpn.data?.gatewayIpId) {
+      const publicIp = nodes.find((n: any) => n.id === vpn.data.gatewayIpId)?.data
+      if (publicIp && String(publicIp.sku || '').toLowerCase() === 'basic') {
+        findings.push({
+          severity: 'warning',
+          message: `VPN Gateway "${vpnName}" uses Basic public IP. Requires migration to Standard SKU (Jan-Apr 2026).`,
+          relatedTypes: [NetworkComponentType.VPN_GATEWAY],
+        })
+      }
     }
   })
 

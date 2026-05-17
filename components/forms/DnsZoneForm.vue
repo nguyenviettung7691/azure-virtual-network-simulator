@@ -26,19 +26,26 @@
         <span class="section-title">Record Sets ({{ records.length }})</span>
         <Button icon="pi pi-plus" size="small" text label="Add Record" @click="addRecord" />
       </div>
+      <small class="helper-text" style="display: block; margin-bottom: 12px;">
+        Supported types: A, AAAA, CNAME, MX, PTR, SRV, TXT, CAA, NS, SOA, SPF, DS, TLSA.
+        Use '@' or leave empty for apex records. Use '*' for wildcard records.
+      </small>
       <div v-if="records.length === 0" class="helper-text">No record sets configured yet.</div>
       <div v-for="(record, idx) in records" :key="`${record.name}-${idx}`" class="record-row">
-        <InputText v-model="record.name" placeholder="@ or web" style="width:110px" />
-        <Select v-model="record.type" :options="recordTypes" style="width:100px" />
-        <InputNumber v-model="record.ttl" :min="1" :max="86400" placeholder="TTL" style="width:95px" />
+        <InputText v-model="record.name" placeholder="@ or web" style="width:100px" />
+        <Select v-model="record.type" :options="recordTypes" style="width:120px" />
+        <InputNumber v-model="record.ttl" :min="1" :max="2147483647" placeholder="TTL (1-2147483647)" style="width:150px" />
         <InputText
           :model-value="record.values.join(', ')"
-          placeholder="10.0.1.10"
+          placeholder="Value"
           style="flex:1; min-width:180px"
           @update:model-value="value => updateRecordValues(idx, String(value || ''))"
         />
         <Button icon="pi pi-trash" text size="small" severity="danger" @click="removeRecord(idx)" />
       </div>
+    </div>
+    <div v-if="model.zoneType === 'Private' && model.vnetLinks" class="helper-text" style="margin-top: 12px;">
+      VNet Links: {{ model.vnetLinks.length }}/1000 ({{ getVnetLinkWarning() }})
     </div>
     <div class="field"><label>Description</label><Textarea v-model="model.description" rows="2" class="w-full" /></div>
   </div>
@@ -65,7 +72,7 @@ function getError(fieldName: string): string | undefined {
   return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
 }
 
-const recordTypes = ['A', 'AAAA', 'CNAME', 'MX', 'PTR', 'SRV', 'TXT']
+const recordTypes = ['A', 'AAAA', 'CAA', 'CNAME', 'DS', 'MX', 'NS', 'PTR', 'SOA', 'SPF', 'SRV', 'TLSA', 'TXT']
 
 const vnetOptions = computed(() =>
   (props.nodes || [])
@@ -116,6 +123,13 @@ function updateRecordValues(idx: number, nextValue: string) {
     ...record,
     values: nextValue.split(',').map(value => value.trim()).filter(Boolean),
   }
+}
+
+function getVnetLinkWarning(): string {
+  const count = model.value.vnetLinks?.length || 0
+  if (count >= 900) return '⚠️ Approaching limit'
+  if (count >= 500) return '⚠️ Over 50%'
+  return '✓ Within limit'
 }
 </script>
 <style scoped>

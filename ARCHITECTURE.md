@@ -11,7 +11,7 @@ This section maps the condensed features in README.md to their detailed architec
 | README Feature | Detailed Specification |
 |---|---|
 | **Interactive Canvas** | § 1.1 Diagram Engine; § 1.2 Viewport Controls |
-| **Component Configuration** | § 2 Property Forms |
+| **Component Configuration** | § 2 Property Forms; [`docs/component/`](docs/component/) per-component specs |
 | **Real-Time Network Summary** | § 3.1 Network Summary Panel |
 | **Smart Auto-Layout** | § 5 Auto-Layout Pipeline |
 | **High-Contrast Edges** | § 1.1 Edge Rendering; § 8 Styling |
@@ -63,6 +63,30 @@ This section maps the condensed features in README.md to their detailed architec
 - **Target:** Opens the corresponding property edit form within the Right Side Panel.
 - **Validation:** Forms must validate Azure-specific rules (e.g., CIDR overlaps, naming conventions). Form states are dynamically mapped to the specific `NetworkComponentType` clicked.
 
+Each component has a dedicated specification document under [`docs/component/`](docs/component/):
+
+### 2.1 [Azure Managed Identity Component (System-Assigned & User-Assigned)](docs/component/identity.md)
+### 2.2 [Azure Public IP Address Component Specification](docs/component/ip-address.md)
+### 2.3 [Azure Subnet Component](docs/component/subnet.md)
+### 2.4 [Azure Application Security Group (ASG) Component Specification](docs/component/asg.md)
+### 2.5 [Azure Network Security Group (NSG) Component Specification](docs/component/nsg.md)
+### 2.6 [Azure Firewall Component Specification](docs/component/firewall.md)
+### 2.7 [Azure Bastion Component Specification](docs/component/bastion.md)
+### 2.8 [Azure DNS Zone Component Specification](docs/component/dns-zone.md)
+### 2.9 [Azure Network Virtual Appliance (NVA) Component Specification](docs/component/nva.md)
+### 2.10 [Azure Load Balancer (Standard & Gateway SKUs) Component Specification](docs/component/load-balancer.md)
+### 2.11 [Azure User-Defined Routes (UDR) Component Specification](docs/component/udr.md)
+### 2.12 [Azure Virtual Machine (VM) Component Specification](docs/component/vm.md)
+### 2.13 [Azure Virtual Machine Scale Sets (VMSS) Component Specification](docs/component/vmss.md)
+### 2.14 [Azure Network Interface Card (NIC) Component Specification](docs/component/nic.md)
+### 2.15 [Azure Kubernetes Service (AKS) Component Specification](docs/component/aks.md)
+### 2.16 [Azure App Service Component Specification](docs/component/app-service.md)
+### 2.17 [Azure Storage Account & Blob Storage Component Specification](docs/component/storage-account.md)
+### 2.18 [Azure Managed Disk Component Specification](docs/component/managed-disk.md)
+### 2.19 [Azure Virtual Network Peering (VNet Peering) Component Specification](docs/component/vnet-peering.md)
+### 2.20 [Azure VPN Gateway Component Specification](docs/component/vpn-gateway.md)
+### 2.21 [Azure Key Vault Component Specification](docs/component/key-vault.md)
+
 ---
 
 ## 3. UI Panels & Data Visualization
@@ -74,7 +98,7 @@ A reactive dashboard reflecting the live diagram state.
 
 #### 3.1.1 Components Section
 - **Grouping:** Nodes grouped by component type.
-- **Category headings:** Type groups are nested beneath sub-headings that mirror the top toolbar taxonomy in fixed order: `Network`, `Security`, `Gateway`, `Compute`, `Storage`, `Identity`.
+- **Category headings:** Type groups are nested beneath sub-headings that mirror the command palette taxonomy in fixed order: `Network`, `Security`, `Gateway`, `Compute`, `Storage`, `Identity`.
 - **Headers:** Clickable `.group-header-clickable` per type — includes component icon, label, count `<Tag>`, and a chevron icon. Clicking toggles `collapsedComponentTypes` (a `Set<string>` ref) to collapse/expand the node list below via `v-show`.
 - **Identify hover behavior:** Hovering a component group header highlights that header and only its related component rows (`identify-active` class scope). This behavior is panel-local and does not modify canvas node state.
   - **Performance optimization:** Hover events are debounced at 16ms (one frame at 60fps) in `RightPanel.vue` to reduce store update frequency. Canvas node decoration is memoized in `DiagramCanvas.vue` based on highlight node IDs, avoiding unnecessary re-renders when the highlight set hasn't changed.
@@ -82,7 +106,7 @@ A reactive dashboard reflecting the live diagram state.
 
 #### 3.1.2 Connectivity Section
 - **Structure:** Div-based collapsible groups (`.conn-groups` container), one `.conn-group` per target node.
-- **Category headings:** Target groups are categorized using the target component type and rendered under the same fixed category order used by the top toolbar (`Network`, `Security`, `Gateway`, `Compute`, `Storage`, `Identity`).
+- **Category headings:** Target groups are categorized using the target component type and rendered under the same fixed category order used by the command palette (`Network`, `Security`, `Gateway`, `Compute`, `Storage`, `Identity`).
 - **Data Synthesis:** Rows reflect explicit attachment edges *and* synthesized containment relationships mapped from `node.parentNode`, guaranteeing full topology visibility.
 - **Collapse/Expand:** Each `.conn-group-header` (chevron + target icon + name + source count badge) is clickable — toggles `collapsedConnTargets` ref; the `.conn-sources` list of source rows is shown/hidden via `v-show`.
 - **Iconography:** Source and Target cells include a small, colored component-type icon. Tooltips expose the full type label.
@@ -102,10 +126,15 @@ A reactive dashboard reflecting the live diagram state.
 
 ### 3.4 Toolbar Responsiveness (Tablet Baseline)
 - **Supported minimum viewport:** Responsive toolbar support is guaranteed down to tablet widths (`<= 1024px`). Phone-size viewport optimization is out of scope.
-- **Top Toolbar (`AppHeader.vue`):**
+- **Top Header (`AppHeader.vue`) + Command Palette (`ComponentCommandPalette.vue`):**
   - Keeps logo icon visible while reducing branding footprint for tighter widths.
-  - Preserves component category access through a compact, horizontally scrollable center rail.
+  - Replaces the permanent icon rail with a searchable command palette in the header center.
+  - Command palette opens on focus, supports keyboard-first navigation (`ArrowUp`/`ArrowDown`, `Enter`, `Escape`), and supports global focus via `Ctrl/Cmd+K`.
+  - Dropdown results stay grouped by fixed categories (`Network`, `Security`, `Gateway`, `Compute`, `Storage`, `Identity`) and include icon + bold label + short description rows.
+  - Selecting an option must continue to trigger `diagramStore.openAddComponentModal(...)` so existing component-form flow remains unchanged.
   - Preserves access to right-side account/setup actions in compact form.
+  - Uses locally bundled Azure Public Service SVG collections through `@nuxt/icon` so command palette rows render matching Azure service/component artwork without runtime icon fetches.
+  - The same Azure collection is reused by the Network Summary sidebar and diagram node icons so the visual language stays consistent across the core topology surfaces.
 - **Bottom Toolbar (`BottomToolbar.vue`):**
   - Stays single-row at tablet widths.
   - Uses horizontal scrolling rather than multi-row wrapping so all primary actions (Export, Import, Save, AI Challenge, Reset, Status) remain reachable.
@@ -171,7 +200,7 @@ A reactive dashboard reflecting the live diagram state.
     - **Classification rules:**
       - **Always Public-Facing:** VPN Gateway, Bastion, Public IP Address, Public DNS Zone, Public Load Balancer, Public App Gateway, public App Service, public Azure Functions
       - **Always VNet:** VNet, Subnet, VNet Peering, NIC, NSG, ASG, Firewall, UDR, NVA, VM, VMSS, AKS, Internal Load Balancer, Internal App Gateway, Service Endpoint, Private Endpoint
-      - **Always Private:** Storage Account, Blob Storage, Managed Disk, Key Vault, Managed Identity, Private DNS Zone
+      - **Always Private:** Storage Account (GPv2 recommended), Blob Storage, Managed Disk, Key Vault, Managed Identity, Private DNS Zone
       - **Config-driven:** App Gateway (frontendType: 'Public' | 'Internal'), Load Balancer (loadBalancerType: 'Public' | 'Internal'), App Service/Functions (VNet Integration or Private Endpoint presence), AKS (node pools in VNet, API server can be public/private)
     - **Edge routing by layer relationship:**
       - Higher → lower layer: source exits `Bottom`, target enters `Top` (e.g., Public Load Balancer → Private backend NIC)

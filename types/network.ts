@@ -29,6 +29,64 @@ export enum NetworkComponentType {
   INTERNET = 'INTERNET',
 }
 
+/**
+ * Managed Disk Type enum (all 5 Azure disk types)
+ */
+export enum ManagedDiskType {
+  ULTRA = 'Ultra',
+  PREMIUM_SSD_V2 = 'Premium_SSD_v2',
+  PREMIUM_SSD = 'Premium_SSD',
+  STANDARD_SSD = 'Standard_SSD',
+  STANDARD_HDD = 'Standard_HDD',
+}
+
+/**
+ * Managed Disk Redundancy enum (LRS or ZRS)
+ */
+export enum ManagedDiskRedundancy {
+  LRS = 'LRS',
+  ZRS = 'ZRS',
+}
+
+/**
+ * Managed Disk Role enum (OS or Data)
+ */
+export enum ManagedDiskRole {
+  OS = 'OS',
+  DATA = 'DATA',
+}
+
+/**
+ * Managed Disk type constraints: which redundancy options are supported per disk type
+ */
+export const MANAGED_DISK_REDUNDANCY_BY_TYPE: Record<ManagedDiskType, ManagedDiskRedundancy[]> = {
+  [ManagedDiskType.ULTRA]: [ManagedDiskRedundancy.LRS],
+  [ManagedDiskType.PREMIUM_SSD_V2]: [ManagedDiskRedundancy.LRS],
+  [ManagedDiskType.PREMIUM_SSD]: [ManagedDiskRedundancy.LRS, ManagedDiskRedundancy.ZRS],
+  [ManagedDiskType.STANDARD_SSD]: [ManagedDiskRedundancy.LRS, ManagedDiskRedundancy.ZRS],
+  [ManagedDiskType.STANDARD_HDD]: [ManagedDiskRedundancy.LRS],
+}
+
+/**
+ * Managed Disk size constraints (min and max GiB per disk type)
+ */
+export const MANAGED_DISK_SIZE_LIMITS: Record<ManagedDiskType, { min: number; max: number }> = {
+  [ManagedDiskType.ULTRA]: { min: 4, max: 65536 },
+  [ManagedDiskType.PREMIUM_SSD_V2]: { min: 1, max: 65536 },
+  [ManagedDiskType.PREMIUM_SSD]: { min: 4, max: 32767 },
+  [ManagedDiskType.STANDARD_SSD]: { min: 4, max: 32767 },
+  [ManagedDiskType.STANDARD_HDD]: { min: 4, max: 32767 },
+}
+
+/**
+ * Disk types that can be used as OS disks
+ */
+export const MANAGED_DISK_OS_COMPATIBLE: ManagedDiskType[] = [
+  ManagedDiskType.PREMIUM_SSD,
+  ManagedDiskType.STANDARD_SSD,
+  ManagedDiskType.STANDARD_HDD,
+]
+
 export interface NetworkComponent {
   id: string
   name: string
@@ -57,12 +115,15 @@ export interface VNetComponent extends NetworkComponent {
 export interface SubnetComponent extends NetworkComponent {
   type: NetworkComponentType.SUBNET
   addressPrefix: string
+  addressPrefixIPv6?: string
   vnetId: string
   nsgId?: string
   routeTableId?: string
+  natGatewayId?: string
   serviceEndpoints?: string[]
   delegations?: string[]
   privateEndpointNetworkPolicies?: 'Enabled' | 'Disabled'
+  privateSubnet?: boolean
 }
 
 export interface NsgComponent extends NetworkComponent {
@@ -84,6 +145,12 @@ export interface NsgRule {
   destinationAddressPrefix: string
   destinationPortRange: string
   description?: string
+  // Optional type specifiers for source/destination (defaults to 'IpCidr' for backward compatibility)
+  sourceType?: 'IpCidr' | 'ServiceTag' | 'Asg'
+  destinationType?: 'IpCidr' | 'ServiceTag' | 'Asg'
+  // Optional ASG references when sourceType='Asg' or destinationType='Asg'
+  sourceAsgId?: string
+  destinationAsgId?: string
 }
 
 export interface AsgComponent extends NetworkComponent {
@@ -95,10 +162,13 @@ export interface IpAddressComponent extends NetworkComponent {
   type: NetworkComponentType.IP_ADDRESS
   ipAddress?: string
   allocationMethod: 'Static' | 'Dynamic'
-  sku: 'Basic' | 'Standard'
+  sku: 'Standard' | 'Standard_v2'  // Basic SKU retired Sep 30, 2025
+  tier?: 'Regional' | 'Global'     // Regional (default) or Global for cross-region LBs
   ipVersion: 'IPv4' | 'IPv6'
   associatedTo?: string
   dnsLabel?: string
+  availabilityZones?: string[]      // Zone IDs: '1', '2', '3'; Standard_v2 always zone-redundant
+  routingPreference?: 'Internet' | 'Microsoft'  // Standard only; not supported on Standard_v2
 }
 
 export interface DnsZoneComponent extends NetworkComponent {
@@ -107,13 +177,15 @@ export interface DnsZoneComponent extends NetworkComponent {
   zoneType: 'Public' | 'Private'
   vnetLinks?: string[]
   recordSets?: DnsRecord[]
+  metadata?: Record<string, string>
 }
 
 export interface DnsRecord {
   name: string
-  type: 'A' | 'AAAA' | 'CNAME' | 'MX' | 'PTR' | 'SRV' | 'TXT'
+  type: 'A' | 'AAAA' | 'CNAME' | 'MX' | 'PTR' | 'SRV' | 'TXT' | 'CAA' | 'NS' | 'SOA' | 'SPF' | 'DS' | 'TLSA'
   ttl: number
   values: string[]
+  metadata?: Record<string, string>
 }
 
 export interface VnetPeeringComponent extends NetworkComponent {
@@ -145,44 +217,70 @@ export interface UdrRoute {
 
 export interface VpnGatewayComponent extends NetworkComponent {
   type: NetworkComponentType.VPN_GATEWAY
-  sku: 'Basic' | 'VpnGw1' | 'VpnGw2' | 'VpnGw3' | 'VpnGw4' | 'VpnGw5'
+  sku: 'Basic' | 'VpnGw1' | 'VpnGw2' | 'VpnGw3' | 'VpnGw4' | 'VpnGw5' | 'VpnGw1AZ' | 'VpnGw2AZ' | 'VpnGw3AZ' | 'VpnGw4AZ' | 'VpnGw5AZ'
   vpnType: 'PolicyBased' | 'RouteBased'
+  vpnGatewayGeneration?: 'Generation1' | 'Generation2' // Optional; inferred from SKU if omitted
   enableBgp?: boolean
   activeActive?: boolean
+  availabilityZones?: string[] // e.g., ['1', '2', '3'] for zone-redundant deployment
+  bgpSettings?: {
+    asn?: number // Border Gateway Protocol ASN
+    bgpPeeringAddress?: string // BGP peering address
+    bgpPeeringAddressForIPv6?: string // BGP peering address for IPv6
+  }
   gatewayIpId?: string
   subnetId?: string
 }
 
 export interface AppGatewayComponent extends NetworkComponent {
   type: NetworkComponentType.APP_GATEWAY
-  sku: 'Standard_v2' | 'WAF_v2' | 'Standard' | 'WAF'
-  tier: 'Standard' | 'Standard_v2' | 'WAF' | 'WAF_v2'
+  sku: 'Standard_v2' | 'WAF_v2'
+  tier: 'Standard_v2' | 'WAF_v2'
   capacity: number
+  minInstances?: number // 1-125; for autoscaling
+  maxInstances?: number // 1-125; for autoscaling
+  idleTimeoutInMinutes?: number // 4-30 minutes
   enableHttp2?: boolean
   enableWaf?: boolean
   wafMode?: 'Detection' | 'Prevention'
+  enableMutualAuthentication?: boolean // mTLS (v2 feature)
   frontendType: 'Public' | 'Internal'
   frontendIpId?: string
   subnetId?: string
+  availabilityZones?: string[] // e.g., ['1', '2', '3'] for zone-redundant deployment
+  keyVaultCertificateId?: string // for TLS certificate storage and rotation
   backendPools?: string[]
+  healthProbes?: HealthProbe[]
+  loadBalancingRules?: LoadBalancingRule[]
 }
 
 export interface NvaComponent extends NetworkComponent {
   type: NetworkComponentType.NVA
+  nvaRole?: 'Firewall' | 'SDWAN' | 'VPN' | 'Proxy' | 'Other'
   vmSize: string
   publisher: string
   offer: string
   sku: string
   version: string
+  haMode?: 'Single' | 'ActiveActive' | 'ActiveStandby'
+  availabilityZones?: string[] // e.g., ['1', '2', '3'] for zone-redundant deployment
+  publicIpId?: string
   subnetId?: string
   enableIpForwarding?: boolean
 }
 
+/**
+ * Azure Load Balancer Component
+ * Note: Basic SKU was retired September 30, 2025; only Standard and Gateway SKUs are supported.
+ * For Azure alignment and Well-Architected best practices, use Standard SKU for production workloads.
+ */
 export interface LoadBalancerComponent extends NetworkComponent {
   type: NetworkComponentType.LOAD_BALANCER
-  sku: 'Basic' | 'Standard' | 'Gateway'
+  sku: 'Standard' | 'Gateway'
   tier: 'Regional' | 'Global'
   loadBalancerType: 'Public' | 'Internal'
+  availabilityZones?: string[] // Zone IDs: '1', '2', '3' for zone redundancy
+  idleTimeoutInMinutes?: number // 4-30 minute range for TCP idle timeout
   frontendIpConfigs?: LoadBalancerFrontend[]
   backendPools?: LoadBalancerBackendPool[]
   loadBalancingRules?: LoadBalancingRule[]
@@ -234,6 +332,7 @@ export interface NetworkICComponent extends NetworkComponent {
   publicIpId?: string
   nsgId?: string
   asgIds?: string[]
+  dnsServers?: string[]
   enableAcceleratedNetworking?: boolean
   enableIpForwarding?: boolean
 }
@@ -248,7 +347,7 @@ export interface VmComponent extends NetworkComponent {
   adminUsername: string
   subnetId?: string
   nicIds?: string[]
-  availabilityZone?: string
+  availabilityZone?: '1' | '2' | '3'
   diskType?: 'Standard_LRS' | 'Premium_LRS' | 'StandardSSD_LRS'
 }
 
@@ -257,6 +356,7 @@ export interface VmssComponent extends NetworkComponent {
   sku: string
   capacity: number
   os: 'Windows' | 'Linux'
+  orchestrationMode: 'Flexible' | 'Uniform'
   imagePublisher: string
   imageOffer: string
   imageSku: string
@@ -265,41 +365,114 @@ export interface VmssComponent extends NetworkComponent {
   autoscaleEnabled?: boolean
   minCapacity?: number
   maxCapacity?: number
+  availabilityZones?: string[]
+  scaleInPolicy?: 'FIFO' | 'OldestVM' | 'NewestVM'
+  overprovision?: boolean
 }
 
 export interface AksComponent extends NetworkComponent {
   type: NetworkComponentType.AKS
-  kubernetesVersion: string
-  nodeCount: number
-  nodeVmSize: string
-  networkPlugin: 'kubenet' | 'azure' | 'none'
-  serviceCidr?: string
-  dnsServiceIp?: string
-  subnetId?: string
-  enableRbac?: boolean
-  enablePrivateCluster?: boolean
-  apiServerAccess: 'Public' | 'Private'
+  // Core cluster configuration
+  kubernetesVersion: string // Must be N-2 or N: 1.28-1.35 (per Azure support window)
+  subnetId?: string // Required for production
+  networkPlugin: 'kubenet' | 'azure' | 'azure-overlay' // azure/overlay for production
+  apiServerAccess: 'Public' | 'Private' // Private recommended
+  pricingTier?: 'Free' | 'Standard' | 'Premium' // Default: Standard
+  // System node pool
+  systemNodePoolSize?: number // Min 3 recommended; includes system components
+  systemNodePoolVmSku?: string // e.g., 'Standard_D2d_v5'
+  // User node pool configuration
+  nodeCount?: number // Initial node count (user pool)
+  nodeVmSize?: string // User node pool VM size
+  enableClusterAutoscaler?: boolean // Default: true
+  minNodeCount?: number // Min 1-2; if autoscaler enabled
+  maxNodeCount?: number // Max 1-1000; if autoscaler enabled
+  // Availability & resilience
+  availabilityZones?: string[] // e.g., ['1','2','3'] for zone redundancy
+  // OS & image configuration
+  osSku?: 'Ubuntu' | 'AzureLinux' | 'Windows2022' // Default: Ubuntu
+  osVersion?: string // e.g., '22.04' for Ubuntu
+  // Security & policies
+  enableRbac?: boolean // Default: true; recommended always ON
+  enablePrivateCluster?: boolean // Recommended: true
+  enableNetworkPolicy?: boolean // Default: false; recommend: true
+  networkPolicyProvider?: 'azure' | 'calico' // If enableNetworkPolicy true
+  apiServerAuthorizedIpRanges?: string[] // For public cluster lockdown
+  // Networking & ingress
+  outboundType?: 'loadBalancer' | 'userDefinedRouting' | 'managedNAT' // Default: loadBalancer
+  loadBalancerSku?: 'Basic' | 'Standard' // Default: Standard
+  dnsPrefix?: string // Optional; for FQDN
+  serviceCidr?: string // Optional; default 10.0.0.0/16
+  dnsServiceIp?: string // Optional; default 10.0.0.10
+  dockerBridgeCidr?: string // Optional; for advanced networking
+  // Monitoring & operations
+  enableMonitoring?: boolean // Default: true; enables Container Insights
+  monitoringWorkspaceId?: string // Log Analytics workspace ID
+  enableManagedIdentity?: boolean // Default: true; recommended
 }
 
 export interface AppServiceComponent extends NetworkComponent {
   type: NetworkComponentType.APP_SERVICE
-  sku: string
-  tier: 'Free' | 'Shared' | 'Basic' | 'Standard' | 'Premium' | 'Isolated'
+  // Plan & Tier (pricing tier determines features and scale-out)
+  sku: 'F1' | 'D1' | 'B1' | 'B2' | 'B3' | 'S1' | 'S2' | 'S3' | 'P1v2' | 'P2v2' | 'P3v2' | 'P1v3' | 'P2v3' | 'P3v3' | 'P1v4' | 'P2v4' | 'P3v4' | 'I1v2' | 'I2v2' | 'I3v2'
+  tier: 'Free' | 'Shared' | 'Basic' | 'Standard' | 'Premium' | 'PremiumV2' | 'PremiumV3' | 'PremiumV4' | 'Isolated' | 'IsolatedV2'
   os: 'Windows' | 'Linux'
-  runtimeStack?: string
-  vnetIntegrationSubnetId?: string
+  // Runtime & Workload
+  runtimeStack?: string // e.g., "DOTNET|8.0", "NODE|20-lts", "PYTHON|3.11", "JAVA|21-java21"
+  // Networking
+  vnetIntegrationSubnetId?: string // VNet integration for outbound access
+  enablePrivateEndpoint?: boolean // Private Link support
+  privateEndpointId?: string // Reference to private endpoint if enabled
+  ipRestrictions?: Array<{ ipAddress: string; priority?: number; action?: 'Allow' | 'Deny' }> // IP access restrictions
   customDomain?: string
-  enableHttps?: boolean
+  // Security & TLS
+  enableHttps?: boolean // Force HTTPS redirect
+  minTlsVersion?: '1.0' | '1.1' | '1.2' | '1.3' // Minimum TLS version; recommend 1.2+
+  enableManagedIdentity?: boolean // Enable system-assigned managed identity
+  userAssignedIdentityIds?: string[] // User-assigned managed identities
+  // Authentication & Authorization
+  enableEasyAuth?: boolean // Built-in authentication/authorization
+  easyAuthProvider?: 'AzureAD' | 'Microsoft' | 'Google' | 'Facebook' | 'X'
+  // Monitoring & Diagnostics
+  enableDiagnosticLogging?: boolean // Enable diagnostic logs (app logs, web server logs, failed requests)
+  applicationInsightsResourceId?: string // Log Analytics workspace or Application Insights resource
+  enableHealthCheck?: boolean
+  healthCheckPath?: string // Path for health check probe (e.g., /health)
+  // Key Vault integration
+  keyVaultSecretUri?: string // Reference to secret in Key Vault for app settings/connection strings
 }
 
 export interface FunctionsComponent extends NetworkComponent {
   type: NetworkComponentType.FUNCTIONS
-  storageAccountId?: string
+  // Hosting model (Azure Functions-native)
+  hostingOption?: 'FlexConsumption' | 'Premium' | 'Dedicated' | 'ContainerApps' | 'Consumption'
+  planSku?: 'FC1' | 'Y1' | 'EP1' | 'EP2' | 'EP3' | 'B1' | 'B2' | 'B3' | 'S1' | 'S2' | 'S3' | 'P1v2' | 'P2v2' | 'P3v2' | 'P1v3' | 'P2v3' | 'P3v3' | 'P1v4' | 'P2v4' | 'P3v4' | 'I1v2' | 'I2v2' | 'I3v2'
+  os?: 'Windows' | 'Linux'
+  // Legacy compatibility fields (read/write for older saved setups)
+  tier?: 'Free' | 'Shared' | 'Basic' | 'Standard' | 'Premium' | 'PremiumV2' | 'PremiumV3' | 'PremiumV4' | 'Isolated' | 'IsolatedV2'
+  hostingPlanSku?: 'Y1' | 'EP1' | 'EP2' | 'EP3' | 'B1' | 'B2' | 'B3' | 'S1' | 'S2' | 'S3' | 'P1v2' | 'P2v2' | 'P3v2' | 'P1v3' | 'P2v3' | 'P3v3' | 'P1v4' | 'P2v4' | 'P3v4' | 'I1v2' | 'I2v2' | 'I3v2'
+  // Runtime & Workload
   runtimeStack: 'dotnet' | 'node' | 'python' | 'java' | 'powershell'
-  runtimeVersion: string
-  hostingPlanSku: string
+  runtimeVersion: string // e.g., "8.0", "20", "3.11", "21", "7.4"
+  storageAccountId?: string // Required storage account for function code/state
+  // Networking
   vnetIntegrationSubnetId?: string
   enablePrivateEndpoint?: boolean
+  privateEndpointId?: string
+  ipRestrictions?: Array<{ ipAddress: string; priority?: number; action?: 'Allow' | 'Deny' }>
+  // Security & TLS
+  enableHttps?: boolean
+  minTlsVersion?: '1.0' | '1.1' | '1.2' | '1.3'
+  enableManagedIdentity?: boolean
+  userAssignedIdentityIds?: string[]
+  // Authentication & Authorization (less common for Functions but supported)
+  enableEasyAuth?: boolean
+  easyAuthProvider?: 'AzureAD' | 'Microsoft' | 'Google' | 'Facebook' | 'X'
+  // Monitoring & Diagnostics
+  enableDiagnosticLogging?: boolean
+  applicationInsightsResourceId?: string
+  // Key Vault integration
+  keyVaultSecretUri?: string
 }
 
 export interface StorageAccountComponent extends NetworkComponent {
@@ -307,20 +480,33 @@ export interface StorageAccountComponent extends NetworkComponent {
   accountKind: 'BlobStorage' | 'BlockBlobStorage' | 'FileStorage' | 'Storage' | 'StorageV2'
   replication: 'LRS' | 'GRS' | 'RAGRS' | 'ZRS' | 'GZRS' | 'RAGZRS'
   accessTier?: 'Hot' | 'Cool' | 'Archive'
+  // Security settings
   enableHttpsOnly?: boolean
   minTlsVersion?: 'TLS1_0' | 'TLS1_1' | 'TLS1_2'
   allowBlobPublicAccess?: boolean
+  allowSharedKeyAccess?: boolean // Default true for compatibility; false disables shared key + SAS authorization
+  allowPublicEndpoint?: boolean // Default true; false disables public endpoint entirely (requires private endpoints)
+  // Networking
   networkDefaultAction?: 'Allow' | 'Deny'
   virtualNetworkRules?: string[]
   ipRules?: string[]
+  // Data protection
+  enableSoftDelete?: boolean // Allows recovery of deleted containers/blobs within retention period
+  softDeleteRetentionDays?: number // 1-365 days; recommended minimum 7 days
 }
 
 export interface ManagedDiskComponent extends NetworkComponent {
   type: NetworkComponentType.MANAGED_DISK
+  diskType: ManagedDiskType
+  redundancy: ManagedDiskRedundancy
+  diskRole: ManagedDiskRole
   diskSizeGb: number
-  sku: 'Standard_LRS' | 'Premium_LRS' | 'StandardSSD_LRS' | 'UltraSSD_LRS'
   osType?: 'Windows' | 'Linux'
   attachedToVmId?: string
+  iops?: number
+  throughput?: number
+  // Backward compatibility: legacy sku field (will be normalized on load)
+  sku?: 'Standard_LRS' | 'Premium_LRS' | 'StandardSSD_LRS' | 'UltraSSD_LRS'
 }
 
 export interface KeyVaultComponent extends NetworkComponent {
@@ -346,12 +532,31 @@ export interface KeyVaultAccessPolicy {
   }
 }
 
+
+/**
+ * Azure Managed Identity (User-Assigned or System-Assigned)
+ *
+ * - System-assigned: created with parent resource, single assignment, lifecycle tied to parent
+ * - User-assigned: standalone, reusable, assignable to multiple resources, independent lifecycle
+ *
+ * Fields:
+ *   - identityType: 'SystemAssigned' | 'UserAssigned'
+ *   - clientId: Azure application (client) ID (auto-generated by Azure)
+ *   - principalId: Service principal object ID in Microsoft Entra ID (auto-generated)
+ *   - tenantId: Microsoft Entra tenant ID (required for cross-tenant RBAC)
+ *   - resourceId: Azure resource ID (format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{name})
+ *   - isolationScope: 'Regional' | 'None' (user-assigned only; restricts cross-region assignment)
+ *   - assignedToId: (system-assigned only) ID of parent resource (VM, App Service, etc.)
+ */
 export interface ManagedIdentityComponent extends NetworkComponent {
   type: NetworkComponentType.MANAGED_IDENTITY
   identityType: 'SystemAssigned' | 'UserAssigned'
-  clientId?: string
-  principalId?: string
-  assignedToId?: string
+  clientId?: string // Azure application (client) ID
+  principalId?: string // Service principal object ID
+  tenantId?: string // Microsoft Entra tenant ID
+  resourceId?: string // Azure resource ID (user-assigned only)
+  isolationScope?: 'Regional' | 'None' // User-assigned only
+  assignedToId?: string // System-assigned only: parent resource
 }
 
 export interface ServiceEndpointComponent extends NetworkComponent {
@@ -373,22 +578,37 @@ export interface PrivateEndpointComponent extends NetworkComponent {
 
 export interface FirewallComponent extends NetworkComponent {
   type: NetworkComponentType.FIREWALL
-  sku: 'Standard' | 'Premium'
-  tier: 'Standard' | 'Premium'
+  sku: 'Basic' | 'Standard' | 'Premium'
   vnetId?: string
   publicIpIds?: string[]
   firewallPolicies?: string[]
   threatIntelMode?: 'Alert' | 'Deny' | 'Off'
+  // Optional deployment mode and networking
+  subnetId?: string // For Forced Tunnel mode (Standard/Premium only)
+  availabilityZones?: string[] // AZ names, e.g. ['1', '2', '3']
+  forcedTunneling?: boolean // Standard/Premium only; if true, uses management NIC + optional subnet
+  // Standard and Premium features
+  dnsProxyEnabled?: boolean // Standard/Premium only
+  customDnsServers?: string[] // Standard/Premium only; array of IPv4 addresses
+  // Premium-only features
+  idpsMode?: 'Off' | 'Alert' | 'AlertDeny'
+  tlsInspectionEnabled?: boolean
+  scaleUnits?: number // Premium only; range 1-100
 }
 
 export interface BastionComponent extends NetworkComponent {
   type: NetworkComponentType.BASTION
-  sku: 'Basic' | 'Standard'
-  subnetId?: string
-  publicIpId?: string
-  scaleUnits?: number
-  enableTunneling?: boolean
-  enableIpConnect?: boolean
+  sku: 'Developer' | 'Basic' | 'Standard' | 'Premium'
+  subnetId?: string                        // Required for Basic+; not applicable to Developer
+  publicIpId?: string                      // Required for Basic/Standard/Premium (unless isPrivateOnly); not for Developer
+  scaleUnits?: number                      // Fixed 2 for Basic; configurable 2-50 for Standard/Premium; N/A for Developer
+  enableTunneling?: boolean                // Standard+ feature; allows SSH/RDP via native client tunneling
+  enableIpConnect?: boolean                // Standard+ feature; allows IP-based connections
+  enableShareableLink?: boolean             // Standard+ feature; enables shareable links without portal access
+  customInboundPorts?: number[]            // Standard+ feature; custom RDP/SSH ports (default 3389, 22)
+  isPrivateOnly?: boolean                  // Premium-only; private-only deployment without public IP
+  enableSessionRecording?: boolean          // Premium-only; session recording for compliance
+  availabilityZones?: string[]             // Optional all SKUs where supported; AZ support varies by region
 }
 
 export type AnyNetworkComponent =

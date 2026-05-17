@@ -318,7 +318,7 @@ function getNodeDetail(node: DiagramNode): string {
     case NetworkComponentType.APP_SERVICE:
       return d.tier || d.sku || ''
     case NetworkComponentType.FUNCTIONS:
-      return d.runtimeStack || d.tier || ''
+      return [d.hostingOption || '', d.runtimeStack || d.tier || ''].filter(Boolean).join(' - ')
     case NetworkComponentType.LOAD_BALANCER:
       return [d.sku, d.loadBalancerType].filter(Boolean).join(' - ')
     case NetworkComponentType.APP_GATEWAY:
@@ -340,9 +340,9 @@ function getNodeDetail(node: DiagramNode): string {
     case NetworkComponentType.NVA:
       return d.imagePublisher || d.size || ''
     case NetworkComponentType.STORAGE_ACCOUNT:
-      return [d.accountTier, d.replicationType].filter(Boolean).join(' - ')
+      return [d.accountKind, d.replication, d.accessTier].filter(Boolean).join(' - ')
     case NetworkComponentType.BLOB_STORAGE:
-      return d.accessTier || ''
+      return [d.accountKind || 'BlobStorage', d.replication, d.accessTier].filter(Boolean).join(' - ')
     case NetworkComponentType.MANAGED_DISK:
       return [d.diskSizeGB ? `${d.diskSizeGB} GB` : '', d.sku || d.storageType || ''].filter(Boolean).join(' - ')
     case NetworkComponentType.KEY_VAULT:

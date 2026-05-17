@@ -13,10 +13,33 @@
       </div>
       <small v-if="getError('remoteVnetId')" class="error-text">{{ getError('remoteVnetId') }}</small>
     </div>
-    <div class="field checkbox-field"><label>Allow VNet Access</label><ToggleSwitch v-model="model.allowVirtualNetworkAccess" /></div>
-    <div class="field checkbox-field"><label>Allow Forwarded Traffic</label><ToggleSwitch v-model="model.allowForwardedTraffic" /></div>
-    <div class="field checkbox-field"><label>Allow Gateway Transit</label><ToggleSwitch v-model="model.allowGatewayTransit" /></div>
-    <div class="field checkbox-field"><label>Use Remote Gateways</label><ToggleSwitch v-model="model.useRemoteGateways" /></div>
+    <div class="field">
+      <label>Peering State</label>
+      <InputText v-model="model.peeringState" class="w-full" disabled />
+      <small class="helper-text">Initiated | Connected | Disconnected</small>
+    </div>
+    <div class="field checkbox-field">
+      <label>Allow VNet Access</label>
+      <ToggleSwitch v-model="model.allowVirtualNetworkAccess" />
+      <small class="helper-text">Allows resources in peered VNets to directly communicate</small>
+    </div>
+    <div class="field checkbox-field">
+      <label>Allow Forwarded Traffic</label>
+      <ToggleSwitch v-model="model.allowForwardedTraffic" />
+      <small class="helper-text">Allows traffic forwarded via UDRs or network appliances</small>
+    </div>
+    <div class="field checkbox-field">
+      <label>Allow Gateway Transit</label>
+      <ToggleSwitch v-model="model.allowGatewayTransit" />
+      <small v-if="model.allowGatewayTransit" class="warning-text">⚠ Cannot be enabled together with "Use Remote Gateways"</small>
+      <small v-else class="helper-text">Allows this VNet's gateway to be used by remote VNets (hub pattern)</small>
+    </div>
+    <div class="field checkbox-field">
+      <label>Use Remote Gateways</label>
+      <ToggleSwitch v-model="model.useRemoteGateways" />
+      <small v-if="model.useRemoteGateways" class="warning-text">⚠ Cannot be enabled together with "Allow Gateway Transit"</small>
+      <small v-else class="helper-text">Uses the remote VNet's gateway for on-premises connectivity</small>
+    </div>
   </div>
 </template>
 <script setup lang="ts">
@@ -50,4 +73,7 @@ function getError(fieldName: string): string | undefined {
   border-color: var(--red-500) !important;
   background-color: var(--red-50);
 }
+.error-text { color: var(--red-500); font-size: 0.75rem; }
+.helper-text { color: var(--text-color-secondary); font-size: 0.75rem; display: block; margin-top: 0.25rem; }
+.warning-text { color: var(--orange-500); font-size: 0.75rem; display: block; margin-top: 0.25rem; font-weight: 500; }
 </style>

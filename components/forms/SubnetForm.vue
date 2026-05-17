@@ -2,11 +2,20 @@
   <div class="component-form">
     <div class="field"><label>Name *</label><InputText v-model="model.name" class="w-full" placeholder="my-subnet" /></div>
     <div class="field">
-      <label>Address Prefix *</label>
+      <label>Address Prefix (IPv4) *</label>
       <div :class="{ 'has-error': getError('addressPrefix') }" class="input-wrapper">
         <InputText v-model="model.addressPrefix" class="w-full" placeholder="10.0.1.0/24" />
       </div>
       <small v-if="getError('addressPrefix')" class="error-text">{{ getError('addressPrefix') }}</small>
+      <small class="hint-text">Must be /29 or larger (minimum 8 IPs). Must fit within parent VNet.</small>
+    </div>
+    <div class="field">
+      <label>Address Prefix (IPv6)</label>
+      <div :class="{ 'has-error': getError('addressPrefixIPv6') }" class="input-wrapper">
+        <InputText v-model="model.addressPrefixIPv6" class="w-full" placeholder="2001:db8:1::/64" />
+      </div>
+      <small v-if="getError('addressPrefixIPv6')" class="error-text">{{ getError('addressPrefixIPv6') }}</small>
+      <small class="hint-text">Optional. For dual-stack support. Must be /64 or larger.</small>
     </div>
     <div class="field">
       <label>Parent VNet</label>
@@ -27,10 +36,27 @@
       </div>
       <small v-if="getError('routeTableId')" class="error-text">{{ getError('routeTableId') }}</small>
     </div>
+    <div class="field"><label>NAT Gateway (reserved for future use)</label>
+      <div :class="{ 'has-error': getError('natGatewayId') && getError('natGatewayId')?.includes('not exist') }" class="input-wrapper">
+        <InputText v-model="model.natGatewayId" class="w-full" placeholder="NAT Gateway component not yet available" disabled />
+      </div>
+      <small v-if="getError('natGatewayId')" class="error-text">{{ getError('natGatewayId') }}</small>
+      <small class="hint-text">NAT Gateway component type will be available in a future update.</small>
+    </div>
     <div class="field"><label>Service Endpoints (comma-separated)</label><InputText v-model="endpointsStr" class="w-full" placeholder="Microsoft.Storage, Microsoft.KeyVault" /></div>
-    <div class="field"><label>Delegations (comma-separated)</label><InputText v-model="delegationsStr" class="w-full" placeholder="Microsoft.Web/serverFarms" /></div>
+    <div class="field"><label>Delegations (comma-separated)</label><InputText v-model="delegationsStr" class="w-full" placeholder="Microsoft.Web/serverFarms" />
+      <small v-if="getError('delegations')" class="error-text">{{ getError('delegations') }}</small>
+    </div>
     <div class="field"><label>Private Endpoint Network Policies</label>
       <Select v-model="model.privateEndpointNetworkPolicies" :options="['Enabled','Disabled']" class="w-full" />
+      <small class="hint-text">Disabled allows private endpoints. Cannot be Disabled if delegations are configured.</small>
+    </div>
+    <div class="field"><label>Private Subnet</label>
+      <div class="checkbox-wrapper">
+        <input v-model="model.privateSubnet" type="checkbox" class="checkbox" />
+        <span>Prevent default outbound access</span>
+      </div>
+      <small class="hint-text">When enabled, resources in this subnet have no default outbound access to the internet.</small>
     </div>
   </div>
 </template>
@@ -77,5 +103,32 @@ function getError(fieldName: string): string | undefined {
 .input-wrapper.has-error :deep(.p-select-trigger) {
   border-color: var(--red-500) !important;
   background-color: var(--red-50);
+}
+.error-text {
+  font-size: 0.75rem;
+  color: var(--red-700);
+  background-color: var(--red-50);
+  padding: 0.2rem 0.35rem;
+  border-radius: 4px;
+  display: inline-block;
+  max-width: 100%;
+  word-break: break-word;
+}
+.hint-text {
+  font-size: 0.7rem;
+  color: var(--text-color-secondary);
+  opacity: 0.8;
+  font-style: italic;
+}
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+.checkbox {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
 }
 </style>

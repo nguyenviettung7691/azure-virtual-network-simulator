@@ -310,6 +310,11 @@
   border-color: var(--p-primary-hover-color, #106ebe);
 }
 
+.vue-flow__controls-button.control-locked .flow-control-icon,
+.vue-flow__controls-button.control-locked .mdi-themed-icon {
+  color: inherit;
+}
+
 /* Show pointer cursor on node name labels when the canvas is in interactive (unlocked) state.
    generic-node-name: used by all compact-card nodes (ComputeNode, NsgNode, etc.)
    node-name: used by container nodes VNetNode and SubnetNode */

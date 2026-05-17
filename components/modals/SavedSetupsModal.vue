@@ -18,7 +18,7 @@
     </div>
 
     <div v-else-if="setups.length === 0" class="empty-state">
-      <Icon icon="mdi:folder-open-outline" class="empty-icon" />
+      <IconifyIcon icon="mdi:folder-open-outline" class="empty-icon" />
       <p>No saved setups yet</p>
       <small>Use the "Save Setup" button in the bottom toolbar to save your current diagram</small>
     </div>
@@ -30,7 +30,7 @@
         >
           <img v-if="setup.thumbnail" :src="setup.thumbnail" alt="Setup preview" />
           <div v-else class="no-thumbnail">
-            <Icon icon="mdi:image-off" />
+            <IconifyIcon icon="mdi:image-off" />
           </div>
           <Button
             v-if="setup.thumbnail"
@@ -44,7 +44,7 @@
             @click="openThumbnailPreview(setup)"
           >
             <template #icon>
-              <Icon icon="mdi:fullscreen" />
+              <IconifyIcon icon="mdi:fullscreen" />
             </template>
           </Button>
         </div>
@@ -52,17 +52,17 @@
           <span class="setup-name">{{ setup.name }}</span>
           <div class="setup-meta-grid">
             <span class="setup-meta-row">
-              <Icon icon="mdi:calendar-month-outline" class="setup-meta-icon" />
+              <IconifyIcon icon="mdi:calendar-month-outline" class="setup-meta-icon" />
               <span class="setup-meta-label">Saved</span>
               <span class="setup-meta-value">{{ formatDate(setup.createdAt) }}</span>
             </span>
             <span class="setup-meta-row">
-              <Icon icon="mdi:vector-arrange-above" class="setup-meta-icon" />
+              <IconifyIcon icon="mdi:vector-arrange-above" class="setup-meta-icon" />
               <span class="setup-meta-label">Components</span>
               <span class="setup-meta-value">{{ setup.diagram?.nodes?.length || 0 }}</span>
             </span>
             <span class="setup-meta-row">
-              <Icon icon="mdi:clipboard-check-outline" class="setup-meta-icon" />
+              <IconifyIcon icon="mdi:clipboard-check-outline" class="setup-meta-icon" />
               <span class="setup-meta-label">Tests</span>
               <span class="setup-meta-value">{{ setup.tests?.length || 0 }}</span>
             </span>
@@ -100,14 +100,14 @@
         :alt="selectedThumbnailAlt"
       />
       <div v-else class="thumbnail-preview-empty">
-        <Icon icon="mdi:image-off" />
+        <IconifyIcon icon="mdi:image-off" />
       </div>
     </div>
   </Dialog>
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
+import { Icon as IconifyIcon } from '@iconify/vue'
 import type { SavedSetup } from '~/types/diagram'
 
 const authStore = useAuthStore()

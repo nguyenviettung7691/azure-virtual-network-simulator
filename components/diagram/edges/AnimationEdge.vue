@@ -31,7 +31,7 @@
         :style="travelerStyle"
       >
         <span class="animation-traveler-shell">
-          <Icon icon="mdi:paper-plane-outline" class="animation-traveler-icon" />
+          <IconifyIcon icon="mdi:paper-plane-outline" class="animation-traveler-icon" />
         </span>
       </div>
     </EdgeLabelRenderer>
@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
+import { Icon as IconifyIcon } from '@iconify/vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from '@vue-flow/core'
 import type { EdgeProps } from '@vue-flow/core'

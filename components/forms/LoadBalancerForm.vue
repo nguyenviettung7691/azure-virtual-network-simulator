@@ -1,15 +1,38 @@
 <template>
   <div class="component-form">
     <div class="field"><label>Name *</label><InputText v-model="model.name" class="w-full" placeholder="my-lb" /></div>
-    <div class="field"><label>SKU</label><SelectButton v-model="model.sku" :options="['Basic','Standard','Gateway']" /></div>
-    <div class="field"><label>Type</label><SelectButton v-model="model.loadBalancerType" :options="['Public','Internal']" /></div>
-    <div class="field"><label>Tier</label><SelectButton v-model="model.tier" :options="['Regional','Global']" /></div>
     <div class="field">
-      <label>Capacity</label>
-      <div :class="{ 'has-error': getError('capacity') }" class="input-wrapper">
-        <InputNumber v-model="model.capacity" :min="1" class="w-full" placeholder="Auto" />
+      <label>SKU *</label>
+      <div :class="{ 'has-error': getError('sku') }" class="input-wrapper">
+        <SelectButton v-model="model.sku" :options="['Standard','Gateway']" class="w-full" />
       </div>
-      <small v-if="getError('capacity')" class="error-text">{{ getError('capacity') }}</small>
+      <small class="helper-text">Basic SKU was retired September 30, 2025. Use Standard for production workloads.</small>
+      <small v-if="getError('sku')" class="error-text">{{ getError('sku') }}</small>
+    </div>
+    <div class="field"><label>Type</label><SelectButton v-model="model.loadBalancerType" :options="['Public','Internal']" class="w-full" /></div>
+    <div class="field">
+      <label>Tier</label>
+      <div :class="{ 'has-error': getError('tier') }" class="input-wrapper">
+        <SelectButton v-model="model.tier" :options="['Regional','Global']" class="w-full" />
+      </div>
+      <small v-if="getError('tier')" class="error-text">{{ getError('tier') }}</small>
+    </div>
+    <div class="field">
+      <label>Availability Zones</label>
+      <div :class="{ 'has-error': getError('availabilityZones') }" class="input-wrapper">
+        <InputText v-model="availabilityZonesStr" class="w-full" placeholder="1,2,3 (comma-separated)" />
+      </div>
+      <small v-if="availabilityZonesWarning" class="warning-text">⚠️ {{ availabilityZonesWarning }}</small>
+      <small class="helper-text">2+ zones recommended for zone redundancy and reliability (Well-Architected)</small>
+      <small v-if="getError('availabilityZones')" class="error-text">{{ getError('availabilityZones') }}</small>
+    </div>
+    <div class="field">
+      <label>Idle Timeout (minutes)</label>
+      <div :class="{ 'has-error': getError('idleTimeoutInMinutes') }" class="input-wrapper">
+        <InputNumber v-model="model.idleTimeoutInMinutes" :min="4" :max="30" class="w-full" placeholder="15" />
+      </div>
+      <small class="helper-text">TCP idle timeout before connection reset (4-30 minutes, default 4)</small>
+      <small v-if="getError('idleTimeoutInMinutes')" class="error-text">{{ getError('idleTimeoutInMinutes') }}</small>
     </div>
 
     <!-- Frontend IP Configuration -->
@@ -53,6 +76,7 @@
         <span class="section-title">Health Probes</span>
         <Button icon="pi pi-plus" size="small" text rounded @click="addProbe" aria-label="Add probe" />
       </div>
+      <small class="helper-text">Health probes monitor backend instance health; interval 5-300s recommended for fast failure detection</small>
       <div v-if="probes.length === 0" class="helper-text">No health probes configured.</div>
       <div v-for="(probe, i) in probes" :key="i" class="rule-card" :class="{ 'has-error': getProbeErrors(i).length > 0 }">
         <div class="rule-row">
@@ -66,13 +90,13 @@
         <div class="rule-row">
           <label class="caption">Interval (s)</label>
           <div :class="{ 'has-error': hasProbeFieldError(i, 'intervalInSeconds') }" class="input-wrapper" style="width:5rem">
-            <InputNumber v-model="probe.intervalInSeconds" :min="5" :max="2147483647" />
+            <InputNumber v-model="probe.intervalInSeconds" :min="5" :max="300" />
           </div>
           <label class="caption">Unhealthy threshold</label>
           <div :class="{ 'has-error': hasProbeFieldError(i, 'numberOfProbes') }" class="input-wrapper" style="width:5rem">
             <InputNumber v-model="probe.numberOfProbes" :min="1" :max="2147483647" />
           </div>
-          <InputText v-if="probe.protocol !== 'Tcp'" v-model="probe.requestPath" class="flex-1" placeholder="/health" />
+          <InputText v-if="probe.protocol !== 'Tcp'" v-model="probe.requestPath" class="flex-1" placeholder="/health (required for HTTP/HTTPS)" />
         </div>
         <div v-if="getProbeErrors(i).length > 0" class="probe-errors">
           <small v-for="(err, j) in getProbeErrors(i)" :key="j" class="error-text">{{ err }}</small>
@@ -86,18 +110,27 @@
         <span class="section-title">Load Balancing Rules</span>
         <Button icon="pi pi-plus" size="small" text rounded @click="addRule" aria-label="Add rule" />
       </div>
+      <small class="helper-text">Rules define how frontend ports map to backend pools; each rule must reference a health probe</small>
       <div v-if="rules.length === 0" class="helper-text">No rules configured.</div>
-      <div v-for="(rule, i) in rules" :key="i" class="rule-card">
+      <div v-for="(rule, i) in rules" :key="i" class="rule-card" :class="{ 'has-error': getRuleErrors(i).length > 0 }">
         <div class="rule-row">
           <InputText v-model="rule.name" class="flex-1" placeholder="rule-name" />
           <Select v-model="rule.protocol" :options="['Tcp','Udp','All']" class="w-5rem" />
           <Button icon="pi pi-trash" size="small" text rounded severity="danger" @click="removeRule(i)" />
         </div>
         <div class="rule-row">
-          <label class="caption">Frontend Port</label>
-          <InputNumber v-model="rule.frontendPort" :min="1" :max="65535" class="w-5rem" />
-          <label class="caption">Backend Port</label>
-          <InputNumber v-model="rule.backendPort" :min="1" :max="65535" class="w-5rem" />
+          <label class="caption">Frontend Port (1-65535)</label>
+          <div :class="{ 'has-error': hasRuleFieldError(i, 'frontendPort') }" class="input-wrapper" style="width:6rem">
+            <InputNumber v-model="rule.frontendPort" :min="1" :max="65535" />
+          </div>
+          <label class="caption">Backend Port (1-65535)</label>
+          <div :class="{ 'has-error': hasRuleFieldError(i, 'backendPort') }" class="input-wrapper" style="width:6rem">
+            <InputNumber v-model="rule.backendPort" :min="1" :max="65535" />
+          </div>
+          <Checkbox v-model="rule.enableFloatingIp" :binary="true" input-id="floating-ip" /><label for="floating-ip" class="caption">Floating IP</label>
+        </div>
+        <div v-if="getRuleErrors(i).length > 0" class="probe-errors">
+          <small v-for="(err, j) in getRuleErrors(i)" :key="j" class="error-text">{{ err }}</small>
         </div>
       </div>
     </div>
@@ -138,6 +171,26 @@ const selectedBackendNicIds = computed({
         : [],
     }
   },
+})
+
+// Availability Zones: comma-separated string ↔ string[] array
+const availabilityZonesStr = computed({
+  get: () => (model.value.availabilityZones || []).join(','),
+  set: (v: string) => {
+    const zones = v
+      .split(',')
+      .map(z => z.trim())
+      .filter(z => z !== '')
+    model.value = { ...model.value, availabilityZones: zones.length > 0 ? zones : undefined }
+  },
+})
+
+// Zone redundancy warning: fewer than 2 zones
+const availabilityZonesWarning = computed(() => {
+  const zones = model.value.availabilityZones || []
+  if (zones.length === 0) return undefined
+  if (zones.length < 2) return 'Fewer than 2 zones; zone redundancy recommended'
+  return undefined
 })
 
 // Frontend IP helpers
@@ -183,17 +236,27 @@ const validationErrors = computed(() => {
 })
 
 function getError(fieldName: string): string | undefined {
-  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName && e.severity === 'error')?.message
 }
 
 function getProbeErrors(probeIdx: number): string[] {
   return validationErrors.value
-    .filter((e: FieldError) => e.fieldName.startsWith(`healthProbes[${probeIdx}]`))
+    .filter((e: FieldError) => e.fieldName.startsWith(`healthProbes[${probeIdx}]`) && e.severity === 'error')
     .map((e: FieldError) => e.message)
 }
 
 function hasProbeFieldError(probeIdx: number, fieldName: string): boolean {
-  return validationErrors.value.some((e: FieldError) => e.fieldName === `healthProbes[${probeIdx}].${fieldName}`)
+  return validationErrors.value.some((e: FieldError) => e.fieldName === `healthProbes[${probeIdx}].${fieldName}` && e.severity === 'error')
+}
+
+function getRuleErrors(ruleIdx: number): string[] {
+  return validationErrors.value
+    .filter((e: FieldError) => e.fieldName.startsWith(`loadBalancingRules[${ruleIdx}]`) && e.severity === 'error')
+    .map((e: FieldError) => e.message)
+}
+
+function hasRuleFieldError(ruleIdx: number, fieldName: string): boolean {
+  return validationErrors.value.some((e: FieldError) => e.fieldName === `loadBalancingRules[${ruleIdx}].${fieldName}` && e.severity === 'error')
 }
 </script>
 <style scoped>
@@ -204,6 +267,8 @@ function hasProbeFieldError(probeIdx: number, fieldName: string): boolean {
 .section-header { display: flex; align-items: center; justify-content: space-between; }
 .section-title { font-size: 0.82rem; font-weight: 600; color: var(--text-color-secondary); }
 .caption, .helper-text { font-size: 0.72rem; color: var(--text-muted); }
+.warning-text { font-size: 0.72rem; color: var(--orange-500); }
+.error-text { font-size: 0.72rem; color: var(--red-500); font-weight: 500; }
 .checkbox-list { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
 .checkbox-row { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; color: var(--text); }
 .rule-card { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }

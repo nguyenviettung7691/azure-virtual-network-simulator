@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { NetworkComponentType, getComponentLabel } from '~/types/network'
+import { NetworkComponentType, getComponentLabel, ManagedDiskType, ManagedDiskRedundancy, ManagedDiskRole } from '~/types/network'
 import type { AnyNetworkComponent } from '~/types/network'
 import type { VNetComponent } from '~/types/network'
 import { getValidator } from '~/lib/componentValidators'
@@ -107,6 +107,93 @@ function buildInitialComponentData(type: NetworkComponentType): Partial<AnyNetwo
     }
   }
 
+  if (type === NetworkComponentType.VNET_PEERING) {
+    return {
+      ...base,
+      allowVirtualNetworkAccess: true,
+      allowForwardedTraffic: true,
+      allowGatewayTransit: false,
+      useRemoteGateways: false,
+      peeringState: 'Initiated',
+    }
+  }
+
+  if (type === NetworkComponentType.VM) {
+    return {
+      ...base,
+      os: 'Linux',
+      size: 'Standard_D2s_v3',
+      imagePublisher: 'Canonical',
+      imageOffer: 'UbuntuServer',
+      imageSku: '22_04-lts-gen2',
+      adminUsername: 'azureadmin',
+      nicIds: [],
+      diskType: 'StandardSSD_LRS',
+    }
+  }
+
+  if (type === NetworkComponentType.VMSS) {
+    return {
+      ...base,
+      sku: 'Standard_D2s_v3',
+      capacity: 2,
+      os: 'Linux',
+      orchestrationMode: 'Flexible',
+      imagePublisher: 'Canonical',
+      imageOffer: 'UbuntuServer',
+      imageSku: '22_04-lts-gen2',
+      upgradePolicy: 'Automatic',
+      autoscaleEnabled: false,
+      availabilityZones: ['1', '2'],
+      scaleInPolicy: 'FIFO',
+    }
+  }
+
+  if (type === NetworkComponentType.FUNCTIONS) {
+    return {
+      ...base,
+      hostingOption: 'FlexConsumption',
+      planSku: 'FC1',
+      hostingPlanSku: 'FC1',
+      os: 'Linux',
+      runtimeStack: 'node',
+      runtimeVersion: '20',
+      enableHttps: true,
+      enableDiagnosticLogging: true,
+    }
+  }
+
+  if (type === NetworkComponentType.STORAGE_ACCOUNT || type === NetworkComponentType.BLOB_STORAGE || type === NetworkComponentType.MANAGED_DISK) {
+    if (type === NetworkComponentType.MANAGED_DISK) {
+      return {
+        ...base,
+        diskType: 'Premium_SSD_v2',
+        redundancy: 'LRS',
+        diskRole: 'DATA',
+        diskSizeGb: 128,
+        osType: undefined,
+        attachedToVmId: undefined,
+      }
+    }
+    // STORAGE_ACCOUNT or BLOB_STORAGE
+    return {
+      ...base,
+      accountKind: type === NetworkComponentType.BLOB_STORAGE ? 'BlobStorage' : 'StorageV2',
+      replication: 'LRS',
+      accessTier: 'Hot',
+      enableHttpsOnly: true,
+      allowBlobPublicAccess: false,
+      allowSharedKeyAccess: true,
+      allowPublicEndpoint: true,
+      networkDefaultAction: 'Allow',
+      virtualNetworkRules: [],
+      ipRules: [],
+      minTlsVersion: 'TLS1_2',
+      enableSoftDelete: false,
+      softDeleteRetentionDays: undefined,
+    }
+  }
+
   return base
 }
 
@@ -171,6 +258,7 @@ function onSubmit() {
     diagramStore.updateNode(data.id, data)
   } else {
     diagramStore.addNode(data)
+    diagramStore.autoLayout()
   }
   submitErrors.value = []
   diagramStore.closeComponentModal()

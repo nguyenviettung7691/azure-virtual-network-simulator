@@ -7,9 +7,14 @@
       <div :class="{ 'has-error': getError('addressSpace') }" class="input-wrapper">
         <InputText v-model="addressSpaceStr" class="w-full" placeholder="10.0.0.0/16, 10.1.0.0/16" />
       </div>
+      <small class="form-hint">Use RFC 1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16). Avoid overlaps with other VNets or on-premises networks.</small>
       <small v-if="getError('addressSpace')" class="error-text">{{ getError('addressSpace') }}</small>
     </div>
-    <div class="field"><label>DNS Servers (comma-separated)</label><InputText v-model="dnsServersStr" class="w-full" placeholder="168.63.129.16" /></div>
+    <div class="field">
+      <label>DNS Servers (comma-separated)</label>
+      <InputText v-model="dnsServersStr" class="w-full" placeholder="168.63.129.16" />
+      <small class="form-hint">Optional. Defaults to Azure DNS (168.63.129.16). Enter custom DNS servers as IP addresses, one per address field.</small>
+    </div>
     <div class="field">
       <label>Region *</label>
       <div :class="{ 'has-error': getError('region') }" class="input-wrapper">
@@ -22,13 +27,16 @@
       <div :class="{ 'has-error': getError('resourceGroup') }" class="input-wrapper">
         <InputText v-model="model.resourceGroup" class="w-full" placeholder="my-rg" />
       </div>
+      <small class="form-hint">Logical container for organizing related resources.</small>
       <small v-if="getError('resourceGroup')" class="error-text">{{ getError('resourceGroup') }}</small>
     </div>
     <div class="field checkbox-field">
       <label>DDoS Protection</label><ToggleSwitch v-model="model.enableDdosProtection" />
+      <small class="form-hint-inline">Enable Azure DDoS Protection Standard for this VNet.</small>
     </div>
     <div class="field checkbox-field">
       <label>VM Protection</label><ToggleSwitch v-model="model.enableVmProtection" />
+      <small class="form-hint-inline">Enable DDoS protection for virtual machines (deprecated feature).</small>
     </div>
   </div>
 </template>
@@ -76,4 +84,6 @@ function getError(fieldName: string): string | undefined {
   border-color: var(--red-500) !important;
   background-color: var(--red-50);
 }
+.form-hint { display: block; font-size: 0.75rem; color: var(--text-color-secondary); font-style: italic; margin-top: 0.2rem; }
+.form-hint-inline { display: inline; font-size: 0.75rem; color: var(--text-color-secondary); font-style: italic; margin-left: 0.5rem; }
 </style>

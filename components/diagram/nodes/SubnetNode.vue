@@ -12,7 +12,7 @@
     <Handle type="target" :position="Position.Bottom" id="bottom-target" />
 
     <div class="node-header subnet-header">
-      <Icon icon="mdi:lan" class="node-icon" />
+      <Icon :name="nodeIcon" mode="svg" class="node-icon" />
       <div class="node-title-group">
         <span class="node-label">Subnet</span>
         <span class="node-name">{{ data.name }}</span>
@@ -33,8 +33,9 @@
 
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
-import { Icon } from '@iconify/vue'
 import type { SubnetComponent } from '~/types/network'
+import { NetworkComponentType } from '~/types/network'
+import { getAzureComponentIcon } from '~/lib/azureIcons'
 
 interface Props {
   id: string
@@ -44,6 +45,7 @@ interface Props {
 
 const props = defineProps<Props>()
 const diagramStore = useDiagramStore()
+const nodeIcon = getAzureComponentIcon(NetworkComponentType.SUBNET)
 
 function onDblClick() {
   diagramStore.openEditComponentModal(props.data)

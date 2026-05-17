@@ -8,7 +8,7 @@
   >
     <template #header>
       <div class="congrats-header">
-        <Icon :icon="headerIcon" class="party-icon" :class="{ danger: !isSuccess }" />
+        <IconifyIcon :icon="headerIcon" class="party-icon" :class="{ danger: !isSuccess }" />
         <span>{{ headerTitle }}</span>
       </div>
     </template>
@@ -46,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
+import { Icon as IconifyIcon } from '@iconify/vue'
 
 const challengesStore = useChallengesStore()
 

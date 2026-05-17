@@ -2,7 +2,7 @@
   <aside class="left-panel" :class="{ collapsed: isCollapsed }">
     <div class="panel-header" @click="toggle">
       <div class="panel-title">
-        <Icon icon="mdi:test-tube" class="panel-icon" />
+        <IconifyIcon icon="mdi:test-tube" class="panel-icon" />
         <span v-if="!isCollapsed">Network Tests</span>
       </div>
       <Button :icon="isCollapsed ? 'pi pi-chevron-right' : 'pi pi-chevron-left'" text size="small" class="collapse-btn" />
@@ -40,19 +40,19 @@
             <template #label>
               <div class="meter-label-row">
                 <span class="summary-label pass">
-                  <Icon icon="mdi:check-circle" class="summary-label-icon" />
+                  <IconifyIcon icon="mdi:check-circle" class="summary-label-icon" />
                   Pass ({{ testsStore.testSummary.passed }})
                 </span>
                 <span class="summary-label fail">
-                  <Icon icon="mdi:close-circle" class="summary-label-icon" />
+                  <IconifyIcon icon="mdi:close-circle" class="summary-label-icon" />
                   Fail ({{ testsStore.testSummary.failed }})
                 </span>
                 <span class="summary-label warning">
-                  <Icon icon="mdi:alert-circle" class="summary-label-icon" />
+                  <IconifyIcon icon="mdi:alert-circle" class="summary-label-icon" />
                   Warning ({{ testsStore.testSummary.warning }})
                 </span>
                 <span class="summary-label total">
-                  <Icon icon="mdi:counter" class="summary-label-icon" />
+                  <IconifyIcon icon="mdi:counter" class="summary-label-icon" />
                   Total ({{ testsStore.testSummary.total }})
                 </span>
               </div>
@@ -62,7 +62,7 @@
       </div>
 
       <div v-if="testsStore.tests.length === 0" class="empty-state">
-        <Icon icon="mdi:test-tube-empty" class="empty-icon" />
+        <IconifyIcon icon="mdi:test-tube-empty" class="empty-icon" />
         <p>No tests yet</p>
         <small>Add connection, load balance, or DNS tests</small>
       </div>
@@ -72,7 +72,7 @@
           <AccordionPanel v-for="group in groupedTests" :key="group.type" :value="group.type">
             <AccordionHeader>
               <div class="test-group-title">
-                <Icon :icon="getTestIcon(group.type)" class="test-type-icon" />
+                <IconifyIcon :icon="getTestIcon(group.type)" class="test-type-icon" />
                 <span class="test-group-label">{{ getTestTypeLabel(group.type) }} [{{ group.tests.length }}]</span>
               </div>
             </AccordionHeader>
@@ -113,7 +113,7 @@
                         @click="runAnimation(test)"
                       >
                         <template #icon>
-                          <Icon icon="mdi:paper-plane-outline" />
+                          <IconifyIcon icon="mdi:paper-plane-outline" />
                         </template>
                       </Button>
                       <Button icon="pi pi-pencil" text size="small" v-tooltip="'Edit'" @click="testsStore.openEditTestModal(test)" />
@@ -130,14 +130,14 @@
                     <template v-for="(fnode, ni) in getFlowPath(test)" :key="ni">
                       <div class="flow-node">
                         <div class="flow-node-icon-wrap">
-                          <Icon :icon="fnode.icon" :class="['flow-node-icon', { 'fni-blocked': fnode.blocked, 'fni-success': fnode.success, 'fni-warning': fnode.warning }]" />
-                          <Icon v-if="fnode.blocked" icon="mdi:close-circle" class="flow-blocked-badge" />
-                          <Icon v-if="fnode.success" icon="mdi:check-circle" class="flow-success-badge" />
-                          <Icon v-if="fnode.warning" icon="mdi:alert-circle" class="flow-warning-badge" />
+                          <IconifyIcon :icon="fnode.icon" :class="['flow-node-icon', { 'fni-blocked': fnode.blocked, 'fni-success': fnode.success, 'fni-warning': fnode.warning }]" />
+                          <IconifyIcon v-if="fnode.blocked" icon="mdi:close-circle" class="flow-blocked-badge" />
+                          <IconifyIcon v-if="fnode.success" icon="mdi:check-circle" class="flow-success-badge" />
+                          <IconifyIcon v-if="fnode.warning" icon="mdi:alert-circle" class="flow-warning-badge" />
                         </div>
                         <span class="flow-node-label">{{ fnode.label }}</span>
                       </div>
-                      <Icon v-if="ni < getFlowPath(test).length - 1" icon="mdi:arrow-right-thin" class="flow-arrow" />
+                      <IconifyIcon v-if="ni < getFlowPath(test).length - 1" icon="mdi:arrow-right-thin" class="flow-arrow" />
                     </template>
                   </div>
                   <div class="test-meta" v-if="test.result?.latencyMs">
@@ -155,8 +155,9 @@
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
-import { NetworkComponentType, getComponentIcon } from '~/types/network'
+import { Icon as IconifyIcon } from '@iconify/vue'
+import { NetworkComponentType } from '~/types/network'
+import { getAzureComponentIcon } from '~/lib/azureIcons'
 import { INTERNET_SOURCE_ID } from '~/types/test'
 import type { NetworkTest, TestType } from '~/types/test'
 
@@ -317,7 +318,7 @@ interface FlowNode {
 
 function resolveFlowItem(idOrLabel: string): FlowNode {
   const node = diagramStore.nodes.find(n => n.id === idOrLabel)
-  if (node) return { label: node.data.name, icon: getComponentIcon(node.data.type) }
+  if (node) return { label: node.data.name, icon: getAzureComponentIcon(node.data.type) }
   if (idOrLabel === 'Internet') return { label: 'Internet', icon: 'mdi:web' }
   if (idOrLabel === 'DNS Client') return { label: 'DNS Client', icon: 'mdi:dns' }
   if (idOrLabel.startsWith('Backends:')) return { label: idOrLabel.slice('Backends:'.length).trim(), icon: 'mdi:server-network' }
@@ -348,15 +349,11 @@ function getFlowPath(test: NetworkTest): FlowNode[] {
       }
       return flowNodes
     }
-    const srcIsInternet = test.condition.sourceId === INTERNET_SOURCE_ID
-    const srcName = srcIsInternet
-      ? 'Internet'
-      : (diagramStore.nodes.find(n => n.id === test.condition.sourceId)?.data?.name ?? test.condition.sourceId.substring(0, 8))
-    const tgtName = diagramStore.nodes.find(n => n.id === test.condition.targetId)?.data?.name
-      ?? test.condition.targetId.substring(0, 8)
+    const srcNode = test.condition.sourceId === INTERNET_SOURCE_ID ? null : resolveFlowItem(test.condition.sourceId)
+    const tgtNode = resolveFlowItem(test.condition.targetId)
     return [
-      { label: srcName, icon: srcIsInternet ? 'mdi:web' : 'mdi:laptop' },
-      { label: tgtName, icon: 'mdi:server' },
+      srcNode ?? { label: 'Internet', icon: 'mdi:web' },
+      tgtNode,
     ]
   }
 
@@ -383,9 +380,9 @@ function getFlowPath(test: NetworkTest): FlowNode[] {
     if (test.condition.sourceId === INTERNET_SOURCE_ID) {
       flowNodes.push({ label: 'Internet', icon: 'mdi:web' })
     } else if (test.condition.sourceId) {
-      flowNodes.push({ label: diagramStore.nodes.find(n => n.id === test.condition.sourceId)?.data?.name ?? 'Client', icon: 'mdi:laptop' })
+      flowNodes.push(resolveFlowItem(test.condition.sourceId))
     }
-    if (lbNode) flowNodes.push({ label: lbNode.data.name, icon: 'mdi:scale-balance' })
+    if (lbNode) flowNodes.push(resolveFlowItem(lbId))
     if (backends.length > 0) {
       const names = backends.slice(0, 2).map((n: any) => n.data.name).join(', ')
       const lastNode: FlowNode = { label: names + (backends.length > 2 ? ` +${backends.length - 2}` : ''), icon: 'mdi:server-network' }
@@ -414,7 +411,7 @@ function getFlowPath(test: NetworkTest): FlowNode[] {
       ? diagramStore.nodes.find(n => n.id === test.condition.targetId)
       : diagramStore.nodes.find(n => n.data?.type === NetworkComponentType.DNS_ZONE)
     const flowNodes: FlowNode[] = [{ label: 'DNS Client', icon: 'mdi:dns' }]
-    if (dnsNode) flowNodes.push({ label: (dnsNode.data as any).zoneName || dnsNode.data.name, icon: 'mdi:domain' })
+    if (dnsNode) flowNodes.push(resolveFlowItem(dnsNode.id))
     const ipMatch = result.message?.match(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/)
     const lastDnsNode: FlowNode = ipMatch ? { label: ipMatch[0], icon: 'mdi:ip-network' } : { label: 'Resolved', icon: 'mdi:check-circle' }
     if (result.status === 'fail') flowNodes.push({ ...lastDnsNode, blocked: true })

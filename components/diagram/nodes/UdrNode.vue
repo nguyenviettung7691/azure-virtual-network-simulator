@@ -12,7 +12,7 @@
     <Handle type="target" :position="Position.Bottom" id="bottom-target" />
     <div class="generic-node-content" :style="{ borderColor: '#8764b8' }">
       <div class="generic-node-icon-wrap" :style="{ backgroundColor: '#8764b820' }">
-        <Icon icon="mdi:routes" :style="{ color: '#8764b8' }" class="generic-icon" />
+        <Icon :name="nodeIcon" mode="svg" class="generic-icon" />
       </div>
       <div class="generic-node-info">
         <span class="generic-node-type">Route Table (UDR)</span>
@@ -25,8 +25,9 @@
 
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
-import { Icon } from '@iconify/vue'
 import type { UdrComponent } from '~/types/network'
+import { NetworkComponentType } from '~/types/network'
+import { getAzureComponentIcon } from '~/lib/azureIcons'
 
 interface Props {
   id: string
@@ -36,6 +37,7 @@ interface Props {
 
 const props = defineProps<Props>()
 const diagramStore = useDiagramStore()
+const nodeIcon = getAzureComponentIcon(NetworkComponentType.UDR)
 
 function onDblClick() {
   diagramStore.openEditComponentModal(props.data)

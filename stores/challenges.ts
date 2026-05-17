@@ -162,6 +162,10 @@ function getParentRelationship(node: DiagramNodeLike): string | undefined {
   if (data.type === NetworkComponentType.APP_SERVICE && data.vnetIntegrationSubnetId) return data.vnetIntegrationSubnetId
   if (data.type === NetworkComponentType.FUNCTIONS && data.vnetIntegrationSubnetId) return data.vnetIntegrationSubnetId
 
+  if (data.type === NetworkComponentType.VM && Array.isArray(data.nicIds) && data.nicIds.length > 0) {
+    return undefined
+  }
+
   if (data.subnetId) return data.subnetId
 
   return node.parentNode
@@ -407,7 +411,7 @@ function evaluateNetworkRequirement(nodes: DiagramNodeLike[], requirement: Chall
     }
 
     return components.every((component) => {
-      const subnetId = component.data?.subnetId
+      const subnetId = resolveComponentSubnetId(component, nodes)
       if (!subnetId) return false
       if (!allowedSubnetIds) return true
       return allowedSubnetIds.has(subnetId)
@@ -442,6 +446,16 @@ function evaluateNetworkRequirement(nodes: DiagramNodeLike[], requirement: Chall
   }
 
   return false
+}
+
+function resolveComponentSubnetId(component: DiagramNodeLike, nodes: DiagramNodeLike[]): string | undefined {
+  const nicIds = Array.isArray(component.data?.nicIds) ? component.data.nicIds : []
+  if (nicIds.length > 0) {
+    const firstNic = nodes.find((node) => node.id === nicIds[0])
+    if (firstNic?.data?.subnetId) return firstNic.data.subnetId
+  }
+
+  return component.data?.subnetId
 }
 
 function evaluateTaskConditions(

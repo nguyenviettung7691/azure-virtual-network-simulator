@@ -12,7 +12,7 @@
     <Handle type="target" :position="Position.Bottom" id="bottom-target" />
     <div class="generic-node-content" :style="{ borderColor: nodeColor }">
       <div class="generic-node-icon-wrap" :style="{ backgroundColor: nodeColor + '20' }">
-        <Icon :icon="nodeIcon" :style="{ color: nodeColor }" class="generic-icon" />
+        <Icon :name="nodeIcon" mode="svg" class="generic-icon" />
       </div>
       <div class="generic-node-info">
         <span class="generic-node-type">{{ nodeTypeLabel }}</span>
@@ -25,8 +25,8 @@
 
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
-import { Icon } from '@iconify/vue'
-import { NetworkComponentType, getComponentColor, getComponentIcon, getComponentLabel } from '~/types/network'
+import { NetworkComponentType, getComponentColor, getComponentLabel } from '~/types/network'
+import { getAzureComponentIcon } from '~/lib/azureIcons'
 
 interface Props {
   id: string
@@ -38,7 +38,7 @@ const props = defineProps<Props>()
 const diagramStore = useDiagramStore()
 
 const nodeColor = computed(() => getComponentColor(props.data.type))
-const nodeIcon = computed(() => getComponentIcon(props.data.type))
+const nodeIcon = computed(() => getAzureComponentIcon(props.data.type))
 const nodeTypeLabel = computed(() => getComponentLabel(props.data.type))
 
 const nodeDetail = computed(() => {

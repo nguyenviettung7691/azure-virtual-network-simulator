@@ -203,12 +203,19 @@ function resolveParentId(data: NodeData, maps: Maps): string | undefined {
   if (data.type === NetworkComponentType.NETWORK_IC) return data.subnetId
   if (OUTSIDE_VNET_POLICY.has(data.type)) return undefined
   if (data.type === NetworkComponentType.FIREWALL) return data.vnetId
-  if (SUBNET_HOSTED.has(data.type)) return getSubnetContainerId(data)
+  if (SUBNET_HOSTED.has(data.type)) return getSubnetContainerId(data, maps.nicToSubnet)
   return data.parentId
 }
 
-function getSubnetContainerId(data: NodeData): string | undefined {
-  return data.subnetId || data.vnetIntegrationSubnetId
+function getSubnetContainerId(data: NodeData, nicToSubnet: Map<string, string>): string | undefined {
+  if (data.subnetId) return data.subnetId
+
+  if (Array.isArray(data.nicIds) && data.nicIds.length > 0) {
+    const firstNicSubnet = nicToSubnet.get(data.nicIds[0])
+    if (firstNicSubnet) return firstNicSubnet
+  }
+
+  return data.vnetIntegrationSubnetId
 }
 
 function resolveAttachedVnetId(data: NodeData, maps: Maps): string | undefined {

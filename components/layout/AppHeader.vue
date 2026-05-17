@@ -7,23 +7,8 @@
       </div>
     </div>
 
-    <div class="header-center toolbar-components">
-      <div v-for="group in componentGroups" :key="group.label" class="component-group">
-        <span class="group-label">{{ group.label }}</span>
-        <div class="group-items">
-          <Button
-            v-for="item in group.items"
-            :key="item.type"
-            v-tooltip.bottom="item.label"
-            text
-            size="small"
-            class="component-btn"
-            @click="addComponent(item.type)"
-          >
-            <Icon :icon="item.icon" :style="{ color: item.color }" class="btn-icon" />
-          </Button>
-        </div>
-      </div>
+    <div class="header-center">
+      <ComponentCommandPalette />
     </div>
 
     <div class="header-right">
@@ -59,34 +44,9 @@
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
-import {
-  NetworkComponentType,
-  COMPONENT_CATEGORY_ORDER,
-  COMPONENTS_BY_CATEGORY,
-  getComponentIcon,
-  getComponentLabel,
-  getComponentColor,
-} from '~/types/network'
-
 const authStore = useAuthStore()
-const diagramStore = useDiagramStore()
 const settingsStore = useSettingsStore()
 const savedSetupsStore = useSavedSetupsStore()
-
-const componentGroups = COMPONENT_CATEGORY_ORDER.map((label) => ({
-  label,
-  items: COMPONENTS_BY_CATEGORY[label].map((type) => ({
-    type,
-    label: getComponentLabel(type),
-    icon: getComponentIcon(type),
-    color: getComponentColor(type),
-  })),
-}))
-
-function addComponent(type: NetworkComponentType) {
-  diagramStore.openAddComponentModal(type)
-}
 
 function openSetups() {
   if (!authStore.isAuthenticated) {
@@ -142,50 +102,11 @@ function openSetups() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  overflow-x: auto;
   min-width: 0;
-  scrollbar-width: none;
 }
 
-.header-center::-webkit-scrollbar { display: none; }
-
-/* Each category group is a labelled card: label on top, icon row below */
-.component-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-  padding: 0;
-  border-radius: 7px;
-  background: var(--group-card-bg, rgba(0, 0, 0, 0.07));
-  border: 1.5px solid var(--group-card-border, rgba(0, 0, 0, 0.2));
-  box-shadow: var(--group-card-shadow, 0 1px 4px rgba(0, 0, 0, 0.12));
-}
-
-.group-label {
-  font-size: 0.65rem;
-  color: var(--text-color-secondary);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
-
-.group-items {
-  display: flex;
-  gap: 2px;
-}
-
-.component-btn {
-  width: 38px !important;
-  height: 38px !important;
-  padding: 0 !important;
-}
-
-.btn-icon {
-  font-size: 1.5rem;
+.header-center > * {
+  width: auto;
 }
 
 .header-right {
@@ -223,33 +144,7 @@ function openSetups() {
   }
 
   .header-center {
-    justify-content: flex-start;
-    gap: 0.25rem;
-    padding: 0 0.15rem;
-  }
-
-  .component-group {
-    gap: 2px;
-    padding: 0.05rem;
-    border-radius: 6px;
-  }
-
-  .group-label {
-    font-size: 0.58rem;
-    letter-spacing: 0.04em;
-  }
-
-  .group-items {
-    gap: 1px;
-  }
-
-  .component-btn {
-    width: 33px !important;
-    height: 33px !important;
-  }
-
-  .btn-icon {
-    font-size: 1.25rem;
+    padding: 0 0.2rem;
   }
 
   .header-right {

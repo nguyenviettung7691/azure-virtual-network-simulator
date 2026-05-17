@@ -13,7 +13,7 @@
       >
         <span class="export-button-content" aria-hidden="true">
           <span class="export-button-row">
-            <Icon icon="mdi:xml" />
+            <Icon name="mdi:xml" mode="svg" class="mdi-themed-icon" />
             <span>.drawio</span>
           </span>
           <ProgressBar
@@ -76,7 +76,7 @@
       >
         <span class="export-button-content" aria-hidden="true">
           <span class="export-button-row">
-            <Icon icon="mdi:vector-square" />
+            <Icon name="mdi:vector-square" mode="svg" class="mdi-themed-icon" />
             <span>SVG</span>
           </span>
           <ProgressBar
@@ -164,7 +164,7 @@
         @keydown.space.prevent="toggleBadgeTooltip"
         @keydown.escape.prevent="hideBadgeTooltip"
       >
-        <Icon :icon="autosaveIcon" class="autosave-icon" />
+        <Icon :name="autosaveIcon" mode="svg" class="autosave-icon mdi-themed-icon" />
         {{ autosaveStatusText }}
       </span>
       <span
@@ -179,7 +179,7 @@
         @keydown.space.prevent="toggleBadgeTooltip"
         @keydown.escape.prevent="hideBadgeTooltip"
       >
-        <Icon icon="mdi:vector-polygon" class="status-icon" />
+        <Icon name="mdi:vector-polygon" mode="svg" class="status-icon mdi-themed-icon" />
         Status
       </span>
     </div>
@@ -200,8 +200,6 @@
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
-
 type ExportFormat = 'drawio' | 'png' | 'pdf' | 'svg'
 
 interface ExportProgressState {
@@ -865,6 +863,16 @@ onBeforeUnmount(() => {
 
 .autosave-icon {
   font-size: 0.88rem;
+  color: currentColor;
+}
+
+.export-button-row .mdi-themed-icon {
+  font-size: 1rem;
+  color: var(--text-color-secondary);
+}
+
+.status-text .mdi-themed-icon {
+  color: currentColor;
 }
 
 .autosave-success {

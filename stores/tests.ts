@@ -246,12 +246,8 @@ function buildInternetTraversalPath(targetNode: any, blockingNsgId: string | nul
   const d = targetNode.data as any
   const path: string[] = ['Internet']
 
-  // Resolve subnet: directly from component or via first NIC
-  let subnetId: string | undefined = d.subnetId
-  if (!subnetId && d.nicIds?.length) {
-    const firstNic = nodes.find((n: any) => n.id === d.nicIds[0])
-    subnetId = firstNic?.data?.subnetId
-  }
+  // Resolve subnet using NIC-first semantics for VM networking.
+  const subnetId = resolveNodeSubnetId(targetNode, nodes)
   const subnetNode = subnetId ? nodes.find((n: any) => n.id === subnetId) : undefined
 
   // VNet
@@ -327,8 +323,9 @@ function simulateInternetConnectionTest(test: NetworkTest, nodes: any[], timesta
     if (nsg) applicableNsgs.push(nsg)
   }
 
-  if (d.subnetId) {
-    const subnet = nodes.find((n: any) => n.id === d.subnetId)
+  const resolvedSubnetId = resolveNodeSubnetId(targetNode, nodes)
+  if (resolvedSubnetId) {
+    const subnet = nodes.find((n: any) => n.id === resolvedSubnetId)
     if (subnet?.data?.nsgId) {
       const nsg = nodes.find((n: any) => n.id === subnet.data.nsgId)
       if (nsg) applicableNsgs.push(nsg)
@@ -446,6 +443,15 @@ function simulateLoadBalanceTest(test: NetworkTest, nodes: any[], edges: any[], 
           severity: 'critical',
           message: `Standard Load Balancer "${targetNode.data.name}" is attached to non-Standard Public IP "${ip.data.name}".`,
         })
+      })
+    }
+
+    // Zone redundancy check: Well-Architected Framework recommends 2+ availability zones for reliability
+    const azCount = targetNode.data?.availabilityZones?.length || 0
+    if (azCount === 0 || (azCount === 1 && targetNode.data?.sku === 'Standard')) {
+      findings.push({
+        severity: 'warning',
+        message: `Load Balancer "${targetNode.data.name}" has ${azCount === 0 ? 'no' : '1'} availability zone(s). 2+ zones recommended for zone redundancy (Well-Architected).`,
       })
     }
 
@@ -874,6 +880,18 @@ function resolveNodeVnetId(node: any, nodes: any[]): string | undefined {
     return parentNode ? resolveNodeVnetId(parentNode, nodes) : undefined
   }
 
+  return undefined
+}
+
+function resolveNodeSubnetId(node: any, nodes: any[]): string | undefined {
+  if (!node) return undefined
+
+  if (Array.isArray(node.data?.nicIds) && node.data.nicIds.length > 0) {
+    const firstNic = nodes.find((candidate: any) => candidate.id === node.data.nicIds[0])
+    if (firstNic?.data?.subnetId) return firstNic.data.subnetId
+  }
+
+  if (node.data?.subnetId) return node.data.subnetId
   return undefined
 }
 

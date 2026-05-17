@@ -2,7 +2,7 @@
   <div class="challenge-panel" v-if="challengesStore.showChallengePanel && challengesStore.currentChallenge">
     <div class="challenge-header" @click="toggleExpand">
       <div class="challenge-title-row">
-        <Icon icon="mdi:bolt" class="challenge-icon" />
+        <IconifyIcon icon="mdi:bolt" class="challenge-icon" />
         <span class="challenge-title">{{ challengesStore.currentChallenge.title }}</span>
         <Tag :value="challengesStore.currentChallenge.difficulty" severity="help" class="difficulty-tag" />
         <Tag :value="`${challengesStore.progressPercent}%`" :severity="progressSeverity" />
@@ -22,7 +22,7 @@
       <p class="challenge-desc">{{ challengesStore.currentChallenge.description }}</p>
       <div class="task-list">
         <div v-for="task in challengesStore.currentChallenge.tasks" :key="task.id" class="task-row" :class="{ completed: task.completed }">
-          <Icon :icon="task.completed ? 'mdi:checkbox-marked-circle' : 'mdi:checkbox-blank-circle-outline'" class="task-check" />
+          <IconifyIcon :icon="task.completed ? 'mdi:checkbox-marked-circle' : 'mdi:checkbox-blank-circle-outline'" class="task-check" />
           <span class="task-desc">{{ task.description }}</span>
           <Tag v-if="task.points" :value="`+${task.points}pts`" severity="info" class="task-pts" />
         </div>
@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
+import { Icon as IconifyIcon } from '@iconify/vue'
 
 const challengesStore = useChallengesStore()
 const diagramStore = useDiagramStore()

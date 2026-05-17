@@ -32,6 +32,9 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 
 **Configuration & Design**
 - **Component Configuration** — Click-to-edit property forms for all Azure components.
+- **NIC-First VM Networking** — VM configuration requires NIC attachment; subnet context is derived from selected NICs.
+- **Searchable Component Command Palette** — Header-embedded palette with grouped Azure components, fuzzy search, and keyboard selection (`Ctrl/Cmd+K`, arrows, Enter, Escape).
+- **Azure-Branded Azure UI Icons** — The component command palette, Network Summary sidebar, and diagram nodes use locally bundled Azure Public Service SVG collections so the app renders matching Azure service/component artwork without runtime icon fetches.
 - **Real-Time Network Summary** — Live dashboard with collapsible sections, type grouping, hover identification, and audit badges.
 - **Quick Sample + Full Sample** — Pre-built starter topologies.
 
@@ -46,7 +49,7 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 - **AI Challenges** — Bedrock-powered, time-boxed networking exercises.
 
 **Accessibility**
-- **Tablet-Responsive Toolbars** — Optimized for viewports <= 1024px.
+- **Tablet-Responsive Shell** — Header command palette and bottom toolbar are optimized for viewports <= 1024px.
 - **Dark / Light Mode** — Theme support with system preference respect.
 
 ---
@@ -58,7 +61,7 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 | Framework | Nuxt 3 (SPA, SSR disabled) |
 | UI component library | PrimeVue 4 (Aura preset via `@primevue/themes`) |
 | Styling & theming | App-owned CSS tokens in `assets/css/main.css` plus PrimeVue Aura semantic tokens from `assets/primevue-theme.ts` |
-| Icons | PrimeIcons 7 (`primeicons`) for `pi pi-*` UI icons; Iconify + `@iconify-json/mdi` for diagram/canvas icons via `@iconify/vue` |
+| Icons | PrimeIcons 7 (`primeicons`) for `pi pi-*` UI icons; local Azure Public Service SVG collections bundled through `@nuxt/icon` for the component command palette, Network Summary sidebar, and diagram nodes; Iconify + `@iconify-json/mdi` for remaining diagram/canvas chrome via `@iconify/vue` |
 | Local app state | Pinia |
 | Remote / server state | TanStack Vue Query (`@tanstack/vue-query`) |
 | Diagram engine | Vue Flow (`@vue-flow/core`) + `@vue-flow/controls` + `@vue-flow/background` + `@vue-flow/minimap` |
@@ -88,10 +91,13 @@ The simulator supports the following 27 user-managed Azure component types, plus
 | Load balancing | Application Gateway, Load Balancer |
 | IP & DNS | IP Address, DNS Zone |
 | Compute | VM, VMSS, AKS, App Service, Azure Functions |
-| Storage | Storage Account, Blob Storage, Managed Disk |
+| Storage | Storage Account (StorageV2-first), Blob Storage, Managed Disk |
 | Identity & secrets | Managed Identity, Key Vault |
+| Identity & secrets | Managed Identity, Key Vault (secure secrets, keys, certificates; supports access policies, network rules, soft delete, integration with App Service, Functions, App Gateway) |
 | Endpoints | Service Endpoint, Private Endpoint |
 | System-managed canvas entity | Public Internet |
+
+Azure Functions components are modeled with a Functions-native hosting option contract (Flex Consumption, Premium, Dedicated, Container Apps, Consumption legacy) with legacy field compatibility for previously saved diagrams.
 
 ---
 
@@ -105,6 +111,7 @@ Two built-in setup buttons are available in the empty canvas quick-start state:
 - **Full Sample**
   - Starts from the Quick Sample baseline, then expands it into a full-feature showcase.
   - Adds the remaining supported Azure component types (ASG, UDR, VPN Gateway, Application Gateway, NVA, VMSS, AKS, App Service, Functions, Storage Account, Blob Storage, Managed Disk, Managed Identity, Key Vault, Service Endpoint, Private Endpoint, Firewall, Bastion, VNet Peering, plus a second VNet/Subnet for peering context).
+  - Storage Account defaults follow Azure's GPv2-first guidance, with legacy Blob Storage kept for compatibility.
   - Adds 14 tests covering all major component categories: Application Gateway load-balancing, private-endpoint connectivity, Bastion inbound access, Azure Firewall, Internal Load Balancer east-west, Internal App Gateway, Public DNS Zone resolution, AKS private API server, App Service -> Key Vault, VMSS inbound, Functions -> Storage, VPN Gateway access, Public App Service, and additional DNS resolution.
 
 ---
@@ -148,7 +155,7 @@ The auto-layout algorithm classifies Azure components into four **semantic layer
 | **System-Managed** | Internal canvas entity | Public Internet node (auto-injected) |
 | **Public-Facing** | Internet edge; receives/exposes traffic outside | Public IP Address, VPN Gateway, Public DNS Zone, Bastion, Public Load Balancer, Public App Gateway, public App Service, Azure Functions |
 | **VNet-Managed** | Network fabric; deployed inside or tightly integrated with VNet | VNet, Subnet, VNet Peering, NIC, NSG, ASG, Firewall, UDR, NVA, VM, VMSS, AKS, Internal Load Balancer, Internal App Gateway, Service Endpoint, Private Endpoint |
-| **Private / Internal** | Backend PaaS resources; accessed privately | Storage Account, Blob Storage, Managed Disk, Key Vault, Managed Identity, Private DNS Zone |
+| **Private / Internal** | Backend PaaS resources; accessed privately | Storage Account (GPv2 recommended), Blob Storage, Managed Disk, Key Vault, Managed Identity, Private DNS Zone |
 
 **Config-Driven Layer Assignment:**
 

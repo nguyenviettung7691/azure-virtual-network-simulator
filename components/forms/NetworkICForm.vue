@@ -31,6 +31,11 @@
           </div>
         </div>
       </div>
+      <div class="field"><label>DNS Servers</label>
+        <InputText v-model="dnsServersStr" class="w-full" placeholder="8.8.8.8, 8.8.4.4" />
+        <small class="helper-text">Comma-separated list. Leave empty to inherit from VNet DNS settings.</small>
+        <small v-if="getError('dnsServers')" class="error-text">{{ getError('dnsServers') }}</small>
+      </div>
       <div class="field checkbox-field"><label>Accelerated Networking</label><ToggleSwitch v-model="model.enableAcceleratedNetworking" /></div>
       <div class="field checkbox-field"><label>IP Forwarding</label><ToggleSwitch v-model="model.enableIpForwarding" /></div>
     </template>
@@ -131,6 +136,11 @@ const isPrivateEndpoint = computed(() => model.value.type === NetworkComponentTy
 const selectedAsgIds = computed({
   get: () => model.value.asgIds || [],
   set: (ids: string[]) => { model.value = { ...model.value, asgIds: ids } },
+})
+
+const dnsServersStr = computed({
+  get: () => (model.value.dnsServers || []).join(', '),
+  set: (v: string) => { model.value = { ...model.value, dnsServers: v.split(',').map((s: string) => s.trim()).filter(Boolean) } },
 })
 
 const groupIdsStr = computed({

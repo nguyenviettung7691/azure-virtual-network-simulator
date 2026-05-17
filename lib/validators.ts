@@ -83,7 +83,7 @@ export function validateIPAddress(
 }
 
 /**
- * Validates a port range (single port "80", range "80-443", or wildcard "*")
+ * Validates a port range (single port "80", range "80-443", comma-separated "80,443" or "80,1024-65535", or wildcard "*")
  */
 export function validatePortRange(port: string | number): { valid: boolean; error?: string } {
   if (port === undefined || port === null || port === '') {
@@ -97,26 +97,35 @@ export function validatePortRange(port: string | number): { valid: boolean; erro
     return { valid: true }
   }
 
-  // Check range format "start-end" or single port
-  const rangeRegex = /^(\d+)(-\d+)?$/
-  if (!rangeRegex.test(portStr)) {
-    return { valid: false, error: 'Invalid port format (use single port, range 80-443, or *)' }
-  }
-
-  const parts = portStr.split('-')
+  // Support comma-separated list: "80,443" or "80,1024-65535" or mix
+  const parts = portStr.split(',').map(p => p.trim())
+  
   for (const part of parts) {
-    const num = parseInt(part, 10)
-    if (isNaN(num) || num < 1 || num > 65535) {
-      return { valid: false, error: `Port must be 1-65535, got ${part}` }
+    if (!part) {
+      return { valid: false, error: 'Empty port entry in list' }
     }
-  }
+    
+    // Check individual part format: single port or range "start-end"
+    const rangeRegex = /^(\d+)(-\d+)?$/
+    if (!rangeRegex.test(part)) {
+      return { valid: false, error: 'Invalid port format (use single port, range 80-443, comma-separated 80,443, or *)' }
+    }
 
-  // If range, check start <= end
-  if (parts.length === 2) {
-    const start = parseInt(parts[0], 10)
-    const end = parseInt(parts[1], 10)
-    if (start > end) {
-      return { valid: false, error: `Port range start (${start}) must be <= end (${end})` }
+    const subparts = part.split('-')
+    for (const subpart of subparts) {
+      const num = parseInt(subpart, 10)
+      if (isNaN(num) || num < 1 || num > 65535) {
+        return { valid: false, error: `Port must be 1-65535, got ${subpart}` }
+      }
+    }
+
+    // If range within this part, check start <= end
+    if (subparts.length === 2) {
+      const start = parseInt(subparts[0], 10)
+      const end = parseInt(subparts[1], 10)
+      if (start > end) {
+        return { valid: false, error: `Port range start (${start}) must be <= end (${end})` }
+      }
     }
   }
 
@@ -216,6 +225,29 @@ function cidrContainsCidr(parentCIDR: string, childCIDR: string): boolean {
 }
 
 /**
+ * Helper: Check if two IPv4 CIDR blocks overlap (share any IP addresses)
+ */
+export function cidrOverlaps(cidr1: string, cidr2: string): boolean {
+  if (cidr1 === cidr2) return true
+
+  // Both must be IPv4 to compare
+  const isIPv4_1 = cidr1.includes('.')
+  const isIPv4_2 = cidr2.includes('.')
+  if (isIPv4_1 !== isIPv4_2) return false
+
+  try {
+    // IPv4: check if either contains part of the other
+    if (isIPv4_1) {
+      return cidrContainsCidr(cidr1, cidr2) || cidrContainsCidr(cidr2, cidr1)
+    }
+    // IPv6: simplified, assume no overlap if both are valid format (conservative)
+    return cidr1 === cidr2
+  } catch {
+    return false
+  }
+}
+
+/**
  * Validates NSG rule priority (must be 100-4096)
  */
 export function validatePriority(priority: number | undefined): { valid: boolean; error?: string } {
@@ -288,6 +320,77 @@ export function validateProbeCount(
 }
 
 /**
+ * Validates subnet name (must start with a letter for Azure compatibility)
+ */
+export function validateSubnetName(name: string): { valid: boolean; error?: string } {
+  if (!name || typeof name !== 'string') {
+    return { valid: false, error: 'Subnet name is required' }
+  }
+
+  const trimmed = name.trim()
+  if (trimmed.length === 0) {
+    return { valid: false, error: 'Subnet name is required' }
+  }
+
+  // Azure best practice: name must start with a letter for maximum compatibility
+  if (!/^[a-zA-Z]/.test(trimmed)) {
+    return {
+      valid: false,
+      error: 'Subnet name must start with a letter (a-z, A-Z) for Azure compatibility',
+    }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Validates subnet CIDR has minimum size /29 (Azure minimum: 8 IPs)
+ * /29 = 8 IPs, /30 = 4 IPs (too small), /31 = 2 IPs, /32 = 1 IP
+ */
+export function validateSubnetCIDRSize(cidr: string): { valid: boolean; error?: string } {
+  if (!cidr || typeof cidr !== 'string') {
+    return { valid: false, error: 'CIDR block is required' }
+  }
+
+  const trimmed = cidr.trim()
+  const parts = trimmed.split('/')
+
+  if (parts.length !== 2) {
+    return { valid: false, error: 'Invalid CIDR format' }
+  }
+
+  const prefixStr = parts[1]
+  const prefix = parseInt(prefixStr, 10)
+
+  if (isNaN(prefix)) {
+    return { valid: false, error: 'Invalid prefix length' }
+  }
+
+  // Check if IPv4 or IPv6 by looking at the IP part
+  const isIPv4 = trimmed.includes('.')
+
+  if (isIPv4) {
+    // IPv4: must be /29 or smaller (larger prefix = smaller subnet)
+    if (prefix > 29) {
+      return {
+        valid: false,
+        error: `Subnet CIDR must be /29 or larger (got /${prefix}). Minimum 8 IP addresses required.`,
+      }
+    }
+  } else {
+    // IPv6: minimum /64 per Azure docs
+    if (prefix > 64) {
+      return {
+        valid: false,
+        error: `IPv6 subnet must be /64 or larger (got /${prefix})`,
+      }
+    }
+  }
+
+  return { valid: true }
+}
+
+/**
  * Check if component exists in nodes array
  */
 export function nodeExists(nodeId: string | undefined, nodes: any[]): boolean {
@@ -301,4 +404,146 @@ export function nodeExists(nodeId: string | undefined, nodes: any[]): boolean {
 export function findNodesByType(type: string, nodes: any[]): any[] {
   if (!nodes) return []
   return nodes.filter(n => n.data?.type === type)
+}
+/**
+ * Get VNet ID from a NIC by traversing NIC → Subnet → VNet
+ */
+export function getVNetFromNic(nicId: string, nodes: any[]): string | undefined {
+  if (!nicId || !nodes) return undefined
+  const nic = nodes.find(n => n.id === nicId)?.data
+  if (!nic?.subnetId) return undefined
+  const subnet = nodes.find(n => n.id === nic.subnetId)?.data
+  if (!subnet?.vnetId) return undefined
+  return subnet.vnetId
+}
+
+/**
+ * Get all NICs in the same VNet as a given NIC
+ */
+export function getNicsInSameVNet(nicId: string, nodes: any[]): string[] {
+  const vnetId = getVNetFromNic(nicId, nodes)
+  if (!vnetId) return []
+  const allNics = nodes.filter(n => n.data?.type === 'NETWORK_IC').map(n => n.id)
+  return allNics.filter(id => getVNetFromNic(id, nodes) === vnetId)
+}
+
+/**
+ * Validates NSG security rule name (max 80 chars, starts with letter/number, ends with letter/number/underscore)
+ */
+export function validateRuleName(name: string | undefined): { valid: boolean; error?: string } {
+  if (!name || typeof name !== 'string') {
+    return { valid: false, error: 'Rule name is required' }
+  }
+
+  const trimmed = name.trim()
+  
+  if (trimmed.length === 0) {
+    return { valid: false, error: 'Rule name is required' }
+  }
+  
+  if (trimmed.length > 80) {
+    return { valid: false, error: 'Rule name must be 80 characters or less' }
+  }
+
+  // Must start with letter or number
+  if (!/^[a-zA-Z0-9]/.test(trimmed)) {
+    return { valid: false, error: 'Rule name must start with a letter or number' }
+  }
+
+  // Must end with letter, number, or underscore
+  if (!/[a-zA-Z0-9_]$/.test(trimmed)) {
+    return { valid: false, error: 'Rule name must end with a letter, number, or underscore' }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Validates NSG security rule description (max 140 chars)
+ */
+export function validateRuleDescription(description: string | undefined): { valid: boolean; error?: string } {
+  if (!description) {
+    // Description is optional
+    return { valid: true }
+  }
+
+  if (typeof description !== 'string') {
+    return { valid: false, error: 'Rule description must be text' }
+  }
+
+  const trimmed = description.trim()
+  
+  if (trimmed.length > 140) {
+    return { valid: false, error: 'Rule description must be 140 characters or less' }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Validates Azure service tag names (e.g., "VirtualNetwork", "Internet", "AzureLoadBalancer")
+ */
+export function validateServiceTag(tag: string | undefined): { valid: boolean; error?: string } {
+  if (!tag || typeof tag !== 'string') {
+    return { valid: false, error: 'Service tag is required' }
+  }
+
+  const trimmed = tag.trim()
+  
+  // List of recognized service tags; this is non-exhaustive but covers most common ones
+  // Full list at: https://learn.microsoft.com/en-us/azure/virtual-network/service-tags-overview
+  const knownServiceTags = [
+    'VirtualNetwork',           // Resources within the VNet
+    'Internet',                 // Internet address space
+    'AzureLoadBalancer',        // Azure Load Balancer
+    'AzureTrafficManager',      // Traffic Manager
+    'AzureEventHub',            // Event Hub
+    'AzureServiceBus',          // Service Bus
+    'AzureStorageAccount',      // Storage Account / Blob / Queue / Table
+    'AzureCosmosDB',            // Cosmos DB
+    'AzureApplied',             // Azure Applied
+    'AzurePlatformDNS',         // Azure Platform DNS
+    'AzurePlatformIMDS',        // Azure Instance Metadata Service
+    'AzurePlatformLKM',         // Azure Key Management
+    'AppService',               // App Service
+    'AppServiceManagement',     // App Service Management
+    'Storage',                  // Storage service
+    'StorageAccount',           // Storage account
+    'StorageAccountActionGroup', // Storage account action
+    'KeyVault',                 // Key Vault
+    'Sql',                      // SQL Database
+    'SqlManagement',            // SQL Management
+    'SqlOnDemand',              // SQL On-Demand
+    'WindowsAdminCenter',       // Windows Admin Center
+    'PowerQueryOnline',         // Power Query
+    'MicrosoftContainerRegistry', // Container Registry
+    'AzureContainerRegistry',   // Azure Container Registry
+    'AzureContainerRegistryLoginServer', // Container Registry Login
+    'AzureDataFactory',         // Data Factory
+    'AzureDataFactoryManagement', // Data Factory Management
+    'AzureActiveDirectory',     // Active Directory
+    'AzureActiveDirectoryDomainServices', // AD Domain Services
+    'AzureAdvancedThreatProtection', // Advanced Threat Protection
+    'AzureServiceFabric',       // Service Fabric
+    'AzureSymantecEndpointProtection', // Symantec Endpoint
+    'AzureVisualStudio',        // Visual Studio
+    'AzureML',                  // Machine Learning
+    'AzureResourceManager',     // Resource Manager
+    'AzureSqlDatabase',         // SQL Database
+    'AzureSQLManagedInstance',  // SQL Managed Instance
+    'AzureSynapseAnalytics',    // Synapse Analytics
+    'MonitoringData',           // Monitoring Data
+    'AzureMonitor',             // Azure Monitor
+    'AzureMonitorManagement',   // Azure Monitor Management
+    'MediaServices',            // Media Services
+  ]
+
+  if (!knownServiceTags.includes(trimmed)) {
+    return { 
+      valid: false, 
+      error: `Unknown service tag "${trimmed}". Known tags include: VirtualNetwork, Internet, AzureLoadBalancer, Storage, KeyVault, Sql, and others.` 
+    }
+  }
+
+  return { valid: true }
 }

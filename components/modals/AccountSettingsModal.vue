@@ -159,7 +159,7 @@
                   :aria-pressed="selectedTheme === theme.value"
                   @click="selectedTheme = theme.value"
                 >
-                  <Icon v-if="selectedTheme === theme.value" icon="mdi:check" class="check-icon" />
+                  <IconifyIcon v-if="selectedTheme === theme.value" icon="mdi:check" class="check-icon" />
                 </button>
               </div>
             </div>
@@ -219,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
+import { Icon as IconifyIcon } from '@iconify/vue'
 import type { DarkModeType, ThemeType } from '~/types/settings'
 
 const settingsStore = useSettingsStore()
