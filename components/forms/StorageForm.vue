@@ -77,6 +77,7 @@
         <label>Disk Type *</label>
         <Select v-model="model.diskType" :options="diskTypeOptions" option-label="label" option-value="value" class="w-full" />
         <small v-if="getError('diskType')" class="error-text">{{ getError('diskType') }}</small>
+        <small v-if="getWarning('diskType')" class="warning-text">{{ getWarning('diskType') }}</small>
         <small class="helper-text">Ultra and Premium SSD v2 available in select regions; Standard HDD retiring Sept 8, 2028 for OS disks</small>
       </div>
 
@@ -110,7 +111,7 @@
       <template v-if="isPerformanceConfigurable">
         <div class="field">
           <label>IOPS (optional)</label>
-          <div :class="{ 'has-error': getWarning('iops') }" class="input-wrapper">
+          <div :class="{ 'has-warning': getWarning('iops') }" class="input-wrapper">
             <InputNumber v-model="model.iops" class="w-full" />
           </div>
           <small v-if="getWarning('iops')" class="warning-text">{{ getWarning('iops') }}</small>
@@ -119,19 +120,20 @@
 
         <div class="field">
           <label>Throughput (MB/s, optional)</label>
-          <div :class="{ 'has-error': getWarning('throughput') }" class="input-wrapper">
+          <div :class="{ 'has-warning': getWarning('throughput') }" class="input-wrapper">
             <InputNumber v-model="model.throughput" class="w-full" />
           </div>
           <small v-if="getWarning('throughput')" class="warning-text">{{ getWarning('throughput') }}</small>
-          <small class="helper-text">Max: {{ maxThroughput }} MB/s</small>
+          <small class="helper-text">{{ throughputBandwidth }}</small>
         </div>
       </template>
 
-      <!-- OS Type (shown only for Data disks as optional metadata) -->
-      <div v-if="model.diskRole === ManagedDiskRole.DATA" class="field">
-        <label>OS Type (optional, metadata only)</label>
+      <!-- OS Type (shown only for OS disks as optional consistency metadata) -->
+      <div v-if="model.diskRole === ManagedDiskRole.OS" class="field">
+        <label>OS Type (optional)</label>
         <SelectButton v-model="model.osType" :options="['Windows', 'Linux']" />
-        <small class="helper-text">Documentation only; data disks are OS-agnostic</small>
+        <small v-if="getError('osType')" class="error-text">{{ getError('osType') }}</small>
+        <small class="helper-text">Should match the attached VM OS when this disk is attached</small>
       </div>
 
       <!-- Attached VM Selector -->
@@ -144,8 +146,16 @@
   </div>
 </template>
 <script setup lang="ts">
-import { NetworkComponentType, ManagedDiskType, ManagedDiskRedundancy, ManagedDiskRole, MANAGED_DISK_REDUNDANCY_BY_TYPE, MANAGED_DISK_SIZE_LIMITS } from '~/types/network'
+import { NetworkComponentType, ManagedDiskType, ManagedDiskRedundancy, ManagedDiskRole, MANAGED_DISK_SIZE_LIMITS } from '~/types/network'
 import { getValidator } from '~/lib/componentValidators'
+import {
+  getCoercedManagedDiskRedundancy,
+  getPremiumSsdV2PerformanceLimits,
+  getUltraDiskPerformanceLimits,
+  getValidManagedDiskRedundancies,
+  isManagedDiskPerformanceConfigurable,
+  normalizeManagedDiskData,
+} from '~/lib/managedDisk'
 import type { FieldError } from '~/types/validation'
 
 const props = defineProps<{ modelValue: any; nodes: any[] }>()
@@ -159,7 +169,7 @@ const validationErrors = computed(() => {
 })
 
 function getError(fieldName: string): string | undefined {
-  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName && e.severity !== 'warning')?.message
 }
 function getWarning(fieldName: string): string | undefined {
   return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName && e.severity === 'warning')?.message
@@ -179,10 +189,10 @@ const diskRoleOptions = computed(() => [
 ])
 
 const redundancyOptions = computed(() => {
-  if (!model.value.diskType || !MANAGED_DISK_REDUNDANCY_BY_TYPE[model.value.diskType]) {
+  const validRedundancies = getValidManagedDiskRedundancies(model.value.diskType)
+  if (validRedundancies.length === 0) {
     return []
   }
-  const validRedundancies = MANAGED_DISK_REDUNDANCY_BY_TYPE[model.value.diskType]
   return validRedundancies.map(r => ({
     label: r === ManagedDiskRedundancy.LRS ? 'Locally Redundant (LRS)' : 'Zone Redundant (ZRS)',
     value: r,
@@ -190,38 +200,73 @@ const redundancyOptions = computed(() => {
 })
 
 const sizeLimit = computed(() => {
-  if (!model.value.diskType || !MANAGED_DISK_SIZE_LIMITS[model.value.diskType]) {
+  const diskType = model.value.diskType as ManagedDiskType | undefined
+  if (!diskType || !MANAGED_DISK_SIZE_LIMITS[diskType]) {
     return { min: 4, max: 32767 }
   }
-  return MANAGED_DISK_SIZE_LIMITS[model.value.diskType]
+  return MANAGED_DISK_SIZE_LIMITS[diskType]
 })
 
 const isPerformanceConfigurable = computed(() => {
-  return model.value.diskType === ManagedDiskType.ULTRA || model.value.diskType === ManagedDiskType.PREMIUM_SSD_V2
+  return isManagedDiskPerformanceConfigurable(model.value.diskType)
 })
 
 const iopsBandwidth = computed(() => {
   if (model.value.diskType === ManagedDiskType.ULTRA && model.value.diskSizeGb) {
-    const maxIops = Math.min(400000, model.value.diskSizeGb * 1000)
-    return `Ultra: 100-${maxIops} IOPS (1000 IOPS/GiB, max 400,000)`
+    const limits = getUltraDiskPerformanceLimits(Number(model.value.diskSizeGb))
+    return `Ultra: ${limits.minIops}-${limits.maxIops} IOPS (1000 IOPS/GiB, max 400,000)`
   }
   if (model.value.diskType === ManagedDiskType.PREMIUM_SSD_V2 && model.value.diskSizeGb) {
-    const iopsBands = Math.max(0, model.value.diskSizeGb - 6)
-    const maxIops = 3000 + Math.min(77000, iopsBands * 500)
-    return `Premium v2: 3000-${maxIops} IOPS (baseline 3000 + 500/GiB above 6 GB)`
+    const limits = getPremiumSsdV2PerformanceLimits(Number(model.value.diskSizeGb), Number(model.value.iops || 3000))
+    return `Premium v2: ${limits.minIops}-${limits.maxIops} IOPS (baseline 3000 + 500/GiB above 6 GB)`
   }
   return ''
 })
 
-const maxThroughput = computed(() => {
+const throughputBandwidth = computed(() => {
   if (model.value.diskType === ManagedDiskType.ULTRA) {
-    return '10,000 MB/s'
+    const limits = getUltraDiskPerformanceLimits(Number(model.value.diskSizeGb || 0))
+    const maxByIops = model.value.iops ? Math.min(limits.maxThroughput, Number(model.value.iops) * 0.25) : limits.maxThroughput
+    return `Ultra: ${limits.minThroughput}-${maxByIops} MB/s`
   }
   if (model.value.diskType === ManagedDiskType.PREMIUM_SSD_V2) {
-    return '2,000 MB/s'
+    const limits = getPremiumSsdV2PerformanceLimits(Number(model.value.diskSizeGb || 0), Number(model.value.iops || 3000))
+    return `Premium v2: ${limits.minThroughput}-${limits.maxThroughput} MB/s`
   }
   return 'N/A'
 })
+
+watch(
+  () => model.value.type,
+  () => {
+    if (model.value.type === NetworkComponentType.MANAGED_DISK) {
+      model.value = normalizeManagedDiskData({ ...model.value })
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => model.value.diskType,
+  (diskType) => {
+    if (!isManagedDisk.value) return
+    model.value.redundancy = getCoercedManagedDiskRedundancy(diskType, model.value.redundancy)
+    if (!isManagedDiskPerformanceConfigurable(diskType)) {
+      model.value.iops = undefined
+      model.value.throughput = undefined
+    }
+  },
+)
+
+watch(
+  () => model.value.diskRole,
+  (diskRole) => {
+    if (!isManagedDisk.value) return
+    if (diskRole === ManagedDiskRole.DATA && model.value.osType) {
+      model.value.osType = undefined
+    }
+  },
+)
 const storageTypes = [
   { label: 'Storage Account', value: NetworkComponentType.STORAGE_ACCOUNT },
   { label: 'Blob Storage', value: NetworkComponentType.BLOB_STORAGE },
@@ -260,5 +305,9 @@ const selectedVnetRules = computed({
 .input-wrapper.has-error :deep(.p-inputnumber-input) {
   border-color: var(--red-500) !important;
   background-color: var(--red-50);
+}
+.input-wrapper.has-warning :deep(input),
+.input-wrapper.has-warning :deep(.p-inputnumber-input) {
+  border-color: var(--orange-500) !important;
 }
 </style>

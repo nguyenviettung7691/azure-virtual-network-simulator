@@ -95,6 +95,7 @@ const COMPONENT_DESCRIPTIONS: Partial<Record<NetworkComponentType, string>> = {
   [NetworkComponentType.DNS_ZONE]: 'DNS records for name resolution',
   [NetworkComponentType.VNET_PEERING]: 'Private connectivity between VNets',
   [NetworkComponentType.UDR]: 'Custom routes for traffic steering',
+  [NetworkComponentType.NAT_GATEWAY]: 'Managed outbound internet egress for subnets',
   [NetworkComponentType.NSG]: 'Traffic filtering rules at layer 4',
   [NetworkComponentType.ASG]: 'Application-aware workload grouping',
   [NetworkComponentType.FIREWALL]: 'Managed stateful perimeter firewall',
@@ -135,6 +136,7 @@ const COMPONENT_ALIASES: Partial<Record<NetworkComponentType, string[]>> = {
   [NetworkComponentType.SUBNET]: ['subnet'],
   [NetworkComponentType.AKS]: ['kubernetes', 'aks'],
   [NetworkComponentType.UDR]: ['route table', 'udr'],
+  [NetworkComponentType.NAT_GATEWAY]: ['nat', 'nat gateway', 'egress'],
   [NetworkComponentType.PRIVATE_ENDPOINT]: ['private link', 'private endpoint'],
   [NetworkComponentType.SERVICE_ENDPOINT]: ['service endpoint'],
 }

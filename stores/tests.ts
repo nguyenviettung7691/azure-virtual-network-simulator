@@ -1204,11 +1204,16 @@ function buildRelationshipGraph(nodes: DiagramEntity[], edges: any[]): Relations
     connect(node.id, data.localVnetId)
     connect(node.id, data.remoteVnetId)
     connect(node.id, data.storageAccountId)
+    connect(node.id, data.keyVaultId)
+    connect(node.id, data.keyVaultManagedIdentityId)
     connect(node.id, data.privateLinkServiceId)
     connect(node.id, data.dnsZoneGroupId)
     connect(node.id, data.attachedToVmId)
     connect(node.id, data.assignedToId)
     connect(node.id, data.vnetIntegrationSubnetId)
+    if (Array.isArray(data.userAssignedIdentityIds)) {
+      data.userAssignedIdentityIds.forEach((identityId: string) => connect(node.id, identityId))
+    }
   })
 
   return graph

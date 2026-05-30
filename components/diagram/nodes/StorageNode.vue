@@ -27,6 +27,7 @@
 import { Handle, Position } from '@vue-flow/core'
 import { NetworkComponentType, getComponentColor, getComponentLabel } from '~/types/network'
 import { getAzureComponentIcon } from '~/lib/azureIcons'
+import { formatManagedDiskDetail } from '~/lib/managedDisk'
 
 interface Props {
   id: string
@@ -46,11 +47,7 @@ const nodeDetail = computed(() => {
   if (d.type === NetworkComponentType.STORAGE_ACCOUNT) return [d.accountKind || 'StorageV2', d.replication || 'LRS'].filter(Boolean).join(' · ')
   if (d.type === NetworkComponentType.BLOB_STORAGE) return [d.accountKind || 'BlobStorage', d.replication || 'LRS'].filter(Boolean).join(' · ')
   if (d.type === NetworkComponentType.MANAGED_DISK) {
-    const size = d.diskSizeGb || 128
-    const diskType = d.diskType || d.sku || 'Standard'
-    const redundancy = d.redundancy || 'LRS'
-    const role = d.diskRole ? ` (${d.diskRole})` : ''
-    return `${diskType} - ${size} GB (${redundancy})${role}`
+    return formatManagedDiskDetail(d)
   }
   return ''
 })

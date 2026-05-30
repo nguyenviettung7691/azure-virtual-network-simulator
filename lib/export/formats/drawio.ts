@@ -3,6 +3,7 @@ import type { DiagramEdge, DiagramNode, DiagramState } from '~/types/diagram'
 import { NetworkComponentType, getComponentColor, getComponentLabel } from '~/types/network'
 import { getNodeTypeForComponent } from '~/lib/export/nodeTypeMap'
 import { VNET_HEADER_HEIGHT, SUBNET_HEADER_HEIGHT } from '~/lib/layout'
+import { formatManagedDiskDetail, normalizeManagedDiskData } from '~/lib/managedDisk'
 
 // ─── Theme colour palettes ────────────────────────────────────────────────────
 
@@ -344,7 +345,7 @@ function getNodeDetail(node: DiagramNode): string {
     case NetworkComponentType.BLOB_STORAGE:
       return [d.accountKind || 'BlobStorage', d.replication, d.accessTier].filter(Boolean).join(' - ')
     case NetworkComponentType.MANAGED_DISK:
-      return [d.diskSizeGB ? `${d.diskSizeGB} GB` : '', d.sku || d.storageType || ''].filter(Boolean).join(' - ')
+      return formatManagedDiskDetail(d)
     case NetworkComponentType.KEY_VAULT:
       return d.sku || d.tier || ''
     case NetworkComponentType.MANAGED_IDENTITY:
@@ -460,13 +461,13 @@ export function importFromDrawio(xml: string): DiagramState {
 
       const componentType = resolveComponentType(data?.type)
       const name = data?.name || cell.getAttribute('value') || 'Unknown'
-      const normalizedData = {
+      const normalizedData = normalizeManagedDiskData({
         ...data,
         id: data?.id || id,
         name,
         type: componentType,
         createdAt: data?.createdAt || new Date().toISOString(),
-      }
+      })
 
       nodes.push({
         id,

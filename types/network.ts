@@ -27,6 +27,20 @@ export enum NetworkComponentType {
   FIREWALL = 'FIREWALL',
   BASTION = 'BASTION',
   INTERNET = 'INTERNET',
+  NAT_GATEWAY = 'NAT_GATEWAY',
+}
+/**
+ * Azure NAT Gateway Component
+ * See: https://docs.azure.cn/en-us/nat-gateway/nat-gateway-resource
+ */
+export interface NatGatewayComponent extends NetworkComponent {
+  type: NetworkComponentType.NAT_GATEWAY
+  sku: 'Standard'
+  publicIpIds?: string[] // Up to 2 Public IPs (Standard SKU only)
+  publicIpPrefixIds?: string[] // Up to 2 Public IP Prefixes (Standard SKU only)
+  subnetIds?: string[] // Up to 16 subnets, each subnet can only be associated with one NAT Gateway
+  idleTimeoutInMinutes?: number // 4-120 minutes, default 4
+  availabilityZones?: string[] // Zone IDs: '1', '2', '3'
 }
 
 /**
@@ -248,7 +262,11 @@ export interface AppGatewayComponent extends NetworkComponent {
   frontendIpId?: string
   subnetId?: string
   availabilityZones?: string[] // e.g., ['1', '2', '3'] for zone-redundant deployment
-  keyVaultCertificateId?: string // for TLS certificate storage and rotation
+  keyVaultCertificateId?: string // Legacy compatibility field; stores the resolved Key Vault secret URI when structured fields are set
+  keyVaultId?: string
+  keyVaultCertificateName?: string
+  keyVaultCertificateVersion?: string
+  keyVaultManagedIdentityId?: string
   backendPools?: string[]
   healthProbes?: HealthProbe[]
   loadBalancingRules?: LoadBalancingRule[]
@@ -349,6 +367,8 @@ export interface VmComponent extends NetworkComponent {
   nicIds?: string[]
   availabilityZone?: '1' | '2' | '3'
   diskType?: 'Standard_LRS' | 'Premium_LRS' | 'StandardSSD_LRS'
+  enableManagedIdentity?: boolean
+  userAssignedIdentityIds?: string[]
 }
 
 export interface VmssComponent extends NetworkComponent {
@@ -368,6 +388,8 @@ export interface VmssComponent extends NetworkComponent {
   availabilityZones?: string[]
   scaleInPolicy?: 'FIFO' | 'OldestVM' | 'NewestVM'
   overprovision?: boolean
+  enableManagedIdentity?: boolean
+  userAssignedIdentityIds?: string[]
 }
 
 export interface AksComponent extends NetworkComponent {
@@ -409,6 +431,7 @@ export interface AksComponent extends NetworkComponent {
   enableMonitoring?: boolean // Default: true; enables Container Insights
   monitoringWorkspaceId?: string // Log Analytics workspace ID
   enableManagedIdentity?: boolean // Default: true; recommended
+  userAssignedIdentityIds?: string[] // User-assigned managed identities
 }
 
 export interface AppServiceComponent extends NetworkComponent {
@@ -439,7 +462,10 @@ export interface AppServiceComponent extends NetworkComponent {
   enableHealthCheck?: boolean
   healthCheckPath?: string // Path for health check probe (e.g., /health)
   // Key Vault integration
-  keyVaultSecretUri?: string // Reference to secret in Key Vault for app settings/connection strings
+  keyVaultSecretUri?: string // Legacy compatibility field; stores the resolved Key Vault secret URI when structured fields are set
+  keyVaultId?: string
+  keyVaultSecretName?: string
+  keyVaultSecretVersion?: string
 }
 
 export interface FunctionsComponent extends NetworkComponent {
@@ -473,6 +499,9 @@ export interface FunctionsComponent extends NetworkComponent {
   applicationInsightsResourceId?: string
   // Key Vault integration
   keyVaultSecretUri?: string
+  keyVaultId?: string
+  keyVaultSecretName?: string
+  keyVaultSecretVersion?: string
 }
 
 export interface StorageAccountComponent extends NetworkComponent {
@@ -506,7 +535,7 @@ export interface ManagedDiskComponent extends NetworkComponent {
   iops?: number
   throughput?: number
   // Backward compatibility: legacy sku field (will be normalized on load)
-  sku?: 'Standard_LRS' | 'Premium_LRS' | 'StandardSSD_LRS' | 'UltraSSD_LRS'
+  sku?: 'Standard_LRS' | 'Premium_LRS' | 'Premium_ZRS' | 'StandardSSD_LRS' | 'StandardSSD_ZRS' | 'UltraSSD_LRS' | 'PremiumV2_LRS'
 }
 
 export interface KeyVaultComponent extends NetworkComponent {
@@ -517,6 +546,7 @@ export interface KeyVaultComponent extends NetworkComponent {
   softDeleteRetentionDays?: number
   enablePurgeProtection?: boolean
   networkDefaultAction?: 'Allow' | 'Deny'
+  allowTrustedMicrosoftServices?: boolean
   virtualNetworkRules?: string[]
   ipRules?: string[]
   accessPolicies?: KeyVaultAccessPolicy[]
@@ -561,6 +591,8 @@ export interface ManagedIdentityComponent extends NetworkComponent {
 
 export interface ServiceEndpointComponent extends NetworkComponent {
   type: NetworkComponentType.SERVICE_ENDPOINT
+  // Mirror node for subnet-level service endpoint configuration.
+  // Authoritative endpoint configuration is SubnetComponent.serviceEndpoints[].
   service: string
   subnetId?: string
   locations?: string[]
@@ -639,6 +671,7 @@ export type AnyNetworkComponent =
   | FirewallComponent
   | BastionComponent
   | InternetComponent
+  | NatGatewayComponent
 
 export const COMPONENT_COLORS: Record<NetworkComponentType, string> = {
   [NetworkComponentType.VNET]: '#0078d4',
@@ -669,6 +702,7 @@ export const COMPONENT_COLORS: Record<NetworkComponentType, string> = {
   [NetworkComponentType.FIREWALL]: '#d13438',
   [NetworkComponentType.BASTION]: '#004578',
   [NetworkComponentType.INTERNET]: '#0f6cbd',
+  [NetworkComponentType.NAT_GATEWAY]: '#0078d4',
 }
 
 export const COMPONENT_ICONS: Record<NetworkComponentType, string> = {
@@ -700,6 +734,7 @@ export const COMPONENT_ICONS: Record<NetworkComponentType, string> = {
   [NetworkComponentType.FIREWALL]: 'mdi:wall-fire',
   [NetworkComponentType.BASTION]: 'mdi:castle',
   [NetworkComponentType.INTERNET]: 'mdi:web',
+  [NetworkComponentType.NAT_GATEWAY]: 'mdi:network-outline',
 }
 
 export function getComponentColor(type: NetworkComponentType): string {
@@ -740,6 +775,7 @@ export function getComponentLabel(type: NetworkComponentType): string {
     [NetworkComponentType.FIREWALL]: 'Azure Firewall',
     [NetworkComponentType.BASTION]: 'Azure Bastion',
     [NetworkComponentType.INTERNET]: 'Public Internet',
+    [NetworkComponentType.NAT_GATEWAY]: 'NAT Gateway',
   }
   return labels[type] || type
 }
@@ -764,6 +800,7 @@ export const COMPONENTS_BY_CATEGORY: Record<ComponentCategory, NetworkComponentT
     NetworkComponentType.DNS_ZONE,
     NetworkComponentType.VNET_PEERING,
     NetworkComponentType.UDR,
+    NetworkComponentType.NAT_GATEWAY,
   ],
   Security: [
     NetworkComponentType.NSG,

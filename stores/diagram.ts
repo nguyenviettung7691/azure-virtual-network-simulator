@@ -18,9 +18,11 @@ import type {
   DiagramState,
   DiagramViewMode,
 } from '~/types/diagram'
-import type { AnyNetworkComponent, InternetComponent } from '~/types/network'
+import type { AnyNetworkComponent, InternetComponent, NatGatewayComponent, ServiceEndpointComponent, SubnetComponent } from '~/types/network'
 import { NetworkComponentType } from '~/types/network'
 import { applyDagreLayout } from '~/lib/dagre'
+import { normalizeManagedDiskData } from '~/lib/managedDisk'
+import { getServiceEndpointDisplayName, normalizeServiceEndpointServiceName } from '~/lib/serviceEndpoints'
 import { INTERNET_SOURCE_ID } from '~/types/test'
 import { Position } from '@vue-flow/core'
 
@@ -82,7 +84,7 @@ export function getComponentLayer(type: NetworkComponentType, componentData?: an
 
   // APP_SERVICE: Public by default, private if VNet-integrated or has Private Endpoint
   if (type === NetworkComponentType.APP_SERVICE) {
-    if (componentData?.vnetIntegrationSubnetId) return 'vnet'
+    if (componentData?.enablePrivateEndpoint || componentData?.vnetIntegrationSubnetId) return 'vnet'
     return 'public-facing'
   }
 
@@ -119,6 +121,7 @@ export function getComponentLayer(type: NetworkComponentType, componentData?: an
     NetworkComponentType.VMSS,
     NetworkComponentType.SERVICE_ENDPOINT,
     NetworkComponentType.PRIVATE_ENDPOINT,
+    NetworkComponentType.NAT_GATEWAY,
   ].includes(type)) return 'vnet'
 
   // Fallback (should not reach here if all types are covered)
@@ -205,13 +208,22 @@ export const useDiagramStore = defineStore('diagram', {
 
   actions: {
     addNode(component: AnyNetworkComponent, position?: { x: number; y: number }) {
+      let nextNodes = [...this.nodes]
+      if (component.type === NetworkComponentType.SERVICE_ENDPOINT) {
+        nextNodes = applyServiceEndpointTupleChange(
+          nextNodes,
+          undefined,
+          getServiceEndpointTuple(component as ServiceEndpointComponent),
+        )
+      }
+
       const node = createDiagramNode(
         component,
-        position || getInitialNodePosition(component.type, this.nodes)
+        position || getInitialNodePosition(component.type, nextNodes)
       )
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore – DiagramNode extends a deeply generic vue-flow type; TS depth limit hit
-      this.nodes = syncSystemManagedNodes([...this.nodes, node])
+      this.nodes = normalizeStoreNodes([...nextNodes, node])
       this.isDirty = true
     },
 
@@ -219,15 +231,39 @@ export const useDiagramStore = defineStore('diagram', {
       const idx = this.nodes.findIndex(n => n.id === id)
       if (idx === -1) return
       if (isPublicInternetComponent(this.nodes[idx].data)) return
-      const updatedComponent = { ...this.nodes[idx].data, ...updates } as AnyNetworkComponent
-      this.nodes[idx] = { ...this.nodes[idx], data: updatedComponent }
-      this.nodes = [...this.nodes]
+      const existingComponent = this.nodes[idx].data as AnyNetworkComponent
+      const updatedComponent = normalizeManagedDiskData({ ...this.nodes[idx].data, ...updates } as any) as AnyNetworkComponent
+      let nextNodes = [...this.nodes]
+      nextNodes[idx] = { ...nextNodes[idx], data: updatedComponent }
+      if (existingComponent.type === NetworkComponentType.SERVICE_ENDPOINT || updatedComponent.type === NetworkComponentType.SERVICE_ENDPOINT) {
+        const previousTuple = existingComponent.type === NetworkComponentType.SERVICE_ENDPOINT
+          ? getServiceEndpointTuple(existingComponent as ServiceEndpointComponent)
+          : undefined
+        const nextTuple = updatedComponent.type === NetworkComponentType.SERVICE_ENDPOINT
+          ? getServiceEndpointTuple(updatedComponent as ServiceEndpointComponent)
+          : undefined
+        nextNodes = applyServiceEndpointTupleChange(nextNodes, previousTuple, nextTuple)
+      }
+      this.nodes = normalizeStoreNodes(nextNodes)
       this.isDirty = true
     },
 
     removeNode(id: string) {
       if (id === INTERNET_SOURCE_ID) return
-      this.nodes = syncSystemManagedNodes(this.nodes.filter(n => n.id !== id))
+      const removedNode = this.nodes.find(n => n.id === id)
+      let nextNodes = this.nodes.filter(n => n.id !== id)
+      if (removedNode?.data?.type === NetworkComponentType.SERVICE_ENDPOINT) {
+        const removedTuple = getServiceEndpointTuple(removedNode.data as ServiceEndpointComponent)
+        const hasSameTupleNode = nextNodes.some(node => {
+          if (node.data?.type !== NetworkComponentType.SERVICE_ENDPOINT) return false
+          const tuple = getServiceEndpointTuple(node.data as ServiceEndpointComponent)
+          return !!tuple && !!removedTuple && tuple.subnetId === removedTuple.subnetId && tuple.service === removedTuple.service
+        })
+        if (!hasSameTupleNode) {
+          nextNodes = applyServiceEndpointTupleChange(nextNodes, removedTuple, undefined)
+        }
+      }
+      this.nodes = normalizeStoreNodes(nextNodes)
       this.edges = (this.edges as unknown as EdgeBase[]).filter(
         e => e.source !== id && e.target !== id
       ) as unknown as DiagramEdge[]
@@ -287,7 +323,7 @@ export const useDiagramStore = defineStore('diagram', {
 
     loadDiagram(state: DiagramState) {
       this.stopAnimation()
-      this.nodes = syncSystemManagedNodes(state.nodes)
+      this.nodes = normalizeStoreNodes(state.nodes)
       const nodeLookup = buildNodeLookup(this.nodes)
       this.edges = state.edges.map(edge => normalizeDiagramEdge(edge as DiagramEdge, nodeLookup, true))
       this.viewport = state.viewport
@@ -352,7 +388,7 @@ export const useDiagramStore = defineStore('diagram', {
 
     openEditComponentModal(component: AnyNetworkComponent) {
       if (isPublicInternetComponent(component)) return
-      this.editingComponent = { ...component } as AnyNetworkComponent
+      this.editingComponent = normalizeManagedDiskData({ ...component } as any) as AnyNetworkComponent
       this.addingComponentType = null
       this.showComponentModal = true
     },
@@ -692,6 +728,7 @@ function getNodeType(componentType: NetworkComponentType): string {
     [NetworkComponentType.PRIVATE_ENDPOINT]: 'compute-node',
     [NetworkComponentType.SERVICE_ENDPOINT]: 'compute-node',
     [NetworkComponentType.INTERNET]: 'internet-node',
+    [NetworkComponentType.NAT_GATEWAY]: 'nat-gateway-node',
   }
   return typeMap[componentType] || 'compute-node'
 }
@@ -819,14 +856,255 @@ function createPublicInternetComponent(existing?: Partial<InternetComponent>): I
 }
 
 function createDiagramNode(component: AnyNetworkComponent, position: { x: number; y: number }): DiagramNode {
+  const data = normalizeManagedDiskData(component as any) as AnyNetworkComponent
+
   return {
-    id: component.id,
-    type: getNodeType(component.type),
+    id: data.id,
+    type: getNodeType(data.type),
     position,
-    data: component,
-    width: getNodeWidth(component.type),
-    height: getNodeHeight(component.type),
+    data,
+    width: getNodeWidth(data.type),
+    height: getNodeHeight(data.type),
   }
+}
+
+function normalizeDiagramNodes(nodes: DiagramNode[]): DiagramNode[] {
+  return (nodes || []).map(node => ({
+    ...node,
+    data: normalizeManagedDiskData(node.data as any),
+  }))
+}
+
+type ServiceEndpointTuple = { subnetId: string; service: string }
+
+function getServiceEndpointTuple(component: ServiceEndpointComponent | undefined): ServiceEndpointTuple | undefined {
+  const subnetId = component?.subnetId?.trim()
+  const service = normalizeServiceEndpointServiceName(component?.service)
+  if (!subnetId || !service) return undefined
+  return { subnetId, service }
+}
+
+function applyServiceEndpointTupleChange(
+  nodes: DiagramNode[],
+  previousTuple?: ServiceEndpointTuple,
+  nextTuple?: ServiceEndpointTuple,
+): DiagramNode[] {
+  if (!previousTuple && !nextTuple) return nodes
+
+  return nodes.map(node => {
+    if (node.data?.type !== NetworkComponentType.SUBNET) return node
+
+    const subnetData = node.data as SubnetComponent
+    const currentServices = Array.isArray(subnetData.serviceEndpoints)
+      ? subnetData.serviceEndpoints.map(service => normalizeServiceEndpointServiceName(service)).filter(Boolean)
+      : []
+
+    const serviceSet = new Set(currentServices)
+    if (previousTuple && previousTuple.subnetId === node.id) {
+      serviceSet.delete(previousTuple.service)
+    }
+    if (nextTuple && nextTuple.subnetId === node.id) {
+      serviceSet.add(nextTuple.service)
+    }
+
+    const updatedServices = Array.from(serviceSet)
+    return {
+      ...node,
+      data: {
+        ...subnetData,
+        serviceEndpoints: updatedServices.length > 0 ? updatedServices : undefined,
+      },
+    } as DiagramNode
+  })
+}
+
+function normalizeStoreNodes(nodes: DiagramNode[]): DiagramNode[] {
+  const normalized = normalizeDiagramNodes(nodes)
+  const natReconciled = reconcileNatGatewayAssociations(normalized)
+  const reconciled = reconcileServiceEndpointNodes(natReconciled)
+  return syncSystemManagedNodes(reconciled)
+}
+
+function reconcileNatGatewayAssociations(nodes: DiagramNode[]): DiagramNode[] {
+  const allNodes = [...(nodes || [])]
+  const subnetNodes = allNodes.filter(node => node.data?.type === NetworkComponentType.SUBNET)
+  const natNodes = allNodes.filter(node => node.data?.type === NetworkComponentType.NAT_GATEWAY)
+
+  if (subnetNodes.length === 0 || natNodes.length === 0) {
+    return allNodes.map(node => {
+      if (node.data?.type !== NetworkComponentType.SUBNET) return node
+      const subnetData = node.data as SubnetComponent
+      return { ...node, data: { ...subnetData, natGatewayId: undefined } } as DiagramNode
+    })
+  }
+
+  const subnetIdSet = new Set(subnetNodes.map(node => node.id))
+  const natIdSet = new Set(natNodes.map(node => node.id))
+  const desiredBySubnet = new Map<string, string>()
+
+  for (const natNode of natNodes) {
+    const natData = natNode.data as NatGatewayComponent
+    const subnetIds = Array.isArray(natData.subnetIds) ? natData.subnetIds : []
+    for (const subnetId of subnetIds) {
+      if (!subnetIdSet.has(subnetId) || desiredBySubnet.has(subnetId)) continue
+      desiredBySubnet.set(subnetId, natNode.id)
+    }
+  }
+
+  for (const subnetNode of subnetNodes) {
+    const subnetData = subnetNode.data as SubnetComponent
+    if (!subnetData.natGatewayId) continue
+    if (!natIdSet.has(subnetData.natGatewayId)) continue
+    desiredBySubnet.set(subnetNode.id, subnetData.natGatewayId)
+  }
+
+  const subnetsByNat = new Map<string, string[]>()
+  desiredBySubnet.forEach((natGatewayId, subnetId) => {
+    const current = subnetsByNat.get(natGatewayId) || []
+    current.push(subnetId)
+    subnetsByNat.set(natGatewayId, current)
+  })
+
+  return allNodes.map(node => {
+    if (node.data?.type === NetworkComponentType.SUBNET) {
+      const subnetData = node.data as SubnetComponent
+      const natGatewayId = desiredBySubnet.get(node.id)
+      return { ...node, data: { ...subnetData, natGatewayId } } as DiagramNode
+    }
+    if (node.data?.type === NetworkComponentType.NAT_GATEWAY) {
+      const natData = node.data as NatGatewayComponent
+      const subnetIds = subnetsByNat.get(node.id) || []
+      return {
+        ...node,
+        data: {
+          ...natData,
+          subnetIds: subnetIds.length > 0 ? subnetIds : undefined,
+        },
+      } as DiagramNode
+    }
+    return node
+  })
+}
+
+function reconcileServiceEndpointNodes(nodes: DiagramNode[]): DiagramNode[] {
+  const allNodes = [...(nodes || [])]
+  const subnetNodes = allNodes.filter(node => node.data?.type === NetworkComponentType.SUBNET)
+  if (subnetNodes.length === 0) {
+    return allNodes.filter(node => node.data?.type !== NetworkComponentType.SERVICE_ENDPOINT)
+  }
+
+  const subnetById = new Map(subnetNodes.map(node => [node.id, node]))
+  const serviceEndpointNodes = allNodes.filter(node => node.data?.type === NetworkComponentType.SERVICE_ENDPOINT)
+  const tupleOrder: string[] = []
+  const tupleByKey = new Map<string, { subnetId: string; service: string; existingNode?: DiagramNode }>()
+
+  const addTuple = (subnetId: unknown, serviceRaw: unknown, existingNode?: DiagramNode) => {
+    const subnetKey = typeof subnetId === 'string' ? subnetId : ''
+    const service = normalizeServiceEndpointServiceName(serviceRaw)
+    if (!subnetKey || !service || !subnetById.has(subnetKey)) return
+
+    const tupleKey = `${subnetKey}::${service.toLowerCase()}`
+    const existingTuple = tupleByKey.get(tupleKey)
+    if (existingTuple) {
+      if (!existingTuple.existingNode && existingNode) existingTuple.existingNode = existingNode
+      return
+    }
+
+    tupleByKey.set(tupleKey, { subnetId: subnetKey, service, existingNode })
+    tupleOrder.push(tupleKey)
+  }
+
+  subnetNodes.forEach(subnetNode => {
+    const subnetData = subnetNode.data as SubnetComponent
+    const services = Array.isArray(subnetData.serviceEndpoints) ? subnetData.serviceEndpoints : []
+    services.forEach(service => addTuple(subnetNode.id, service))
+  })
+
+  serviceEndpointNodes.forEach(serviceNode => {
+    const serviceData = serviceNode.data as ServiceEndpointComponent
+    addTuple(serviceData.subnetId, serviceData.service, serviceNode)
+  })
+
+  const servicesBySubnet = new Map<string, string[]>()
+  tupleOrder.forEach(tupleKey => {
+    const tuple = tupleByKey.get(tupleKey)
+    if (!tuple) return
+    const current = servicesBySubnet.get(tuple.subnetId) || []
+    current.push(tuple.service)
+    servicesBySubnet.set(tuple.subnetId, current)
+  })
+
+  const resultNodes: DiagramNode[] = []
+  allNodes.forEach(node => {
+    if (node.data?.type === NetworkComponentType.SERVICE_ENDPOINT) return
+
+    if (node.data?.type !== NetworkComponentType.SUBNET) {
+      resultNodes.push(node)
+      return
+    }
+
+    const subnetData = node.data as SubnetComponent
+    const endpointServices = servicesBySubnet.get(node.id) || []
+    resultNodes.push({
+      ...node,
+      data: {
+        ...subnetData,
+        serviceEndpoints: endpointServices.length > 0 ? endpointServices : undefined,
+      },
+    } as DiagramNode)
+  })
+
+  const usedIds = new Set(resultNodes.map(node => node.id))
+  const createServiceEndpointId = (seed: number): string => {
+    let cursor = seed
+    let id = `SERVICE_ENDPOINT-${Date.now()}-${cursor}`
+    while (usedIds.has(id)) {
+      cursor += 1
+      id = `SERVICE_ENDPOINT-${Date.now()}-${cursor}`
+    }
+    usedIds.add(id)
+    return id
+  }
+
+  tupleOrder.forEach((tupleKey, tupleIndex) => {
+    const tuple = tupleByKey.get(tupleKey)
+    if (!tuple) return
+
+    const existingNode = tuple.existingNode
+    const existingData = existingNode?.data as ServiceEndpointComponent | undefined
+    const component: ServiceEndpointComponent = {
+      id: existingNode?.id || createServiceEndpointId(tupleIndex + 1),
+      name: existingData?.name?.trim()
+        ? existingData.name
+        : `${getServiceEndpointDisplayName(tuple.service)} Service Endpoint`,
+      type: NetworkComponentType.SERVICE_ENDPOINT,
+      description: existingData?.description,
+      tags: existingData?.tags,
+      createdAt: existingData?.createdAt || new Date().toISOString(),
+      service: tuple.service,
+      subnetId: tuple.subnetId,
+      locations: existingData?.locations,
+    }
+
+    if (existingNode) {
+      resultNodes.push({
+        ...existingNode,
+        type: getNodeType(NetworkComponentType.SERVICE_ENDPOINT),
+        data: component,
+      })
+      return
+    }
+
+    const subnetNode = subnetById.get(tuple.subnetId)
+    const basePosition = subnetNode?.position || getInitialNodePosition(NetworkComponentType.SERVICE_ENDPOINT, resultNodes)
+    const position = {
+      x: basePosition.x + 40 + ((tupleIndex % 4) * 28),
+      y: basePosition.y + 40 + (Math.floor(tupleIndex / 4) * 18),
+    }
+    resultNodes.push(createDiagramNode(component, position))
+  })
+
+  return resultNodes
 }
 
 function normalizePublicInternetNode(node?: DiagramNode): DiagramNode {

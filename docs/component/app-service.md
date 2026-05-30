@@ -34,6 +34,9 @@ export interface AppServiceComponent extends NetworkComponent {
   healthCheckPath?: string
   // Key Vault integration
   keyVaultSecretUri?: string
+  keyVaultId?: string
+  keyVaultSecretName?: string
+  keyVaultSecretVersion?: string
 }
 ```
 
@@ -61,10 +64,10 @@ export interface AppServiceComponent extends NetworkComponent {
 | **Runtime Stacks** | Windows: .NET 4.8/6/7/8, Node.js, PHP, Java. Linux: .NET 6/7/8, Node.js, Python, Java, Ruby, Go, PHP | Form runtime selector shows OS-specific options |
 | **VNet Integration** | Secure outbound access to VNet resources; inbound still requires explicit rules | Optional vnetIntegrationSubnetId; validator warns if missing for private workloads |
 | **Private Endpoints** | Eliminate public internet exposure via Azure Private Link; inbound access only from private networks | Optional enablePrivateEndpoint + privateEndpointId; validator warns if mismatch |
-| **Managed Identity** | System-assigned or user-assigned for Azure service authentication; eliminate stored credentials | Optional enableManagedIdentity; validator errors if both system and user-assigned set |
+| **Managed Identity** | System-assigned and/or user-assigned for Azure service authentication; eliminate stored credentials | Optional `enableManagedIdentity` plus `userAssignedIdentityIds[]`; both identity modes can be enabled together |
 | **TLS Enforcement** | Minimum TLS 1.2+ (Azure default); redirect HTTP to HTTPS | Optional minTlsVersion; validator warns if < 1.2; enableHttps forces redirect |
 | **Custom Domains** | Not supported on Free/Shared tiers | Validator warns if custom domain on Free/Shared |
-| **Key Vault Integration** | Store secrets (DB credentials, API keys) in Key Vault; app accesses via managed identity | Optional keyVaultSecretUri; validator warns if referenced vault doesn't exist |
+| **Key Vault Integration** | Store secrets (DB credentials, API keys) in Key Vault; app accesses via managed identity | Structured fields: `keyVaultId`, `keyVaultSecretName`, optional `keyVaultSecretVersion`; `keyVaultSecretUri` remains legacy compatibility only |
 | **Authentication/Authorization** | Built-in Easy Auth with Microsoft Entra ID, Microsoft, Google, Facebook, X | Optional enableEasyAuth + easyAuthProvider selector |
 | **Diagnostic Logging** | Enable for app errors, web server logs, failed request traces | Optional enableDiagnosticLogging |
 | **Application Insights** | Monitor performance, usage, exceptions, dependencies | Optional applicationInsightsResourceId |
@@ -98,7 +101,10 @@ Form sections organized into logical groups:
    - Health Check toggle + conditional path field
 
 5. **Key Vault Integration:**
-   - Key Vault Secret URI input (optional)
+   - Key Vault selector
+   - Secret name input
+   - Optional secret version input
+   - Read-only secret URI preview
 
 **Validation Rules** (`validateAppService()` in `componentValidators.ts`):
 
@@ -106,7 +112,7 @@ Form sections organized into logical groups:
 - ❌ Error: `sku` must be valid for selected tier
 - ❌ Error: `os` must be 'Windows' or 'Linux'
 - ❌ Error: `minTlsVersion` must be 1.0, 1.1, 1.2, or 1.3
-- ❌ Error: Cannot have both system-assigned and user-assigned managed identities enabled simultaneously
+- ❌ Error: `userAssignedIdentityIds[]` references a non-managed-identity resource or a system-assigned identity node
 - ⚠️ Warning: Runtime stack recommended for deployment realism
 - ⚠️ Warning: TLS < 1.2 is deprecated (use 1.2 or 1.3)
 - ⚠️ Warning: Free/Shared tier doesn't support custom domains
@@ -114,7 +120,9 @@ Form sections organized into logical groups:
 - ⚠️ Warning: Free/Shared tier doesn't support managed identity (shared compute)
 - ⚠️ Warning: VNet integration enabled but no subnet reference
 - ⚠️ Warning: Private endpoint enabled but no endpoint ID
-- ⚠️ Warning: Referenced Key Vault, Application Insights, or managed identity doesn't exist
+- ⚠️ Warning: Referenced Key Vault or Application Insights resource doesn't exist in the diagram
+- ⚠️ Warning: Key Vault reference configured without managed identity
+- ⚠️ Warning: Selected Key Vault is network-restricted but the app lacks matching VNet integration metadata
 - ⚠️ Warning: Easy Auth enabled but no provider specified
 
 **Layer Classification:**
@@ -126,7 +134,7 @@ Form sections organized into logical groups:
 **Key Integration Points:**
 
 - **Managed Identity:** System or user-assigned identity for accessing Key Vault, SQL Database, Storage, etc.
-- **Key Vault References:** App settings and connection strings reference Key Vault secrets via managed identity
+- **Key Vault References:** App settings and connection strings use structured Key Vault references (`keyVaultId`, secret name, optional version) and derive the secret URI from the selected vault
 - **Application Insights:** Performance monitoring, custom metrics, dependency tracking
 - **VNet Integration:** Secure outbound traffic to VNet-scoped resources (databases, caches, APIs in VNet)
 - **Private Endpoints:** Completely private inbound connectivity from private networks
@@ -137,7 +145,7 @@ Form sections organized into logical groups:
 - ✓ All 9 modern tiers with correct tier-to-SKU mapping
 - ✓ Tier-specific feature matrix (Free/Shared limitations, Basic+ autoscaling, Premium advanced features, Isolated/IsolatedV2 complete isolation)
 - ✓ OS-specific runtime stack options
-- ✓ Managed identity support (system and user-assigned) with single-selection enforcement
+- ✓ Managed identity support (system-assigned and user-assigned identities can be used together)
 - ✓ TLS version enforcement (1.0-1.3) with deprecation warnings
 - ✓ VNet integration and private endpoint security features
 - ✓ Custom domain support (with tier constraints)
@@ -153,7 +161,7 @@ Form sections organized into logical groups:
 - Remove managed identity fields (critical for passwordless auth)
 - Remove TLS version minimum enforcement (security requirement)
 - Allow tier-incompatible features (e.g., custom domains on Free)
-- Skip Key Vault/Application Insights reference validation
+- Skip structured Key Vault/Application Insights reference validation
 - Merge App Service plan modeling (per-app plan metadata model is correct for v1)
 
 **Future Enhancements (Out of Scope):**
@@ -184,7 +192,7 @@ Azure Functions use a Functions-native hosting model and maintain legacy compati
 - ❌ Error: `runtimeStack` must be one of `dotnet|node|python|java|powershell`
 - ❌ Error: `runtimeVersion` is required
 - ❌ Error: `storageAccountId` is required and must reference an existing node
-- ❌ Error: system-assigned and user-assigned managed identities cannot both be enabled
+- ❌ Error: `userAssignedIdentityIds[]` references a non-managed-identity resource or a system-assigned identity node
 - ⚠️ Warning: Consumption hosting is legacy for new serverless workloads
 - ⚠️ Warning: Linux Consumption retirement guidance surfaced when applicable
 - ⚠️ Warning: Blob-only storage is not recommended for default host storage

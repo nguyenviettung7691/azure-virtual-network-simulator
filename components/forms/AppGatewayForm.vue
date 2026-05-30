@@ -1,11 +1,11 @@
 <template>
   <div class="component-form">
     <div class="field"><label>Name *</label><InputText v-model="model.name" class="w-full" placeholder="my-app-gw" /></div>
-    
+
     <div class="field"><label>SKU (v2 Only)</label><Select v-model="model.sku" :options="['Standard_v2','WAF_v2']" class="w-full" /></div>
-    
+
     <div class="field"><label>Frontend Type</label><SelectButton v-model="model.frontendType" :options="['Public','Internal']" /></div>
-    
+
     <div class="field"><label>Capacity (Fixed Mode)</label>
       <div :class="{ 'has-error': getError('capacity') }" class="input-wrapper">
         <InputNumber v-model="model.capacity" :min="1" :max="32" class="w-full" />
@@ -45,14 +45,14 @@
         <InputText v-model="availabilityZonesStr" class="w-full" placeholder="e.g., 1,2,3" />
       </div>
       <small v-if="getError('availabilityZones')" class="error-text">{{ getError('availabilityZones') }}</small>
-      <small v-if="getWarning('availabilityZones')" class="warning-text">⚠️ {{ getWarning('availabilityZones') }}</small>
+      <small v-if="getWarning('availabilityZones')" class="warning-text">{{ getWarning('availabilityZones') }}</small>
       <small class="helper-text">Comma-separated zone IDs (1, 2, 3) for zone redundancy</small>
     </div>
 
     <div class="field checkbox-field"><label>Enable HTTP/2</label><ToggleSwitch v-model="model.enableHttp2" /></div>
-    
+
     <div class="field checkbox-field"><label>Enable WAF</label><ToggleSwitch v-model="model.enableWaf" /></div>
-    
+
     <div class="field" v-if="model.enableWaf"><label>WAF Mode</label><SelectButton v-model="model.wafMode" :options="['Detection','Prevention']" /></div>
 
     <div class="field checkbox-field"><label>Enable Mutual Authentication (mTLS)</label><ToggleSwitch v-model="model.enableMutualAuthentication" /></div>
@@ -62,7 +62,7 @@
         <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
       </div>
       <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
-      <small v-if="getWarning('subnetId')" class="warning-text">⚠️ {{ getWarning('subnetId') }}</small>
+      <small v-if="getWarning('subnetId')" class="warning-text">{{ getWarning('subnetId') }}</small>
     </div>
 
     <div class="field" v-if="model.frontendType === 'Public'">
@@ -71,16 +71,42 @@
         <Select v-model="model.frontendIpId" :options="ipOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Public IP" />
       </div>
       <small v-if="getError('frontendIpId')" class="error-text">{{ getError('frontendIpId') }}</small>
-      <small v-if="getWarning('frontendIpId')" class="warning-text">⚠️ {{ getWarning('frontendIpId') }}</small>
+      <small v-if="getWarning('frontendIpId')" class="warning-text">{{ getWarning('frontendIpId') }}</small>
       <small class="helper-text">Must be Standard SKU with Static allocation</small>
     </div>
 
-    <div class="field"><label>Key Vault Certificate ID</label>
-      <div :class="{ 'has-error': getError('keyVaultCertificateId') }" class="input-wrapper">
-        <Select v-model="model.keyVaultCertificateId" :options="keyVaultOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Key Vault" showClear />
+    <div class="field"><label>Key Vault</label>
+      <div :class="{ 'has-error': getError('keyVaultId') }" class="input-wrapper">
+        <Select v-model="model.keyVaultId" :options="keyVaultOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Key Vault" showClear />
       </div>
-      <small v-if="getWarning('keyVaultCertificateId')" class="warning-text">⚠️ {{ getWarning('keyVaultCertificateId') }}</small>
-      <small class="helper-text">Recommended for TLS certificate storage and auto-rotation</small>
+      <small v-if="getError('keyVaultId')" class="error-text">{{ getError('keyVaultId') }}</small>
+      <small v-if="getWarning('keyVaultId')" class="warning-text">{{ getWarning('keyVaultId') }}</small>
+    </div>
+
+    <div class="field"><label>Certificate Name</label>
+      <div :class="{ 'has-error': getError('keyVaultCertificateName') }" class="input-wrapper">
+        <InputText v-model="model.keyVaultCertificateName" class="w-full" placeholder="gateway-tls-cert" />
+      </div>
+      <small v-if="getError('keyVaultCertificateName')" class="error-text">{{ getError('keyVaultCertificateName') }}</small>
+    </div>
+
+    <div class="field"><label>Certificate Version</label>
+      <InputText v-model="model.keyVaultCertificateVersion" class="w-full" placeholder="Optional 32-character Key Vault version" />
+      <small v-if="getWarning('keyVaultCertificateVersion')" class="warning-text">{{ getWarning('keyVaultCertificateVersion') }}</small>
+    </div>
+
+    <div class="field"><label>User-Assigned Managed Identity</label>
+      <div :class="{ 'has-error': getError('keyVaultManagedIdentityId') }" class="input-wrapper">
+        <Select v-model="model.keyVaultManagedIdentityId" :options="managedIdentityOptions" option-label="label" option-value="value" class="w-full" placeholder="Select identity" showClear />
+      </div>
+      <small class="helper-text">Application Gateway uses a user-assigned managed identity to retrieve certificates from Key Vault.</small>
+      <small v-if="getError('keyVaultManagedIdentityId')" class="error-text">{{ getError('keyVaultManagedIdentityId') }}</small>
+    </div>
+
+    <div class="field"><label>Secret URI Preview</label>
+      <InputText :model-value="keyVaultCertificateUriPreview" class="w-full" readonly />
+      <small v-if="getWarning('keyVaultCertificateId')" class="warning-text">{{ getWarning('keyVaultCertificateId') }}</small>
+      <small class="helper-text">Application Gateway references the Key Vault secret URI that backs the certificate.</small>
     </div>
 
     <div class="backend-section">
@@ -103,6 +129,7 @@
 import type { AppGatewayComponent } from '~/types/network'
 import { NetworkComponentType } from '~/types/network'
 import { getValidator } from '~/lib/componentValidators'
+import { buildKeyVaultObjectUri, normalizeComponentKeyVaultReferences } from '~/lib/keyVault'
 import type { FieldError } from '~/types/validation'
 
 const props = defineProps<{ modelValue: Partial<AppGatewayComponent>; nodes: any[] }>()
@@ -113,17 +140,13 @@ const model = computed({
   set: v => emit('update:modelValue', v),
 })
 
-// Availability Zones: parse/serialize comma-separated string
 const availabilityZonesStr = computed({
   get: () => {
     const zones = model.value.availabilityZones
     return Array.isArray(zones) ? zones.join(',') : ''
   },
   set: (str: string) => {
-    const zones = str
-      .split(',')
-      .map(z => z.trim())
-      .filter(z => z.length > 0)
+    const zones = str.split(',').map(z => z.trim()).filter(z => z.length > 0)
     model.value = { ...model.value, availabilityZones: zones }
   },
 })
@@ -131,19 +154,25 @@ const availabilityZonesStr = computed({
 const subnetOptions = computed(() =>
   (props.nodes || [])
     .filter(n => n.data?.type === NetworkComponentType.SUBNET)
-    .map(n => ({ label: n.data.name, value: n.id }))
+    .map(n => ({ label: n.data.name, value: n.id })),
 )
 
 const ipOptions = computed(() =>
   (props.nodes || [])
     .filter(n => n.data?.type === NetworkComponentType.IP_ADDRESS)
-    .map(n => ({ label: n.data.name, value: n.id }))
+    .map(n => ({ label: n.data.name, value: n.id })),
 )
 
 const keyVaultOptions = computed(() =>
   (props.nodes || [])
     .filter(n => n.data?.type === NetworkComponentType.KEY_VAULT)
-    .map(n => ({ label: n.data.name, value: n.id }))
+    .map(n => ({ label: n.data.name, value: n.id })),
+)
+
+const managedIdentityOptions = computed(() =>
+  (props.nodes || [])
+    .filter(n => n.data?.type === NetworkComponentType.MANAGED_IDENTITY && n.data?.identityType === 'UserAssigned')
+    .map(n => ({ label: n.data.name, value: n.id })),
 )
 
 const BACKEND_TYPES = [
@@ -158,7 +187,7 @@ const BACKEND_TYPES = [
 const backendOptions = computed(() =>
   (props.nodes || [])
     .filter(n => BACKEND_TYPES.includes(n.data?.type))
-    .map(n => ({ label: n.data.name, value: n.id, inputId: `agw-backend-${n.id}` }))
+    .map(n => ({ label: n.data.name, value: n.id, inputId: `agw-backend-${n.id}` })),
 )
 
 const selectedBackendIds = computed({
@@ -168,6 +197,24 @@ const selectedBackendIds = computed({
   },
 })
 
+watchEffect(() => {
+  const normalized = normalizeComponentKeyVaultReferences(model.value, props.nodes || []) as Record<string, any>
+  const fields = ['keyVaultId', 'keyVaultCertificateName', 'keyVaultCertificateVersion', 'keyVaultCertificateId']
+  const current = model.value as Record<string, any>
+  const changed = fields.some(field => normalized[field] !== current[field])
+  if (changed) {
+    model.value = { ...model.value, ...Object.fromEntries(fields.map(field => [field, normalized[field]])) }
+  }
+})
+
+const keyVaultCertificateUriPreview = computed(() => {
+  if (!model.value.keyVaultId || !model.value.keyVaultCertificateName) return ''
+  const vaultNode = (props.nodes || []).find(node => node.id === model.value.keyVaultId && node.data?.type === NetworkComponentType.KEY_VAULT)
+  const vaultName = vaultNode?.data?.name
+  if (!vaultName) return ''
+  return buildKeyVaultObjectUri(vaultName, 'secrets', model.value.keyVaultCertificateName, model.value.keyVaultCertificateVersion)
+})
+
 const validationErrors = computed(() => {
   const validator = getValidator(model.value.type!)
   if (!validator) return []
@@ -175,16 +222,12 @@ const validationErrors = computed(() => {
 })
 
 function getError(fieldName: string): string | undefined {
-  const error = validationErrors.value.find(
-    (e: FieldError) => e.fieldName === fieldName && e.severity === 'error'
-  )
+  const error = validationErrors.value.find((e: FieldError) => e.fieldName === fieldName && e.severity === 'error')
   return error?.message
 }
 
 function getWarning(fieldName: string): string | undefined {
-  const warning = validationErrors.value.find(
-    (e: FieldError) => e.fieldName === fieldName && e.severity === 'warning'
-  )
+  const warning = validationErrors.value.find((e: FieldError) => e.fieldName === fieldName && e.severity === 'warning')
   return warning?.message
 }
 </script>
@@ -262,7 +305,7 @@ function getWarning(fieldName: string): string | undefined {
 
 .warning-text {
   font-size: 0.72rem;
-  color: var(--orange-600);
+  color: var(--orange-500);
 }
 
 .checkbox-list {

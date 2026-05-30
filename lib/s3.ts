@@ -2,6 +2,7 @@ import { uploadData, downloadData, list, remove } from 'aws-amplify/storage'
 import type { DiagramState, SavedSetup } from '~/types/diagram'
 import type { NetworkTest } from '~/types/test'
 import { isS3Configured } from '~/lib/aws'
+import { normalizeComponentKeyVaultReferences } from '~/lib/keyVault'
 
 function assertS3Configured(): void {
   if (!isS3Configured()) {
@@ -92,6 +93,14 @@ function normalizeSavedSetupRecord(raw: unknown, setupId: string, thumbnail?: st
     return null
   }
 
+  const normalizedDiagram: DiagramState = {
+    ...diagram,
+    nodes: diagram.nodes.map((node: any) => ({
+      ...node,
+      data: normalizeComponentKeyVaultReferences(node.data || {}, diagram.nodes),
+    })),
+  }
+
   const inlineThumbnail = typeof record.thumbnail === 'string' && record.thumbnail
     ? record.thumbnail
     : typeof record.thumbnailUrl === 'string' && record.thumbnailUrl
@@ -111,7 +120,7 @@ function normalizeSavedSetupRecord(raw: unknown, setupId: string, thumbnail?: st
     createdAt,
     updatedAt,
     thumbnail: thumbnail || inlineThumbnail,
-    diagram,
+    diagram: normalizedDiagram,
     tests,
     tags: Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === 'string') : undefined,
   }

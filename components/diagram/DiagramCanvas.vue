@@ -195,6 +195,7 @@ import StorageNode from './nodes/StorageNode.vue'
 import IdentityNode from './nodes/IdentityNode.vue'
 import InternetNode from './nodes/InternetNode.vue'
 import NetworkICNode from './nodes/NetworkICNode.vue'
+import NatGatewayNode from './nodes/NatGatewayNode.vue'
 import NetworkEdge from './edges/NetworkEdge.vue'
 import AnimationEdge from './edges/AnimationEdge.vue'
 
@@ -327,6 +328,7 @@ const nodeTypes: NodeTypesObject = {
   'identity-node': markRaw(IdentityNode) as any,
   'internet-node': markRaw(InternetNode) as any,
   'network-ic-node': markRaw(NetworkICNode) as any,
+  'nat-gateway-node': markRaw(NatGatewayNode) as any,
 }
 
 const edgeTypes: EdgeTypesObject = {
@@ -1029,6 +1031,8 @@ function loadFullSampleDiagram() {
     vnetIntegrationSubnetId: subnet2Id,
     subnetId: subnet2Id,
     enableHttps: true,
+    enableManagedIdentity: true,
+    userAssignedIdentityIds: [identity1Id],
     createdAt: now,
   } as any, { x: 1120, y: 1160 })
 
@@ -1078,7 +1082,9 @@ function loadFullSampleDiagram() {
     type: NetworkComponentType.MANAGED_DISK,
     name: 'OS Disk VM 4',
     diskSizeGb: 128,
-    sku: 'Premium_LRS',
+    diskType: 'Premium_SSD',
+    redundancy: 'LRS',
+    diskRole: 'OS',
     osType: 'Linux',
     attachedToVmId: 'sample-vm-4',
     createdAt: now,
@@ -1089,9 +1095,9 @@ function loadFullSampleDiagram() {
     type: NetworkComponentType.MANAGED_IDENTITY,
     name: 'Managed Identity API',
     identityType: 'UserAssigned',
-    clientId: 'sample-client-id',
-    principalId: 'sample-principal-id',
-    assignedToId: appService1Id,
+    clientId: '11111111-1111-4111-8111-111111111111',
+    principalId: '22222222-2222-4222-8222-222222222222',
+    isolationScope: 'None',
     createdAt: now,
   } as any, { x: 980, y: 1280 })
 

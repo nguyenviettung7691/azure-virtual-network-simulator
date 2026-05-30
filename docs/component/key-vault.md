@@ -1,86 +1,98 @@
 ## Azure Key Vault Component Specification
 
-**Overview:**
-Azure Key Vault is a secure cloud service for storing and managing secrets, encryption keys, and certificates. It provides centralized secrets management, key management, and certificate management for Azure resources and applications. The simulator models Key Vault as a first-class component, supporting core Azure features and integration with other Azure services.
+### Overview
 
-**Data Model** (`KeyVaultComponent` in `types/network.ts`):
+Azure Key Vault stores secrets, keys, and certificates behind a data-plane access model plus optional network restrictions. The simulator models a vault resource with:
 
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `id` | string | ✓ | Unique identifier |
-| `name` | string | ✓ | Vault name (1-24 chars, alphanumeric and hyphens, must start/end with alphanumeric) |
-| `type` | `KEY_VAULT` | ✓ | Enum value |
-| `sku` | 'Standard' \| 'Premium' | ✓ | Azure Key Vault SKU |
-| `tenantId` | string | — | Microsoft Entra tenant ID (required for access policies) |
-| `enableSoftDelete` | boolean | — | Enables soft delete (recommended, default true in Azure) |
-| `softDeleteRetentionDays` | number | — | Retention period (7–90 days, default 90) |
-| `enablePurgeProtection` | boolean | — | Prevents immediate deletion (recommended for production) |
-| `networkDefaultAction` | 'Allow' \| 'Deny' | — | Default network access (Allow = public, Deny = private only) |
-| `virtualNetworkRules` | string[] | — | Array of allowed subnet IDs (VNet integration) |
-| `ipRules` | string[] | — | Array of allowed public IP CIDRs |
-| `accessPolicies` | KeyVaultAccessPolicy[] | — | Array of access policies (objectId, tenantId, permissions) |
-| `tags` | object | — | Key-value metadata |
-| `createdAt` | string | ✓ | ISO 8601 timestamp |
+- legacy **access policies** as the only behavioral access-control mode in v1
+- Key Vault firewall metadata (`networkDefaultAction`, subnet rules, IP rules, trusted-services bypass)
+- integrations with App Service, Functions, Application Gateway, and managed identities
 
-**Access Policy Model** (`KeyVaultAccessPolicy`):
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `tenantId` | string | ✓ | Microsoft Entra tenant ID |
-| `objectId` | string | ✓ | Principal object ID (user, app, or managed identity) |
-| `permissions` | object | — | `{ keys?: string[], secrets?: string[], certificates?: string[] }` |
+Azure RBAC is documented as the current recommended/default model for new vaults created with API version `2026-02-01` or later, but RBAC permission evaluation is intentionally out of scope for this simulator version.
 
-**Form Behavior** (`IdentityForm.vue`, Key Vault mode):
-- Name (required, 1–24 chars, Azure naming rules)
-- SKU selector (Standard, Premium)
-- Soft Delete toggle (recommended enabled)
-- Soft Delete Retention Days (shown if soft delete enabled, 7–90)
-- Purge Protection toggle (recommended enabled)
-- Network Default Action (Allow/Deny)
-- Virtual Network Rules (checkboxes for subnets in diagram)
-- IP Rules (comma-separated CIDRs)
-- Access Policies (array editor: add/remove principal, set permissions for keys/secrets/certificates)
-- All fields validated per Azure constraints
+### Data Model (`KeyVaultComponent`)
 
-**Validation Logic** (`validateKeyVault()` in `lib/componentValidators.ts`):
-- Name: required, 1–24 chars, alphanumeric/hyphen, must start/end with alphanumeric
-- SKU: required, must be 'Standard' or 'Premium'
-- Soft Delete: if enabled, retention days required (7–90)
-- Purge Protection: optional, recommended enabled
-- Network Default Action: must be 'Allow' or 'Deny'
-- Virtual Network Rules: if set, all referenced subnets must exist
-- IP Rules: if set, must be valid IPv4 CIDR blocks
-- Access Policies: each must have tenantId, objectId, at least one permission
-- Warn if no access policies defined (vault will be inaccessible)
-
-**Integration with Other Components:**
-- **App Gateway:** `keyVaultCertificateId` references Key Vault for TLS certificate storage/rotation
-- **App Service / Functions:** `keyVaultSecretUri` references Key Vault secret for app settings/connection strings
-- **Managed Identity:** Used as principal in access policies for secure access
-- **Subnet/NetworkIC:** Service endpoints can include Microsoft.KeyVault for private access
-- Validation ensures referenced Key Vaults exist and are of correct type
-
-**Azure Alignment & Constraints:**
-| Constraint | Azure Requirement | Implementation |
+| Field | Type | Notes |
 |---|---|---|
-| **Name** | 1–24 chars, alphanumeric/hyphen, start/end with alphanumeric | ✓ Enforced |
-| **SKU** | Standard or Premium | ✓ Enforced |
-| **Soft Delete** | Enabled by default, 7–90 days retention | ✓ Enforced, default 90 |
-| **Purge Protection** | Optional, recommended enabled | ✓ Supported |
-| **Network Rules** | Allow or Deny, VNet and IP rules | ✓ Supported |
-| **Access Policies** | Required for access, must specify principal and permissions | ✓ Supported |
-| **Private Endpoint** | Not modeled in v1 (future enhancement) | ℹ️ Not yet modeled |
-| **RBAC** | Azure RBAC supported in Azure, not modeled in v1 | ℹ️ Not yet modeled |
+| `name` | string | Required. Vault name must be `3-24` chars, alphanumeric or `-`, start/end alphanumeric, no consecutive `--`. |
+| `sku` | `'Standard' \| 'Premium'` | Required. |
+| `tenantId` | string | Optional metadata, but strongly recommended for access-policy authoring. |
+| `enableSoftDelete` | boolean | Defaults to `true` for new nodes. |
+| `softDeleteRetentionDays` | number | Required when soft delete is enabled. Range `7-90`. Default `90`. |
+| `enablePurgeProtection` | boolean | Optional. Allowed only when soft delete is enabled. |
+| `networkDefaultAction` | `'Allow' \| 'Deny'` | `Allow` keeps the public endpoint open. `Deny` turns on the firewall and requires selected networks, IP rules, or trusted-service bypass. |
+| `allowTrustedMicrosoftServices` | boolean | Optional metadata flag for trusted-service bypass. |
+| `virtualNetworkRules` | string[] | Optional subnet IDs. Max `200`. |
+| `ipRules` | string[] | Optional public IPv4 addresses or CIDRs. Max `1000`. Private RFC1918 ranges are rejected. |
+| `accessPolicies` | `KeyVaultAccessPolicy[]` | Optional array, max `16`. Behavioral access control is based on these legacy policies in v1. |
 
-**Key Invariants:**
-- Vault name must follow Azure naming rules
-- Soft delete and purge protection recommended for production
-- At least one access policy required for usability
-- Network rules can restrict access to selected subnets/IPs
-- Integration with App Gateway, App Service, Functions, Managed Identity
-- Private endpoint and RBAC are future enhancements
+### Access Policy Model (`KeyVaultAccessPolicy`)
 
-**Future Enhancements (Out of Scope):**
-- Per-object (key/secret/cert) management
-- Private endpoint support
-- Azure RBAC (role-based access control)
-- Managed HSM (separate resource type)
+| Field | Type | Notes |
+|---|---|---|
+| `tenantId` | string | Required GUID. |
+| `objectId` | string | Required GUID. Must be unique per vault. |
+| `permissions.keys` | string[] | Optional fixed permission set from Azure Key Vault key permissions. |
+| `permissions.secrets` | string[] | Optional fixed permission set from Azure Key Vault secret permissions. |
+| `permissions.certificates` | string[] | Optional fixed permission set from Azure Key Vault certificate permissions. |
+
+Each access policy must grant at least one key, secret, or certificate permission.
+
+### Form Behavior (`IdentityForm.vue`)
+
+- Name
+- Tenant ID
+- SKU
+- Soft Delete
+- Soft Delete Retention Days
+- Purge Protection
+- Network Default Action
+- Allow Trusted Microsoft Services
+- Virtual Network Rules
+- IP Rules
+- Legacy Access Policies editor
+
+The form explicitly describes Azure RBAC as recommended/current for new vaults, while keeping the simulator’s behavioral scope on legacy access policies.
+
+### Validation (`validateKeyVault`)
+
+- Error on invalid vault name, invalid SKU, invalid `networkDefaultAction`, invalid soft-delete retention, or purge protection without soft delete
+- Error when virtual network rules exceed `200`
+- Error when IP rules exceed `1000`
+- Error when an IP rule is not public IPv4 / IPv4 CIDR, or uses RFC1918 space
+- Error when an access policy is malformed, duplicated by `objectId`, exceeds `16`, or grants no permissions
+- Warning when:
+  - `tenantId` is missing or malformed
+  - no access policies are configured
+  - firewall is enabled with no subnet rules, IP rules, or trusted-services bypass
+  - a selected subnet lacks the `Microsoft.KeyVault` service endpoint
+
+### Integration Model
+
+- **App Service / Functions**
+  - Authoritative fields: `keyVaultId`, `keyVaultSecretName`, `keyVaultSecretVersion`
+  - Legacy field: `keyVaultSecretUri`
+  - The form shows a resolved secret URI preview and validators warn when managed identity or plausible network access metadata are missing.
+- **Application Gateway**
+  - Authoritative fields: `keyVaultId`, `keyVaultCertificateName`, `keyVaultCertificateVersion`, `keyVaultManagedIdentityId`
+  - Legacy field: `keyVaultCertificateId`
+  - The form shows a resolved secret URI preview and validators require a user-assigned managed identity for Key Vault certificate integration.
+- **Managed Identity**
+  - Managed identity metadata can be referenced as Key Vault access-policy principals or as Application Gateway Key Vault fetch identities.
+- **Subnet**
+  - Service endpoints may include `Microsoft.KeyVault`; subnet-based Key Vault firewall rules warn when that endpoint is missing.
+
+### Azure Alignment
+
+- Name rules follow Azure Key Vault vault-name constraints (`3-24`, alphanumeric/hyphen, no consecutive `--`)
+- Soft delete retention is enforced at `7-90`
+- Firewall rules distinguish public endpoint open vs selected networks, instead of equating `Deny` with “private only”
+- Access-policy behavior is preserved for simulator compatibility
+- Azure RBAC, private endpoints, and effective permission computation remain out of scope
+
+### Out of Scope
+
+- Azure RBAC role assignment modeling
+- Private-endpoint-only Key Vault access flow
+- Per-secret / per-key / per-certificate lifecycle operations
+- Managed HSM

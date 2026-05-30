@@ -85,7 +85,7 @@ The simulator supports the following 27 user-managed Azure component types, plus
 | Category | Components |
 |---|---|
 | Networking foundation | Virtual Network (VNet), Subnet, VNet Peering |
-| Connectivity | VPN Gateway, Network Interface Card (NIC) |
+| Connectivity | VPN Gateway, Network Interface Card (NIC), NAT Gateway |
 | Security | NSG, ASG, Azure Firewall, Bastion |
 | Routing | UDR (User-Defined Routes), NVA (Network Virtual Appliance) |
 | Load balancing | Application Gateway, Load Balancer |
@@ -93,11 +93,8 @@ The simulator supports the following 27 user-managed Azure component types, plus
 | Compute | VM, VMSS, AKS, App Service, Azure Functions |
 | Storage | Storage Account (StorageV2-first), Blob Storage, Managed Disk |
 | Identity & secrets | Managed Identity, Key Vault |
-| Identity & secrets | Managed Identity, Key Vault (secure secrets, keys, certificates; supports access policies, network rules, soft delete, integration with App Service, Functions, App Gateway) |
 | Endpoints | Service Endpoint, Private Endpoint |
 | System-managed canvas entity | Public Internet |
-
-Azure Functions components are modeled with a Functions-native hosting option contract (Flex Consumption, Premium, Dedicated, Container Apps, Consumption legacy) with legacy field compatibility for previously saved diagrams.
 
 ---
 

@@ -44,8 +44,10 @@
     <template v-if="isServiceEndpoint">
       <div class="field"><label>Service</label>
         <div :class="{ 'has-error': getError('service') }" class="input-wrapper">
-          <Select v-model="model.service" :options="serviceOptions" class="w-full" />
+          <Select v-model="model.service" :options="serviceOptions" editable filter class="w-full" />
         </div>
+        <small class="helper-text">Service endpoints are enabled per service and per subnet. Known services are suggested, and custom values are allowed for forward compatibility.</small>
+        <small class="helper-text">`Microsoft.Sql` should use same-region subnet/service resources. Service Endpoint nodes are mirrored to the subnet Service Endpoints list.</small>
         <small v-if="getError('service')" class="error-text">{{ getError('service') }}</small>
       </div>
       <div class="field"><label>Subnet</label>
@@ -58,25 +60,49 @@
 
     <!-- Private Endpoint-specific fields -->
     <template v-if="isPrivateEndpoint">
-      <div class="field"><label>Connection Name</label><InputText v-model="model.connectionName" class="w-full" placeholder="my-pe-connection" /></div>
-      <div class="field"><label>Private IP Address</label><InputText v-model="model.privateIpAddress" class="w-full" placeholder="10.0.1.5" /></div>
-      <div class="field"><label>Subnet</label>
+      <div class="field"><label>Connection Name *</label>
+        <div :class="{ 'has-error': getError('connectionName') }" class="input-wrapper">
+          <InputText v-model="model.connectionName" class="w-full" placeholder="my-pe-connection" />
+        </div>
+        <small v-if="getError('connectionName')" class="error-text">{{ getError('connectionName') }}</small>
+        <small v-else-if="getWarning('connectionName')" class="warning-text">{{ getWarning('connectionName') }}</small>
+      </div>
+      <div class="field"><label>Private IP Address</label>
+        <div :class="{ 'has-error': getError('privateIpAddress') }" class="input-wrapper">
+          <InputText v-model="model.privateIpAddress" class="w-full" placeholder="10.0.1.5" />
+        </div>
+        <small v-if="getError('privateIpAddress')" class="error-text">{{ getError('privateIpAddress') }}</small>
+        <small v-else-if="getWarning('privateIpAddress')" class="warning-text">{{ getWarning('privateIpAddress') }}</small>
+      </div>
+      <div class="field"><label>Subnet *</label>
         <div :class="{ 'has-error': getError('subnetId') }" class="input-wrapper">
           <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
         </div>
         <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
+        <small v-else-if="getWarning('subnetId')" class="warning-text">{{ getWarning('subnetId') }}</small>
       </div>
-      <div class="field"><label>Target Resource (Private Link Service)</label>
-        <Select v-model="model.privateLinkServiceId" :options="privateLinkOptions" option-label="label" option-value="value" class="w-full" placeholder="Select target resource" showClear />
+      <div class="field"><label>Target Resource (Private Link Service) *</label>
+        <div :class="{ 'has-error': getError('privateLinkServiceId') }" class="input-wrapper">
+          <Select v-model="model.privateLinkServiceId" :options="privateLinkOptions" option-label="label" option-value="value" class="w-full" placeholder="Select target resource" showClear />
+        </div>
+        <small v-if="getError('privateLinkServiceId')" class="error-text">{{ getError('privateLinkServiceId') }}</small>
+        <small v-else-if="getWarning('privateLinkServiceId')" class="warning-text">{{ getWarning('privateLinkServiceId') }}</small>
       </div>
-      <div class="field"><label>Sub-resource Group IDs (comma-separated)</label>
-        <InputText v-model="groupIdsStr" class="w-full" placeholder="blob, vault, sqlServer" />
+      <div class="field"><label>Sub-resource Group IDs (comma-separated) *</label>
+        <div :class="{ 'has-error': getError('groupIds') }" class="input-wrapper">
+          <InputText v-model="groupIdsStr" class="w-full" placeholder="blob, file, vault" />
+        </div>
+        <small class="helper-text">Group IDs are Azure subresources, for example `blob`, `file`, `vault`, or `sites`.</small>
+        <small v-if="getError('groupIds')" class="error-text">{{ getError('groupIds') }}</small>
+        <small v-else-if="getWarning('groupIds')" class="warning-text">{{ getWarning('groupIds') }}</small>
       </div>
       <div class="field"><label>Private DNS Zone Group</label>
         <div :class="{ 'has-error': getError('dnsZoneGroupId') }" class="input-wrapper">
           <Select v-model="model.dnsZoneGroupId" :options="dnsZoneOptions" option-label="label" option-value="value" class="w-full" placeholder="None" showClear />
         </div>
+        <small class="helper-text">Use a private DNS zone that matches the target service private-link DNS convention.</small>
         <small v-if="getError('dnsZoneGroupId')" class="error-text">{{ getError('dnsZoneGroupId') }}</small>
+        <small v-else-if="getWarning('dnsZoneGroupId')" class="warning-text">{{ getWarning('dnsZoneGroupId') }}</small>
       </div>
     </template>
   </div>
@@ -86,6 +112,7 @@
 import { NetworkComponentType } from '~/types/network'
 
 import { getValidator } from '~/lib/componentValidators'
+import { KNOWN_SERVICE_ENDPOINT_SERVICES } from '~/lib/serviceEndpoints'
 import type { FieldError } from '~/types/validation'
 
 const props = defineProps<{ modelValue: any; nodes: any[] }>()
@@ -99,7 +126,11 @@ const validationErrors = computed(() => {
 })
 
 function getError(fieldName: string): string | undefined {
-  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName && e.severity === 'error')?.message
+}
+
+function getWarning(fieldName: string): string | undefined {
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName && e.severity === 'warning')?.message
 }
 
 const subnetOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.SUBNET).map(n => ({ label: n.data.name, value: n.id })))
@@ -127,7 +158,7 @@ const nicTypes = [
   { label: 'Service Endpoint', value: NetworkComponentType.SERVICE_ENDPOINT },
   { label: 'Private Endpoint', value: NetworkComponentType.PRIVATE_ENDPOINT },
 ]
-const serviceOptions = ['Microsoft.Storage','Microsoft.KeyVault','Microsoft.Sql','Microsoft.ServiceBus','Microsoft.EventHub','Microsoft.CosmosDB','Microsoft.ContainerRegistry','Microsoft.Web']
+const serviceOptions = [...KNOWN_SERVICE_ENDPOINT_SERVICES]
 
 const isNIC = computed(() => model.value.type === NetworkComponentType.NETWORK_IC)
 const isServiceEndpoint = computed(() => model.value.type === NetworkComponentType.SERVICE_ENDPOINT)

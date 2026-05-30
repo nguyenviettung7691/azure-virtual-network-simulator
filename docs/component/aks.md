@@ -49,6 +49,7 @@ AKS clusters have two categories of node pools:
 | `networkPolicyProvider` | 'azure' \| 'calico' | — | If `enableNetworkPolicy=true`, provider for network policies (Azure NPM default, Calico for complex rules) |
 | `apiServerAuthorizedIpRanges` | string[] | — | CIDR blocks (e.g., ['203.0.113.0/24']) allowed to access public API server; empty = unrestricted |
 | `enableManagedIdentity` | boolean | — | Default: true (recommended). Uses managed identity for cluster-to-Azure authentication (replaces service principal) |
+| `userAssignedIdentityIds` | string[] | — | User-assigned managed identity node references; can be used with system-assigned identity |
 | **Networking** | | | |
 | `outboundType` | 'loadBalancer' \| 'userDefinedRouting' \| 'managedNAT' | — | Default: 'loadBalancer'. How cluster egress is routed: LB NAT pool, UDR + NVA, or managed NAT gateway |
 | `loadBalancerSku` | 'Standard' \| 'Basic' | — | Default: 'Standard'. **Standard**: Zone-redundant, public IP required. **Basic**: Single zone (deprecated; avoid) |
@@ -80,6 +81,8 @@ AKS clusters have two categories of node pools:
 | `apiServerAccess='Public'` | Warning | Public API server increases attack surface; private recommended |
 | `enableNetworkPolicy=false` | Warning | Network policies recommended for security microsegmentation |
 | `enableMonitoring=false` | Warning | Monitoring recommended for observability and troubleshooting |
+| `userAssignedIdentityIds[]` references a non-managed-identity or system-assigned identity node | Error | User-assigned identity references must point to standalone user-assigned identity nodes |
+| Referenced user-assigned identity is missing | Warning | Surfaces stale diagram references without blocking legacy imports |
 | `pricingTier='Free'` | Warning | Free tier no SLA; recommend Standard for production |
 | `kubernetesVersion` not latest GA | Warning | Encourage upgrade for security patches and features |
 | `networkPlugin='kubenet'` | Warning | Kubenet is basic; Azure CNI recommended for production |
@@ -95,7 +98,8 @@ AKS clusters have two categories of node pools:
 - **Availability & Resilience**: Availability zones input (comma-separated, parsed to array)
 - **Security & Policies**: RBAC toggle (enabled), Private Cluster toggle, Network Policies toggle + provider dropdown, API Server IP ranges
 - **OS & Image**: OS SKU selector, OS version input
-- **Monitoring & Operations**: Monitoring toggle + conditional Log Analytics workspace ID field, Managed Identity toggle
+- **Monitoring & Operations**: Monitoring toggle + conditional Log Analytics workspace ID field
+- **Identity**: System-assigned managed identity toggle plus user-assigned identity MultiSelect filtered to `UserAssigned` managed identity nodes
 - **Advanced (collapsible)**: Outbound type, Load Balancer SKU, DNS Prefix, Service/DNS Service/Docker Bridge CIDR
 
 **Azure Alignment:**
@@ -111,7 +115,7 @@ AKS clusters have two categories of node pools:
 - ✓ Outbound traffic type (loadBalancer, UDR, managedNAT)
 - ✓ OS support (Ubuntu, AzureLinux, Windows2022)
 - ✓ Container Insights monitoring integration
-- ✓ Managed Identity (RBAC-based workload authentication)
+- ✓ Managed Identity (system-assigned and user-assigned identities can be used together)
 
 **Key Integration Points:**
 

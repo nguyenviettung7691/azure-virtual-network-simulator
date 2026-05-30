@@ -38,6 +38,7 @@ export const AZURE_COMPONENT_ICON_NAMES: Record<NetworkComponentType, string> = 
   [NetworkComponentType.FIREWALL]: 'azure-toolbar:10084-icon-service-firewalls',
   [NetworkComponentType.BASTION]: 'azure-toolbar:02422-icon-service-bastions',
   [NetworkComponentType.INTERNET]: 'azure-toolbar:globe',
+  [NetworkComponentType.NAT_GATEWAY]: 'azure-toolbar:10063-icon-service-virtual-network-gateways',
 }
 
 export const AZURE_TOPBAR_COMPONENT_ICONS = AZURE_COMPONENT_ICON_NAMES

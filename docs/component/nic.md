@@ -49,11 +49,12 @@ A Network Interface Card (NIC) is the primary mechanism by which Azure VMs and o
      - Required, non-empty
      - Suggested pattern: start with letter, alphanumeric + hyphens (Azure naming convention)
 
-2. **Component Type** (read-only dropdown)
+2. **Component Type** (dropdown selector)
    - Options: Network Interface | Service Endpoint | Private Endpoint
    - Default: Network Interface
    - **Behavior:** Multiplexed form shows different field sets based on type selection
    - **Constraint:** Changing type between NIC/Service Endpoint/Private Endpoint triggers form reflow
+   - **Service Endpoint mode:** Service field is an editable suggestion list (known services + custom values), subnet is required, and values are synchronized with `SubnetComponent.serviceEndpoints[]`.
 
 3. **Subnet** (required dropdown, NIC-only)
    - Options: Dynamically populated from all SUBNET nodes in diagram
@@ -189,7 +190,39 @@ function validateNetworkIC(data: any, nodes: any[]): ValidationResult {
 
   // Private Endpoint validation
   if (data.type === NetworkComponentType.PRIVATE_ENDPOINT) {
-    // ... existing Private Endpoint logic
+    // Required: connectionName, subnetId, privateLinkServiceId, groupIds
+    if (!data.connectionName?.trim()) addError(errors, 'connectionName', 'Connection name is required')
+    if (!data.subnetId) addError(errors, 'subnetId', 'Subnet is required')
+    if (!data.privateLinkServiceId) addError(errors, 'privateLinkServiceId', 'Target private-link resource is required')
+    if (!Array.isArray(data.groupIds) || data.groupIds.length === 0) {
+      addError(errors, 'groupIds', 'At least one sub-resource group ID is required')
+    }
+
+    // Subnet constraints
+    const subnet = nodes.find(n => n.id === data.subnetId)?.data
+    if (data.subnetId && !subnet) addError(errors, 'subnetId', 'Referenced subnet does not exist')
+    if (subnet?.type !== NetworkComponentType.SUBNET) addError(errors, 'subnetId', 'Referenced subnet must be a Subnet component')
+
+    // Optional static private IP checks
+    if (data.privateIpAddress && subnet?.addressPrefix) {
+      if (!isValidIpAddress(data.privateIpAddress)) {
+        addError(errors, 'privateIpAddress', 'Private IP must be a valid IPv4 address')
+      } else if (!ipFitsInCidr(data.privateIpAddress, subnet.addressPrefix)) {
+        addError(errors, 'privateIpAddress', 'Private IP must fit selected subnet CIDR')
+      } else if (isReservedAddress(data.privateIpAddress, subnet.addressPrefix)) {
+        addError(errors, 'privateIpAddress', 'Private IP is a reserved subnet address', 'warning')
+      }
+    }
+
+    // Optional private DNS zone checks
+    const dnsZone = nodes.find(n => n.id === data.dnsZoneGroupId)?.data
+    if (data.dnsZoneGroupId && !dnsZone) addError(errors, 'dnsZoneGroupId', 'Referenced DNS zone does not exist', 'warning')
+    if (dnsZone && dnsZone.type !== NetworkComponentType.DNS_ZONE) {
+      addError(errors, 'dnsZoneGroupId', 'DNS zone group should reference a DNS Zone', 'warning')
+    }
+    if (dnsZone?.type === NetworkComponentType.DNS_ZONE && dnsZone.zoneType !== 'Private') {
+      addError(errors, 'dnsZoneGroupId', 'DNS zone group should reference a Private DNS zone', 'warning')
+    }
   }
 
   return { isValid: errors.filter(e => e.severity === 'error').length === 0, errors }
@@ -228,7 +261,7 @@ When creating a new NIC via the UI, the form initializes with:
 - **NSG (Network Security Group):** NIC-level NSG (if `nsgId` set) provides inbound/outbound filtering that overrides subnet-level NSG for this NIC specifically. Both subnet and NIC NSGs apply (most restrictive rule wins).
 - **ASG (Application Security Group):** NICs can belong to multiple ASGs within same VNet for rule-based security group management. ASGs simplify large-scale rule creation (e.g., "all web servers in ASG-web").
 - **VNet Peering:** NICs in peered VNets can communicate directly if `allowVirtualNetworkAccess=true` on peering (no additional configuration needed).
-- **Service Endpoints / Private Endpoints:** NICs can access Azure services through Service Endpoints (subnet-level) or Private Endpoints (private link to service).
+- **Service Endpoints / Private Endpoints:** NICs can access Azure services through subnet-level Service Endpoints or private-link-based Private Endpoints. Service Endpoint nodes mirror subnet endpoint configuration and are not a separate authority.
 
 **Auto-Layout Positioning:**
 

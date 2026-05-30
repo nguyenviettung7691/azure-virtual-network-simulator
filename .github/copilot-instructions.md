@@ -173,7 +173,7 @@ When a task touches AWS or deployment behavior, consult the matching `/docs` fil
 **Azure Alignment:**
 - ✓ Name, SKU, soft delete, purge protection, network rules, access policies enforced per Azure
 - ✓ Integration with App Gateway, App Service, Functions, Managed Identity
-- ✓ Private endpoint and RBAC not yet modeled (future enhancement)
+- ✓ Private Endpoint support: modeled as a first-class component with subnet, target resource, group IDs, and DNS zone group integration. RBAC not yet modeled (future enhancement)
 
 **Do NOT:**
 - Allow names outside Azure rules (1–24 chars, alphanumeric/hyphen, start/end with alphanumeric)
@@ -181,11 +181,11 @@ When a task touches AWS or deployment behavior, consult the matching `/docs` fil
 - Allow soft delete retention outside 7–90 days
 - Allow missing access policies (vault will be unusable)
 - Allow invalid subnet or IP references in network rules
-- Model private endpoint or RBAC (future enhancement)
+- Model RBAC (future enhancement)
 
 **Future Enhancements (Out of Scope):**
 - Per-object (key/secret/cert) management
-- Private endpoint support
+- Private Endpoint support
 - Azure RBAC (role-based access control)
 - Managed HSM (separate resource type)
 
@@ -392,7 +392,7 @@ When a task touches AWS or deployment behavior, consult the matching `/docs` fil
 - ✓ VNet link max 1,000 per private zone
 - ✓ Record set limits (10,000 public, 25,000 private)
 - ✓ Zone type config-driven layer classification (Public=public-facing, Private=private)
-- ✓ Integration with Private Endpoint DNS Zone Groups (filters to private zones)
+- ✓ Integration with Private Endpoint DNS Zone Groups (filters to private zones; see Private Endpoint)
 - ✓ Integration with DNS tests (zone selection for name resolution tests)
 
 **Key Integration Points:**
@@ -402,7 +402,7 @@ When a task touches AWS or deployment behavior, consult the matching `/docs` fil
   - Layer drives edge visibility and rendering behavior
 - Node rendering: Mapped to `dns-zone-node` in `getNodeTypeForComponent()` ([lib/export/nodeTypeMap.ts](lib/export/nodeTypeMap.ts))
   - Node displays zone name + zone type (e.g., "contoso.com (Public)")
-- Private Endpoint DNS Zone Group selector: Filters DNS zones to `zoneType === 'Private'` in [components/forms/NetworkICForm.vue](components/forms/NetworkICForm.vue#L70-L120)
+- Private Endpoint DNS Zone Group selector: Filters DNS zones to `zoneType === 'Private'` in [components/forms/NetworkICForm.vue](../../components/forms/NetworkICForm.vue#L70-L120) (see Private Endpoint)
 - DNS test form: Zone selector in [components/panels/TestFormModal.vue](components/panels/TestFormModal.vue#L30-L90) allows dns-type tests to reference zones
 
 **Do NOT:**

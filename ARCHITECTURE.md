@@ -62,30 +62,57 @@ This section maps the condensed features in README.md to their detailed architec
 - **Trigger:** `onClick` event on any user-managed node (requires canvas state `Unlocked`).
 - **Target:** Opens the corresponding property edit form within the Right Side Panel.
 - **Validation:** Forms must validate Azure-specific rules (e.g., CIDR overlaps, naming conventions). Form states are dynamically mapped to the specific `NetworkComponentType` clicked.
+- **Service Endpoint model contract:** `SubnetComponent.serviceEndpoints[]` is authoritative; `SERVICE_ENDPOINT` nodes are synchronized mirrors for diagram UX and compatibility.
 
 Each component has a dedicated specification document under [`docs/component/`](docs/component/):
 
 ### 2.1 [Azure Managed Identity Component (System-Assigned & User-Assigned)](docs/component/identity.md)
+
 ### 2.2 [Azure Public IP Address Component Specification](docs/component/ip-address.md)
+
 ### 2.3 [Azure Subnet Component](docs/component/subnet.md)
+
 ### 2.4 [Azure Application Security Group (ASG) Component Specification](docs/component/asg.md)
+
 ### 2.5 [Azure Network Security Group (NSG) Component Specification](docs/component/nsg.md)
+
 ### 2.6 [Azure Firewall Component Specification](docs/component/firewall.md)
+
 ### 2.7 [Azure Bastion Component Specification](docs/component/bastion.md)
+
 ### 2.8 [Azure DNS Zone Component Specification](docs/component/dns-zone.md)
+
 ### 2.9 [Azure Network Virtual Appliance (NVA) Component Specification](docs/component/nva.md)
+
 ### 2.10 [Azure Load Balancer (Standard & Gateway SKUs) Component Specification](docs/component/load-balancer.md)
+
 ### 2.11 [Azure User-Defined Routes (UDR) Component Specification](docs/component/udr.md)
+
 ### 2.12 [Azure Virtual Machine (VM) Component Specification](docs/component/vm.md)
+
 ### 2.13 [Azure Virtual Machine Scale Sets (VMSS) Component Specification](docs/component/vmss.md)
+
 ### 2.14 [Azure Network Interface Card (NIC) Component Specification](docs/component/nic.md)
+
 ### 2.15 [Azure Kubernetes Service (AKS) Component Specification](docs/component/aks.md)
+
 ### 2.16 [Azure App Service Component Specification](docs/component/app-service.md)
+
 ### 2.17 [Azure Storage Account & Blob Storage Component Specification](docs/component/storage-account.md)
+
 ### 2.18 [Azure Managed Disk Component Specification](docs/component/managed-disk.md)
+
 ### 2.19 [Azure Virtual Network Peering (VNet Peering) Component Specification](docs/component/vnet-peering.md)
+
 ### 2.20 [Azure VPN Gateway Component Specification](docs/component/vpn-gateway.md)
+
 ### 2.21 [Azure Key Vault Component Specification](docs/component/key-vault.md)
+
+### 2.22 [Azure NAT Gateway Component Specification](docs/component/nat-gateway.md)
+
+### 2.23 [Azure Service Endpoint Component Specification](docs/component/service-endpoint.md)
+
+### 2.24 [Azure Private Endpoint Component Specification](docs/component/private-endpoint.md)
 
 ---
 
@@ -200,8 +227,8 @@ A reactive dashboard reflecting the live diagram state.
     - **Classification rules:**
       - **Always Public-Facing:** VPN Gateway, Bastion, Public IP Address, Public DNS Zone, Public Load Balancer, Public App Gateway, public App Service, public Azure Functions
       - **Always VNet:** VNet, Subnet, VNet Peering, NIC, NSG, ASG, Firewall, UDR, NVA, VM, VMSS, AKS, Internal Load Balancer, Internal App Gateway, Service Endpoint, Private Endpoint
-      - **Always Private:** Storage Account (GPv2 recommended), Blob Storage, Managed Disk, Key Vault, Managed Identity, Private DNS Zone
-      - **Config-driven:** App Gateway (frontendType: 'Public' | 'Internal'), Load Balancer (loadBalancerType: 'Public' | 'Internal'), App Service/Functions (VNet Integration or Private Endpoint presence), AKS (node pools in VNet, API server can be public/private)
+      - **Always Private:** Storage Account (GPv2 recommended), Blob Storage, Managed Disk, Managed Identity, Private DNS Zone
+      - **Config-driven:** App Gateway (frontendType: 'Public' | 'Internal'), Load Balancer (loadBalancerType: 'Public' | 'Internal'), App Service/Functions (VNet Integration or Private Endpoint presence), AKS (node pools in VNet, API server can be public/private), Key Vault (firewall/public endpoint configuration)
     - **Edge routing by layer relationship:**
       - Higher → lower layer: source exits `Bottom`, target enters `Top` (e.g., Public Load Balancer → Private backend NIC)
       - Same layer or ambiguous layer classification: source exits `Right`, target enters `Left` (e.g., NSG → Subnet within VNet layer)
@@ -262,7 +289,7 @@ A reactive dashboard reflecting the live diagram state.
   - Internal Application Gateway east-west path (backend count assertion).
   - Public DNS Zone resolution (`api.example.com`).
   - AKS Cluster private API server access (VM 4 → port 443).
-  - App Service API to Key Vault HTTPS connectivity.
+  - App Service managed-identity-backed Key Vault secret reference connectivity.
   - VMSS inbound internet reachability (Internet → port 80).
   - Azure Functions to Storage Account HTTPS path.
   - VPN Gateway subnet access from workload VM (VM 3 → port 443).

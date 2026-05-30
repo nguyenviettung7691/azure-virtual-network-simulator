@@ -23,6 +23,8 @@ export interface VmssComponent extends NetworkComponent {
   availabilityZones?: string[]                   // Optional: Zone distribution (1, 2, 3 for resilience)
   scaleInPolicy?: 'FIFO' | 'OldestVM' | 'NewestVM' // Optional: Order for scale-in (Flexible only)
   overprovision?: boolean                        // Optional: Overprovision during deployment (Uniform only)
+  enableManagedIdentity?: boolean                // Optional: System-assigned managed identity
+  userAssignedIdentityIds?: string[]             // Optional: User-assigned managed identity references
 }
 ```
 
@@ -108,6 +110,11 @@ Azure VMSS supports two fundamentally different orchestration modes, each with d
    - Dropdown from SUBNET nodes in diagram
    - Error if missing or referenced subnet doesn't exist
 
+12. **Identity**:
+   - System-assigned managed identity toggle
+   - User-assigned managed identity MultiSelect filtered to `UserAssigned` managed identity nodes
+   - Both identity modes can be enabled together
+
 **Validation Rules** (`componentValidators.ts` - validateCompute VMSS section):
 
 | Constraint | Validation | Severity | UI Behavior |
@@ -123,6 +130,8 @@ Azure VMSS supports two fundamentally different orchestration modes, each with d
 | **Autoscale Min/Max** | If enabled: min >= 0, max <= 1000, min <= max | Error | InputNumber constraints; error if violated |
 | **Autoscale Ineffective** | If enabled and min == max | Warning | Warns user scaling will not trigger |
 | **Overprovision (Uniform)** | Default true; advise implications | Warning | Explains deployment reliability vs cost/resource waste tradeoff |
+| **User-Assigned Identity Type** | References must target `MANAGED_IDENTITY` nodes with `identityType='UserAssigned'` | Error | Blocks assigning system-assigned identity documentation nodes |
+| **Missing User-Assigned Identity** | Referenced identity ID is not present in the diagram | Warning | Preserves legacy setups while surfacing stale references |
 
 **Azure Alignment:**
 
@@ -135,6 +144,7 @@ Azure VMSS supports two fundamentally different orchestration modes, each with d
 - ✓ Availability zones support across both modes; 99.99% SLA with 2+ zones
 - ✓ Scale-in policy selection (Flexible mode feature)
 - ✓ Overprovision modeling (Uniform mode feature)
+- ✓ Managed identity support: system-assigned and user-assigned identities can be used together
 - ✓ Instance protection and health probe references (documented as future enhancements)
 - ✓ Spot instance mixing (documented as v2 enhancement; Flexible supports both)
 

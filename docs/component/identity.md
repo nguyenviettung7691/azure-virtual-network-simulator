@@ -1,57 +1,65 @@
 ## Azure Managed Identity Component (System-Assigned & User-Assigned)
 
 ### Overview
-Azure Managed Identities provide secure, passwordless authentication for Azure resources to access other Azure services. There are two types:
 
-- **System-Assigned:** Created with a parent resource (e.g., VM, App Service), deleted with the resource, can only be assigned to one resource, lifecycle is coupled.
-- **User-Assigned:** Standalone Azure resource, reusable, assignable to multiple resources, must be deleted manually, lifecycle is independent.
+Azure Managed Identities provide passwordless authentication for Azure resources. The simulator models both Azure identity types, but they have different ownership semantics:
 
-#### Data Model (`ManagedIdentityComponent`)
+- **User-assigned:** A standalone Azure resource that can be assigned to multiple supported resources. This is the default for new `MANAGED_IDENTITY` nodes.
+- **System-assigned:** An identity attached to exactly one supported resource. Its lifecycle is tied to that resource. In this simulator, a `SystemAssigned` managed identity node is an optional documentation/attachment record; the source resource itself uses `enableManagedIdentity`.
+
+RBAC role assignments, Azure role definitions, and target-scope permissions are intentionally out of scope for v1.
+
+### Data Model (`ManagedIdentityComponent`)
+
 | Field | Type | Description |
 |---|---|---|
-| `identityType` | 'SystemAssigned' \| 'UserAssigned' | Type of managed identity |
-| `clientId` | string | Azure application (client) ID (auto-generated) |
-| `principalId` | string | Service principal object ID in Microsoft Entra ID (auto-generated) |
-| `tenantId` | string | Microsoft Entra tenant ID (required for cross-tenant RBAC) |
-| `resourceId` | string | Azure resource ID (user-assigned only) |
-| `isolationScope` | 'Regional' \| 'None' | User-assigned only; restricts assignment to resources in the same region |
-| `assignedToId` | string | System-assigned only; parent resource (e.g., VM, App Service) |
+| `identityType` | `'SystemAssigned' \| 'UserAssigned'` | Required identity kind. |
+| `clientId` | string | Optional Azure application/client ID. Azure generates this value. |
+| `principalId` | string | Optional service principal object ID in Microsoft Entra ID. Azure generates this value. |
+| `tenantId` | string | Optional Microsoft Entra tenant ID. |
+| `resourceId` | string | Optional Azure resource ID for user-assigned identities. |
+| `isolationScope` | `'Regional' \| 'None'` | Optional user-assigned identity assignment scope metadata. Defaults to `None` for new nodes. |
+| `assignedToId` | string | Optional system-assigned documentation link to a VM, VMSS, AKS, App Service, or Functions resource. |
 
-#### Form Behavior (`IdentityForm.vue`)
-- Identity Type selector with help text explaining lifecycle and assignment
-- Client ID, Principal ID, Tenant ID fields (with help text)
-- Resource ID and Isolation Scope (user-assigned only)
-- Assigned To (system-assigned only)
-- All fields are informational except assignment fields
+Identity-capable source resources use:
 
-#### Validation (`validateIdentity`)
-- System-assigned: Warn if not attached to a parent resource
-- User-assigned: Warn if not assigned to any resource (informational)
-- Isolation scope: Warn if not 'Regional' or 'None'
-- No error-level validation for these fields
+- `enableManagedIdentity?: boolean` for system-assigned identity enablement.
+- `userAssignedIdentityIds?: string[]` for one or more user-assigned identity node references.
 
-#### Integration Points
-- **Compute (VM, VMSS, AKS), App Service, Functions:**
-  - Can enable system-assigned and/or assign one or more user-assigned identities
-  - Both types can be enabled simultaneously (matches Azure reality)
-  - User-assigned identities are referenced by ID in `userAssignedIdentityIds[]`
-  - System-assigned is toggled by `enableManagedIdentity`
-- **Key Vault, Storage, SQL, etc.:**
-  - Managed identity is used for secure access (not modeled as direct assignment in v1)
+### Form Behavior (`IdentityForm.vue`)
 
-#### Best Practices (from Azure docs)
-- Use user-assigned identities for scenarios with multiple resources needing the same permissions, rapid creation/deletion, or compliance requirements
-- Use system-assigned for unique-per-resource identity, audit logging, or when permissions should be removed with the resource
-- Both types can be used together for maximum flexibility
-- Assign only the minimum permissions needed (principle of least privilege)
-- Clean up unused user-assigned identities and role assignments
+- New managed identity nodes default to `UserAssigned` with `isolationScope: 'None'`.
+- User-assigned mode shows `Resource ID` and `Isolation Scope`.
+- System-assigned mode shows `Assigned To`, filtered to identity-capable source resources only.
+- `clientId`, `principalId`, and `tenantId` are optional documentation fields and warn on malformed GUIDs.
 
-#### Service Principal Concept
-- Each managed identity is backed by a service principal in Microsoft Entra ID
-- `clientId` is the application (client) ID; `principalId` is the service principal object ID
-- Role assignments are made to the managed identity (not modeled in v1)
+### Validation (`validateIdentity`)
 
-#### Future Enhancements
-- Model role assignments and RBAC
-- Support for Federated Identity Credentials (FIC)
-- Lifecycle automation for user-assigned identity cleanup
+- Error if `identityType` is not `SystemAssigned` or `UserAssigned`.
+- System-assigned nodes warn when `assignedToId` is missing, missing from the diagram, not identity-capable, or points to a resource without `enableManagedIdentity: true`.
+- User-assigned nodes warn when they are not referenced by any resource through `userAssignedIdentityIds[]`.
+- User-assigned `resourceId` warns when it does not match the Azure managed identity resource ID shape.
+- `isolationScope` warns when set to anything other than `Regional` or `None`.
+
+### Integration Points
+
+- **VM, VMSS, AKS, App Service, Functions:** Can enable system-assigned identity and assign one or more user-assigned identities at the same time.
+- **Application Gateway:** Key Vault certificate integration uses a user-assigned managed identity (`keyVaultManagedIdentityId`) rather than a system-assigned identity.
+- **Compute forms:** User-assigned identity selectors list only `MANAGED_IDENTITY` nodes with `identityType === 'UserAssigned'`.
+- **Validators:** `userAssignedIdentityIds[]` references warn if missing, error if the target is not a managed identity, and error if the target is system-assigned.
+- **Graph/test/challenge traversal:** `assignedToId` and `userAssignedIdentityIds[]` both participate in relationship graphs.
+- **Key Vault, Storage, SQL, etc.:** Managed identities can be documented as principals for secure access, but RBAC and access policy effects are not computed in v1.
+
+### Azure Alignment
+
+- User-assigned identities are standalone resources with independent lifecycle and can be reused across multiple resources.
+- System-assigned identities are created on a single resource and are deleted with that resource.
+- A supported Azure resource can have both a system-assigned identity and user-assigned identities.
+- Each managed identity is backed by a service principal in Microsoft Entra ID.
+- Least-privilege RBAC assignment and cleanup of unused user-assigned identities remain documented best practices, not modeled behavior.
+
+### Future Enhancements
+
+- First-class Azure role assignment/RBAC modeling.
+- Federated identity credentials.
+- Cleanup analysis for unused user-assigned identities and stale role assignments.

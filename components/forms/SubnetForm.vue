@@ -36,14 +36,16 @@
       </div>
       <small v-if="getError('routeTableId')" class="error-text">{{ getError('routeTableId') }}</small>
     </div>
-    <div class="field"><label>NAT Gateway (reserved for future use)</label>
+    <div class="field"><label>NAT Gateway</label>
       <div :class="{ 'has-error': getError('natGatewayId') && getError('natGatewayId')?.includes('not exist') }" class="input-wrapper">
-        <InputText v-model="model.natGatewayId" class="w-full" placeholder="NAT Gateway component not yet available" disabled />
+        <Select v-model="model.natGatewayId" :options="natGatewayOptions" option-label="label" option-value="value" class="w-full" placeholder="None" showClear />
       </div>
       <small v-if="getError('natGatewayId')" class="error-text">{{ getError('natGatewayId') }}</small>
-      <small class="hint-text">NAT Gateway component type will be available in a future update.</small>
+      <small class="hint-text">Select a NAT Gateway for outbound internet egress. A subnet can attach to only one NAT Gateway.</small>
     </div>
-    <div class="field"><label>Service Endpoints (comma-separated)</label><InputText v-model="endpointsStr" class="w-full" placeholder="Microsoft.Storage, Microsoft.KeyVault" /></div>
+    <div class="field"><label>Service Endpoints (comma-separated)</label><InputText v-model="endpointsStr" class="w-full" placeholder="Microsoft.Storage, Microsoft.KeyVault" />
+      <small class="hint-text">Service endpoints are configured per service/per subnet and are mirrored to Service Endpoint nodes on save.</small>
+    </div>
     <div class="field"><label>Delegations (comma-separated)</label><InputText v-model="delegationsStr" class="w-full" placeholder="Microsoft.Web/serverFarms" />
       <small v-if="getError('delegations')" class="error-text">{{ getError('delegations') }}</small>
     </div>
@@ -73,6 +75,7 @@ const model = computed({ get: () => props.modelValue as SubnetComponent, set: v 
 const vnetOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.VNET).map(n => ({ label: n.data.name, value: n.id })))
 const nsgOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.NSG).map(n => ({ label: n.data.name, value: n.id })))
 const udrOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.UDR).map(n => ({ label: n.data.name, value: n.id })))
+const natGatewayOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.NAT_GATEWAY).map(n => ({ label: n.data.name, value: n.id })))
 const endpointsStr = computed({
   get: () => model.value.serviceEndpoints?.join(', ') || '',
   set: v => { model.value = { ...model.value, serviceEndpoints: v.split(',').map(s => s.trim()).filter(Boolean) } }

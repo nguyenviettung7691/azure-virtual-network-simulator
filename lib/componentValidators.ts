@@ -1,9 +1,116 @@
 /**
+ * NAT Gateway validator: Azure NAT Gateway resource validation
+ * https://docs.azure.cn/en-us/nat-gateway/nat-gateway-resource
+ */
+export function validateNatGateway(data: any, nodes: any[]): ValidationResult {
+  const errors: any[] = []
+
+  if (!data.name || typeof data.name !== 'string' || data.name.trim() === '') {
+    addError(errors, 'name', 'NAT Gateway name is required')
+  } else {
+    const name = data.name.trim()
+    if (name.length < 1 || name.length > 80) {
+      addError(errors, 'name', 'Name must be 1-80 characters')
+    }
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$/.test(name)) {
+      addError(errors, 'name', 'Name must be alphanumeric or hyphen, start/end with alphanumeric')
+    }
+  }
+
+  if (data.sku !== 'Standard') {
+    addError(errors, 'sku', 'SKU must be Standard (only supported value)')
+  }
+
+  if (data.idleTimeoutInMinutes !== undefined && data.idleTimeoutInMinutes !== null) {
+    const timeout = parseInt(String(data.idleTimeoutInMinutes), 10)
+    if (isNaN(timeout) || timeout < 4 || timeout > 120) {
+      addError(errors, 'idleTimeoutInMinutes', 'Idle timeout must be 4-120 minutes')
+    }
+  }
+
+  if (data.availabilityZones && Array.isArray(data.availabilityZones)) {
+    for (const zone of data.availabilityZones) {
+      if (!['1', '2', '3'].includes(String(zone))) {
+        addError(errors, 'availabilityZones', `Zone must be '1', '2', or '3', got '${zone}'`)
+      }
+    }
+    if (data.availabilityZones.length === 1) {
+      addError(errors, 'availabilityZones', 'Single-zone NAT Gateway is not zone-redundant', 'warning')
+    }
+  }
+
+  const publicIpIds = Array.isArray(data.publicIpIds)
+    ? data.publicIpIds.map((id: unknown) => String(id).trim()).filter(Boolean)
+    : []
+  const publicIpPrefixIds = Array.isArray(data.publicIpPrefixIds)
+    ? data.publicIpPrefixIds.map((id: unknown) => String(id).trim()).filter(Boolean)
+    : []
+
+  if (publicIpIds.length + publicIpPrefixIds.length > 16) {
+    addError(errors, 'publicIpIds', 'NAT Gateway supports up to 16 total IPv4 public IP capacity references')
+  }
+
+  for (const pipId of publicIpIds) {
+    if (!nodeExists(pipId, nodes)) {
+      addError(errors, 'publicIpIds', `Referenced Public IP does not exist: ${pipId}`)
+      continue
+    }
+    const pip = nodes.find(n => n.id === pipId)?.data
+    if (pip?.type !== NetworkComponentType.IP_ADDRESS) {
+      addError(errors, 'publicIpIds', `Referenced resource is not a Public IP: ${pipId}`)
+      continue
+    }
+    if (pip?.sku !== 'Standard') {
+      addError(errors, 'publicIpIds', `Public IP must be Standard SKU (found: ${pip?.sku})`)
+    }
+    const natGateways = findNodesByType(NetworkComponentType.NAT_GATEWAY, nodes).filter(n => n.id !== data.id)
+    for (const nat of natGateways) {
+      if (Array.isArray(nat.data?.publicIpIds) && nat.data.publicIpIds.includes(pipId)) {
+        addError(errors, 'publicIpIds', `Public IP is already attached to another NAT Gateway: ${nat.data?.name || nat.id}`)
+        break
+      }
+    }
+  }
+
+  for (const prefixId of publicIpPrefixIds) {
+    if (!nodeExists(prefixId, nodes)) {
+      addError(errors, 'publicIpPrefixIds', `Public IP Prefix ID '${prefixId}' cannot be resolved in the diagram model`, 'warning')
+    }
+  }
+
+  if (Array.isArray(data.subnetIds)) {
+    if (data.subnetIds.length > 16) {
+      addError(errors, 'subnetIds', 'A NAT Gateway can be attached to up to 16 subnets')
+    }
+    for (const subnetId of data.subnetIds) {
+      if (!nodeExists(subnetId, nodes)) {
+        addError(errors, 'subnetIds', `Referenced subnet does not exist: ${subnetId}`)
+      } else {
+        const subnet = nodes.find(n => n.id === subnetId)?.data
+        if (subnet?.type !== NetworkComponentType.SUBNET) {
+          addError(errors, 'subnetIds', `Referenced resource is not a Subnet: ${subnetId}`)
+          continue
+        }
+        if (subnet?.natGatewayId && subnet.natGatewayId !== data.id) {
+          addError(errors, 'subnetIds', `Subnet '${subnet.name}' is already attached to another NAT Gateway`)
+        }
+      }
+    }
+  }
+
+  return { isValid: errors.filter(e => e.severity === 'error').length === 0, errors }
+}
+/**
  * Per-component validation rules for Azure network components
  */
 
 import type { AnyNetworkComponent } from '~/types/network'
-import { NetworkComponentType, ManagedDiskType, ManagedDiskRedundancy, ManagedDiskRole, MANAGED_DISK_REDUNDANCY_BY_TYPE, MANAGED_DISK_SIZE_LIMITS, MANAGED_DISK_OS_COMPATIBLE } from '~/types/network'
+import { NetworkComponentType, ManagedDiskType, ManagedDiskRedundancy, ManagedDiskRole, MANAGED_DISK_REDUNDANCY_BY_TYPE, MANAGED_DISK_SIZE_LIMITS } from '~/types/network'
+import {
+  getPremiumSsdV2PerformanceLimits,
+  getUltraDiskPerformanceLimits,
+  normalizeManagedDiskData,
+} from '~/lib/managedDisk'
 import type { ValidationResult, ValidatorFn } from '~/types/validation'
 import {
   validateCIDRBlock,
@@ -25,9 +132,146 @@ import {
   validateRuleDescription,
   validateServiceTag,
 } from './validators'
+import {
+  KEY_VAULT_ACCESS_POLICY_PERMISSION_OPTIONS,
+  isValidKeyVaultName,
+  isValidKeyVaultObjectName,
+  isValidKeyVaultObjectVersion,
+  normalizeComponentKeyVaultReferences,
+  parseKeyVaultReference,
+} from './keyVault'
+import {
+  isKnownServiceEndpointService,
+  normalizeServiceEndpointServiceName,
+} from '~/lib/serviceEndpoints'
 
 function addError(errors: any[], fieldName: string, message: string, severity: 'error' | 'warning' = 'error') {
   errors.push({ fieldName, message, severity })
+}
+
+const IDENTITY_CAPABLE_RESOURCE_TYPES = [
+  NetworkComponentType.VM,
+  NetworkComponentType.VMSS,
+  NetworkComponentType.AKS,
+  NetworkComponentType.APP_SERVICE,
+  NetworkComponentType.FUNCTIONS,
+]
+
+function findNodeById(id: string | undefined, nodes: any[]) {
+  if (!id) return undefined
+  return nodes.find((n: any) => n.id === id)
+}
+
+function isIdentityCapableResourceType(type: NetworkComponentType | undefined): boolean {
+  return !!type && IDENTITY_CAPABLE_RESOURCE_TYPES.includes(type)
+}
+
+function isGuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function isUserAssignedIdentityResourceId(value: string): boolean {
+  return /^\/subscriptions\/[^/]+\/resourceGroups\/[^/]+\/providers\/Microsoft\.ManagedIdentity\/userAssignedIdentities\/[^/]+$/i.test(value)
+}
+
+function validateUserAssignedIdentityReferences(data: any, nodes: any[], errors: any[]) {
+  if (!Array.isArray(data.userAssignedIdentityIds)) return
+
+  for (const identityId of data.userAssignedIdentityIds) {
+    const identityNode = findNodeById(identityId, nodes)
+    if (!identityNode) {
+      addError(errors, 'userAssignedIdentityIds', `Referenced identity does not exist: ${identityId}`, 'warning')
+      continue
+    }
+
+    if (identityNode.data?.type !== NetworkComponentType.MANAGED_IDENTITY) {
+      addError(errors, 'userAssignedIdentityIds', `Referenced resource is not a managed identity: ${identityId}`)
+      continue
+    }
+
+    if (identityNode.data?.identityType !== 'UserAssigned') {
+      addError(errors, 'userAssignedIdentityIds', `System-assigned identity cannot be assigned through userAssignedIdentityIds: ${identityNode.data?.name || identityId}`)
+    }
+  }
+}
+
+function isPrivateIpv4Address(ip: string): boolean {
+  const octets = ip.split('.').map(value => parseInt(value, 10))
+  if (octets.length !== 4 || octets.some(value => Number.isNaN(value))) return false
+  if (octets[0] === 10) return true
+  if (octets[0] === 192 && octets[1] === 168) return true
+  if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return true
+  return false
+}
+
+function getSubnetNode(subnetId: string | undefined, nodes: any[]) {
+  const node = findNodeById(subnetId, nodes)
+  return node?.data?.type === NetworkComponentType.SUBNET ? node : undefined
+}
+
+function getKeyVaultNode(keyVaultId: string | undefined, nodes: any[]) {
+  const node = findNodeById(keyVaultId, nodes)
+  return node?.data?.type === NetworkComponentType.KEY_VAULT ? node : undefined
+}
+
+function hasAnyManagedIdentity(data: any): boolean {
+  return data.enableManagedIdentity === true || (Array.isArray(data.userAssignedIdentityIds) && data.userAssignedIdentityIds.length > 0)
+}
+
+function validateAppLikeKeyVaultReference(data: any, nodes: any[], errors: any[]) {
+  const normalized = normalizeComponentKeyVaultReferences(data, nodes)
+  const hasKeyVaultReference = Boolean(
+    normalized.keyVaultId
+    || normalized.keyVaultSecretName
+    || normalized.keyVaultSecretVersion
+    || (typeof normalized.keyVaultSecretUri === 'string' && normalized.keyVaultSecretUri.trim()),
+  )
+
+  if (!hasKeyVaultReference) return normalized
+
+  if (!normalized.keyVaultId) {
+    addError(errors, 'keyVaultId', 'Key Vault reference could not be matched to a Key Vault node in the diagram', 'warning')
+  }
+
+  if (normalized.keyVaultId) {
+    const keyVaultNode = getKeyVaultNode(normalized.keyVaultId, nodes)
+    if (!keyVaultNode) {
+      addError(errors, 'keyVaultId', 'Referenced Key Vault does not exist', 'warning')
+    } else if (keyVaultNode.data?.networkDefaultAction === 'Deny') {
+      if (!normalized.vnetIntegrationSubnetId) {
+        addError(errors, 'keyVaultId', 'Selected Key Vault is network-restricted; VNet integration is recommended to make the reference reachable', 'warning')
+      } else if (
+        Array.isArray(keyVaultNode.data?.virtualNetworkRules)
+        && keyVaultNode.data.virtualNetworkRules.length > 0
+        && !keyVaultNode.data.virtualNetworkRules.includes(normalized.vnetIntegrationSubnetId)
+      ) {
+        addError(errors, 'keyVaultId', 'Selected Key Vault firewall does not include the app integration subnet', 'warning')
+      }
+    }
+  }
+
+  if ((normalized.keyVaultId || normalized.keyVaultSecretVersion) && !normalized.keyVaultSecretName) {
+    addError(errors, 'keyVaultSecretName', 'Secret name is required when configuring a Key Vault reference', 'warning')
+  }
+
+  if (normalized.keyVaultSecretName && !isValidKeyVaultObjectName(String(normalized.keyVaultSecretName))) {
+    addError(errors, 'keyVaultSecretName', 'Secret name must be 1-127 characters and contain only letters, numbers, or hyphens')
+  }
+
+  if (normalized.keyVaultSecretVersion && !isValidKeyVaultObjectVersion(String(normalized.keyVaultSecretVersion))) {
+    addError(errors, 'keyVaultSecretVersion', 'Secret version should be a 32-character hexadecimal Key Vault object version', 'warning')
+  }
+
+  if ((normalized.keyVaultId || normalized.keyVaultSecretName) && !hasAnyManagedIdentity(normalized)) {
+    addError(errors, 'enableManagedIdentity', 'Managed identity is recommended for App Service and Functions Key Vault references', 'warning')
+  }
+
+  const rawValue = typeof normalized.keyVaultSecretUri === 'string' ? normalized.keyVaultSecretUri.trim() : ''
+  if (rawValue && !normalized.keyVaultId && !parseKeyVaultReference(rawValue)) {
+    addError(errors, 'keyVaultSecretUri', 'Legacy Key Vault reference could not be parsed; keep the raw value or reselect the vault and secret', 'warning')
+  }
+
+  return normalized
 }
 
 /**
@@ -829,6 +1073,7 @@ function validateLoadBalancer(data: any, nodes: any[]): ValidationResult {
  */
 function validateAppGateway(data: any, nodes: any[]): ValidationResult {
   const errors: any[] = []
+  const normalized = normalizeComponentKeyVaultReferences(data, nodes)
 
   // SKU must be v2 only (Standard_v2 or WAF_v2)
   if (!data.sku || !['Standard_v2', 'WAF_v2'].includes(data.sku)) {
@@ -963,22 +1208,59 @@ function validateAppGateway(data: any, nodes: any[]): ValidationResult {
   }
 
   // Key Vault certificate validation (security best practice for TLS)
-  if (!data.keyVaultCertificateId && data.frontendType === 'Public') {
+  if (!normalized.keyVaultCertificateName && !normalized.keyVaultCertificateId && data.frontendType === 'Public') {
     addError(
       errors,
-      'keyVaultCertificateId',
+      'keyVaultCertificateName',
       'Key Vault certificate recommended for TLS termination on public frontend',
       'warning'
     )
   }
 
-  if (data.keyVaultCertificateId && !nodeExists(data.keyVaultCertificateId, nodes)) {
-    addError(
-      errors,
-      'keyVaultCertificateId',
-      'Referenced Key Vault certificate does not exist',
-      'warning'
-    )
+  const hasKeyVaultCertificateConfig = Boolean(
+    normalized.keyVaultId
+    || normalized.keyVaultCertificateName
+    || (typeof normalized.keyVaultCertificateId === 'string' && normalized.keyVaultCertificateId.trim()),
+  )
+
+  if (hasKeyVaultCertificateConfig) {
+    if (!normalized.keyVaultId) {
+      addError(errors, 'keyVaultId', 'Key Vault certificate reference could not be matched to a Key Vault node in the diagram', 'warning')
+    } else {
+      const keyVaultNode = getKeyVaultNode(normalized.keyVaultId, nodes)
+      if (!keyVaultNode) {
+        addError(errors, 'keyVaultId', 'Referenced Key Vault does not exist', 'warning')
+      } else if (
+        keyVaultNode.data?.networkDefaultAction === 'Deny'
+        && keyVaultNode.data?.allowTrustedMicrosoftServices !== true
+        && (!Array.isArray(keyVaultNode.data?.virtualNetworkRules) || !keyVaultNode.data.virtualNetworkRules.includes(data.subnetId))
+      ) {
+        addError(errors, 'keyVaultId', 'Selected Key Vault is network-restricted; allow trusted services or add the Application Gateway subnet to the vault firewall', 'warning')
+      }
+    }
+
+    if (!normalized.keyVaultCertificateName) {
+      addError(errors, 'keyVaultCertificateName', 'Certificate name is required when configuring a Key Vault certificate reference')
+    } else if (!isValidKeyVaultObjectName(String(normalized.keyVaultCertificateName))) {
+      addError(errors, 'keyVaultCertificateName', 'Certificate name must be 1-127 characters and contain only letters, numbers, or hyphens')
+    }
+
+    if (normalized.keyVaultCertificateVersion && !isValidKeyVaultObjectVersion(String(normalized.keyVaultCertificateVersion))) {
+      addError(errors, 'keyVaultCertificateVersion', 'Certificate version should be a 32-character hexadecimal Key Vault object version', 'warning')
+    }
+
+    if (!normalized.keyVaultManagedIdentityId) {
+      addError(errors, 'keyVaultManagedIdentityId', 'A user-assigned managed identity is required for Application Gateway Key Vault certificate integration')
+    } else {
+      const identityNode = findNodeById(normalized.keyVaultManagedIdentityId, nodes)
+      if (!identityNode) {
+        addError(errors, 'keyVaultManagedIdentityId', 'Referenced managed identity does not exist')
+      } else if (identityNode.data?.type !== NetworkComponentType.MANAGED_IDENTITY) {
+        addError(errors, 'keyVaultManagedIdentityId', 'Referenced resource is not a managed identity')
+      } else if (identityNode.data?.identityType !== 'UserAssigned') {
+        addError(errors, 'keyVaultManagedIdentityId', 'Application Gateway must use a user-assigned managed identity for Key Vault certificate integration')
+      }
+    }
   }
 
   // WAF mode validation
@@ -1268,6 +1550,8 @@ function validateCompute(data: any, nodes: any[]): ValidationResult {
   if (data.type !== NetworkComponentType.VM && data.subnetId && !nodeExists(data.subnetId, nodes)) {
     addError(errors, 'subnetId', 'Referenced subnet does not exist', 'warning')
   }
+
+  validateUserAssignedIdentityReferences(data, nodes, errors)
 
   // VM-specific
   if (data.type === NetworkComponentType.VM) {
@@ -1590,6 +1874,8 @@ function validateStorage(data: any, nodes: any[]): ValidationResult {
 
   // Managed Disk comprehensive validation
   if (data.type === NetworkComponentType.MANAGED_DISK) {
+    data = normalizeManagedDiskData(data)
+
     // Disk type validation (required)
     if (!data.diskType || !Object.values(ManagedDiskType).includes(data.diskType)) {
       addError(errors, 'diskType', `Disk type is required and must be one of: ${Object.values(ManagedDiskType).join(', ')}`)
@@ -1601,16 +1887,12 @@ function validateStorage(data: any, nodes: any[]): ValidationResult {
     }
 
     // Redundancy compatibility with disk type
-    if (data.diskType && data.redundancy && MANAGED_DISK_REDUNDANCY_BY_TYPE[data.diskType]) {
-      const validRedundancies = MANAGED_DISK_REDUNDANCY_BY_TYPE[data.diskType]
+    const managedDiskType = data.diskType as ManagedDiskType | undefined
+    if (managedDiskType && data.redundancy && MANAGED_DISK_REDUNDANCY_BY_TYPE[managedDiskType]) {
+      const validRedundancies = MANAGED_DISK_REDUNDANCY_BY_TYPE[managedDiskType]
       if (!validRedundancies.includes(data.redundancy)) {
         addError(errors, 'redundancy', `Redundancy ${data.redundancy} is not supported for ${data.diskType}; supported options: ${validRedundancies.join(', ')}`)
       }
-    }
-
-    // ZRS on Premium SSD v2 (not yet supported, so warning)
-    if (data.diskType === ManagedDiskType.PREMIUM_SSD_V2 && data.redundancy === ManagedDiskRedundancy.ZRS) {
-      addError(errors, 'redundancy', 'Zone-redundant storage for Premium SSD v2 is not yet supported; use LRS', 'warning')
     }
 
     // Disk role validation (required)
@@ -1636,37 +1918,34 @@ function validateStorage(data: any, nodes: any[]): ValidationResult {
     // Disk size validation with per-type ranges
     if (data.diskSizeGb === undefined || data.diskSizeGb === null) {
       addError(errors, 'diskSizeGb', 'Disk size is required')
-    } else if (data.diskType && MANAGED_DISK_SIZE_LIMITS[data.diskType]) {
-      const { min, max } = MANAGED_DISK_SIZE_LIMITS[data.diskType]
-      if (data.diskSizeGb < min || data.diskSizeGb > max) {
+    } else if (managedDiskType && MANAGED_DISK_SIZE_LIMITS[managedDiskType]) {
+      const { min, max } = MANAGED_DISK_SIZE_LIMITS[managedDiskType]
+      if (!Number.isInteger(Number(data.diskSizeGb))) {
+        addError(errors, 'diskSizeGb', 'Disk size must be a whole number of GiB')
+      } else if (data.diskSizeGb < min || data.diskSizeGb > max) {
         addError(errors, 'diskSizeGb', `Disk size must be ${min}-${max} GB for ${data.diskType}`)
       }
     }
 
-    // OS type validation (for data disks, osType should not be set; for OS disks it's optional metadata)
-    if (data.diskRole === ManagedDiskRole.DATA && data.osType) {
-      addError(errors, 'osType', 'Data disks should not have an OS type specified', 'warning')
-    }
-
     // IOPS/throughput validation (only valid for Ultra and Premium SSD v2)
     const performanceConfigDiskTypes = [ManagedDiskType.ULTRA, ManagedDiskType.PREMIUM_SSD_V2]
-    if (data.iops !== undefined && !performanceConfigDiskTypes.includes(data.diskType)) {
+    if (data.iops !== undefined && data.iops !== null && !performanceConfigDiskTypes.includes(data.diskType)) {
       addError(errors, 'iops', `IOPS configuration is only applicable to ${performanceConfigDiskTypes.join(' and ')}`, 'warning')
     }
-    if (data.throughput !== undefined && !performanceConfigDiskTypes.includes(data.diskType)) {
+    if (data.throughput !== undefined && data.throughput !== null && !performanceConfigDiskTypes.includes(data.diskType)) {
       addError(errors, 'throughput', `Throughput configuration is only applicable to ${performanceConfigDiskTypes.join(' and ')}`, 'warning')
     }
 
     // Ultra Disk IOPS/throughput constraints (1000 IOPS/GiB, up to 400,000 IOPS; 0.25 MB/s per IOPS)
     if (data.diskType === ManagedDiskType.ULTRA && data.diskSizeGb) {
-      if (data.iops !== undefined) {
-        const maxIops = Math.min(400000, data.diskSizeGb * 1000)
-        if (data.iops < 100 || data.iops > maxIops) {
-          addError(errors, 'iops', `Ultra Disk IOPS must be 100-${maxIops} (1000 IOPS/GiB up to 400,000 max)`, 'warning')
+      const limits = getUltraDiskPerformanceLimits(Number(data.diskSizeGb))
+      if (data.iops !== undefined && data.iops !== null) {
+        if (data.iops < limits.minIops || data.iops > limits.maxIops) {
+          addError(errors, 'iops', `Ultra Disk IOPS must be ${limits.minIops}-${limits.maxIops} (1000 IOPS/GiB up to 400,000 max)`, 'warning')
         }
       }
-      if (data.throughput !== undefined && data.iops) {
-        const maxThroughput = Math.min(10000, data.iops * 0.25)
+      if (data.throughput !== undefined && data.throughput !== null && data.iops) {
+        const maxThroughput = Math.min(limits.maxThroughput, data.iops * 0.25)
         if (data.throughput < 1 || data.throughput > maxThroughput) {
           addError(errors, 'throughput', `Ultra Disk throughput must be 1-${maxThroughput} MB/s (0.25 MB/s per IOPS)`, 'warning')
         }
@@ -1675,17 +1954,16 @@ function validateStorage(data: any, nodes: any[]): ValidationResult {
 
     // Premium SSD v2 IOPS/throughput constraints (3000 baseline, +500 IOPS/GiB up to 80,000; 125 MB/s baseline, +0.25 MB/s per IOPS up to 2000)
     if (data.diskType === ManagedDiskType.PREMIUM_SSD_V2 && data.diskSizeGb) {
-      if (data.iops !== undefined) {
-        const iopsBands = Math.max(0, data.diskSizeGb - 6)
-        const maxIops = 3000 + Math.min(77000, iopsBands * 500) // 3000 + up to 77000
-        if (data.iops < 3000 || data.iops > maxIops) {
-          addError(errors, 'iops', `Premium SSD v2 IOPS must be 3000-${maxIops} (baseline 3000 + 500 per GiB above 6 GiB)`, 'warning')
+      const iopsForThroughput = data.iops !== undefined && data.iops !== null ? Number(data.iops) : 3000
+      const limits = getPremiumSsdV2PerformanceLimits(Number(data.diskSizeGb), iopsForThroughput)
+      if (data.iops !== undefined && data.iops !== null) {
+        if (data.iops < limits.minIops || data.iops > limits.maxIops) {
+          addError(errors, 'iops', `Premium SSD v2 IOPS must be ${limits.minIops}-${limits.maxIops} (baseline 3000 + 500 per GiB above 6 GiB)`, 'warning')
         }
       }
-      if (data.throughput !== undefined && data.iops) {
-        const maxThroughput = Math.min(2000, 125 + (data.iops - 3000) * 0.25)
-        if (data.throughput < 125 || data.throughput > maxThroughput) {
-          addError(errors, 'throughput', `Premium SSD v2 throughput must be 125-${maxThroughput} MB/s (baseline 125 + 0.25 MB/s per IOPS above 3000)`, 'warning')
+      if (data.throughput !== undefined && data.throughput !== null) {
+        if (data.throughput < limits.minThroughput || data.throughput > limits.maxThroughput) {
+          addError(errors, 'throughput', `Premium SSD v2 throughput must be ${limits.minThroughput}-${limits.maxThroughput} MB/s (baseline 125, up to 750 MB/s at 3000 IOPS, max 2000)`, 'warning')
         }
       }
     }
@@ -1695,9 +1973,27 @@ function validateStorage(data: any, nodes: any[]): ValidationResult {
       addError(errors, 'attachedToVmId', 'Data disk should be attached to a VM; currently unattached', 'warning')
     }
 
-    // Attached VM validation (if set, must exist)
-    if (data.attachedToVmId && !nodeExists(data.attachedToVmId, nodes)) {
-      addError(errors, 'attachedToVmId', 'Referenced VM does not exist', 'warning')
+    // Attached VM validation (if set, must exist and be a VM)
+    if (data.attachedToVmId) {
+      const attachedVmNode = nodes.find((n: any) => n.id === data.attachedToVmId)
+      if (!attachedVmNode) {
+        addError(errors, 'attachedToVmId', 'Referenced VM does not exist')
+      } else if (attachedVmNode.data?.type !== NetworkComponentType.VM) {
+        addError(errors, 'attachedToVmId', 'Attached resource must be a Virtual Machine')
+      } else if (data.diskRole === ManagedDiskRole.OS && data.osType && attachedVmNode.data?.os && data.osType !== attachedVmNode.data.os) {
+        addError(errors, 'osType', `OS disk type (${data.osType}) must match attached VM OS (${attachedVmNode.data.os})`)
+      }
+    }
+
+    if (data.diskRole === ManagedDiskRole.OS && data.attachedToVmId) {
+      const duplicateOsDisk = findNodesByType(NetworkComponentType.MANAGED_DISK, nodes)
+        .filter((node: any) => node.id !== data.id)
+        .map((node: any) => normalizeManagedDiskData(node.data || {}))
+        .find((disk: any) => disk.diskRole === ManagedDiskRole.OS && disk.attachedToVmId === data.attachedToVmId)
+
+      if (duplicateOsDisk) {
+        addError(errors, 'attachedToVmId', `VM already has an OS disk modeled: ${duplicateOsDisk.name || duplicateOsDisk.id}`)
+      }
     }
   }
 
@@ -1827,37 +2123,201 @@ function validateStorage(data: any, nodes: any[]): ValidationResult {
 }
 
 /**
- * Identity validators (Key Vault, Managed Identity)
+ * Key Vault validator: naming, networking, access policies, and soft delete behavior
  */
-function validateIdentity(data: any, nodes: any[]): ValidationResult {
+function validateKeyVault(data: any, nodes: any[] = []): ValidationResult {
   const errors: any[] = []
 
-  // Virtual network rules validation for Key Vault
-  if (data.type === NetworkComponentType.KEY_VAULT && data.virtualNetworkRules && Array.isArray(data.virtualNetworkRules)) {
+  if (!data.name || typeof data.name !== 'string' || data.name.trim() === '') {
+    addError(errors, 'name', 'Key Vault name is required')
+  } else if (!isValidKeyVaultName(data.name)) {
+    addError(errors, 'name', 'Key Vault name must be 3-24 characters, alphanumeric or hyphen, start/end with alphanumeric, and not contain consecutive hyphens')
+  }
+
+  if (!data.sku || !['Standard', 'Premium'].includes(data.sku)) {
+    addError(errors, 'sku', 'SKU must be Standard or Premium')
+  }
+
+  if (!data.networkDefaultAction || !['Allow', 'Deny'].includes(data.networkDefaultAction)) {
+    addError(errors, 'networkDefaultAction', 'Network default action must be Allow or Deny')
+  }
+
+  if (!data.tenantId) {
+    addError(errors, 'tenantId', 'Tenant ID is recommended for access policy authoring and cross-checking', 'warning')
+  } else if (!isGuid(String(data.tenantId))) {
+    addError(errors, 'tenantId', 'Tenant ID should be a valid GUID', 'warning')
+  }
+
+  if (data.enablePurgeProtection && data.enableSoftDelete === false) {
+    addError(errors, 'enablePurgeProtection', 'Purge protection requires soft delete to be enabled')
+  }
+
+  if (data.enableSoftDelete === false && data.softDeleteRetentionDays !== undefined && data.softDeleteRetentionDays !== null) {
+    addError(errors, 'softDeleteRetentionDays', 'Soft delete retention days apply only when soft delete is enabled', 'warning')
+  }
+
+  if (data.enableSoftDelete !== false) {
+    if (data.softDeleteRetentionDays === undefined || data.softDeleteRetentionDays === null) {
+      addError(errors, 'softDeleteRetentionDays', 'Soft delete retention days is required', 'error')
+    } else {
+      const retentionDays = parseInt(String(data.softDeleteRetentionDays), 10)
+      if (Number.isNaN(retentionDays) || retentionDays < 7 || retentionDays > 90) {
+        addError(errors, 'softDeleteRetentionDays', 'Soft delete retention must be 7-90 days')
+      }
+    }
+  }
+
+  if (Array.isArray(data.virtualNetworkRules)) {
+    if (data.virtualNetworkRules.length > 200) {
+      addError(errors, 'virtualNetworkRules', 'A Key Vault supports at most 200 virtual network rules')
+    }
+
     for (const subnetId of data.virtualNetworkRules) {
-      if (subnetId && !nodeExists(subnetId, nodes)) {
-        addError(errors, 'virtualNetworkRules', 'Referenced subnet does not exist', 'warning')
+      const subnetNode = getSubnetNode(subnetId, nodes)
+      if (!subnetNode) {
+        addError(errors, 'virtualNetworkRules', 'Referenced subnet does not exist')
+        break
+      }
+
+      const serviceEndpoints = Array.isArray(subnetNode.data?.serviceEndpoints) ? subnetNode.data.serviceEndpoints : []
+      if (!serviceEndpoints.includes('Microsoft.KeyVault')) {
+        addError(errors, 'virtualNetworkRules', `Subnet "${subnetNode.data?.name || subnetId}" does not declare the Microsoft.KeyVault service endpoint`, 'warning')
+      }
+    }
+  }
+
+  if (Array.isArray(data.ipRules)) {
+    if (data.ipRules.length > 1000) {
+      addError(errors, 'ipRules', 'A Key Vault supports at most 1000 IPv4 rules')
+    }
+
+    for (const rule of data.ipRules) {
+      if (!rule) continue
+      const trimmedRule = String(rule).trim()
+      if (!trimmedRule) continue
+      if (trimmedRule.includes(':')) {
+        addError(errors, 'ipRules', 'Only IPv4 addresses or IPv4 CIDR ranges are supported in Key Vault IP rules')
+        break
+      }
+
+      const ipValue = trimmedRule.includes('/') ? trimmedRule.split('/')[0] : trimmedRule
+      const check = trimmedRule.includes('/')
+        ? validateCIDRBlock(trimmedRule)
+        : validateIPAddress(trimmedRule, 'IPv4')
+      if (!check.valid) {
+        addError(errors, 'ipRules', `Invalid Key Vault IP rule: ${trimmedRule}`)
+        break
+      }
+      if (isPrivateIpv4Address(ipValue)) {
+        addError(errors, 'ipRules', `Private RFC1918 addresses are not allowed in Key Vault IP rules: ${trimmedRule}`)
         break
       }
     }
   }
 
+  const accessPolicies = Array.isArray(data.accessPolicies) ? data.accessPolicies : []
+  if (accessPolicies.length > 16) {
+    addError(errors, 'accessPolicies', 'A Key Vault supports at most 16 access policies')
+  }
+  if (accessPolicies.length === 0) {
+    addError(errors, 'accessPolicies', 'No access policies are configured; this legacy-mode vault would not grant data-plane access to any principal', 'warning')
+  }
+
+  const seenObjectIds = new Set<string>()
+  accessPolicies.forEach((policy: any, index: number) => {
+    const prefix = `accessPolicies[${index}]`
+    const objectId = String(policy?.objectId || '').trim()
+    const tenantId = String(policy?.tenantId || '').trim()
+    const permissions = policy?.permissions || {}
+
+    if (!tenantId) {
+      addError(errors, `${prefix}.tenantId`, 'Access policy tenantId is required')
+    } else if (!isGuid(tenantId)) {
+      addError(errors, `${prefix}.tenantId`, 'Access policy tenantId should be a valid GUID')
+    }
+
+    if (!objectId) {
+      addError(errors, `${prefix}.objectId`, 'Access policy objectId is required')
+    } else if (!isGuid(objectId)) {
+      addError(errors, `${prefix}.objectId`, 'Access policy objectId should be a valid GUID')
+    } else if (seenObjectIds.has(objectId.toLowerCase())) {
+      addError(errors, `${prefix}.objectId`, 'Access policy objectId must be unique within a Key Vault')
+    } else {
+      seenObjectIds.add(objectId.toLowerCase())
+    }
+
+    const permissionGroups = ['keys', 'secrets', 'certificates'] as const
+    let hasPermission = false
+    permissionGroups.forEach((group) => {
+      const values = Array.isArray(permissions[group]) ? permissions[group] : []
+      if (values.length > 0) hasPermission = true
+      const allowed = KEY_VAULT_ACCESS_POLICY_PERMISSION_OPTIONS[group] as readonly string[]
+      values.forEach((value: string) => {
+        if (!allowed.includes(value)) {
+          addError(errors, `${prefix}.permissions.${group}`, `Unsupported ${group} permission: ${value}`)
+        }
+      })
+    })
+
+    if (!hasPermission) {
+      addError(errors, `${prefix}.permissions`, 'Access policy must grant at least one key, secret, or certificate permission')
+    }
+  })
+
+  if (
+    data.networkDefaultAction === 'Deny'
+    && (!Array.isArray(data.virtualNetworkRules) || data.virtualNetworkRules.length === 0)
+    && (!Array.isArray(data.ipRules) || data.ipRules.length === 0)
+    && data.allowTrustedMicrosoftServices !== true
+  ) {
+    addError(errors, 'networkDefaultAction', 'Firewall is enabled but no subnet rules, IP rules, or trusted-service bypass are configured', 'warning')
+  }
+
+  return { isValid: errors.filter(e => e.severity === 'error').length === 0, errors }
+}
+
+/**
+ * Identity validators (Managed Identity only)
+ */
+function validateIdentity(data: any, nodes: any[] = []): ValidationResult {
+  const errors: any[] = []
+
   // Managed Identity validation
   if (data.type === NetworkComponentType.MANAGED_IDENTITY) {
-    // System-assigned: should have assignedToId
+    if (!['SystemAssigned', 'UserAssigned'].includes(data.identityType)) {
+      addError(errors, 'identityType', 'Identity type must be SystemAssigned or UserAssigned')
+    }
+
+    for (const fieldName of ['clientId', 'principalId', 'tenantId']) {
+      const value = data[fieldName]
+      if (value && !isGuid(String(value))) {
+        addError(errors, fieldName, `${fieldName} should be a valid GUID`, 'warning')
+      }
+    }
+
     if (data.identityType === 'SystemAssigned') {
       if (!data.assignedToId) {
         addError(errors, 'assignedToId', 'System-assigned identity should be attached to a parent resource (e.g., VM, App Service)', 'warning')
-      } else if (!nodeExists(data.assignedToId, nodes)) {
-        addError(errors, 'assignedToId', 'Assigned resource does not exist', 'warning')
+      } else {
+        const assignedNode = findNodeById(data.assignedToId, nodes)
+        if (!assignedNode) {
+          addError(errors, 'assignedToId', 'Assigned resource does not exist', 'warning')
+        } else if (!isIdentityCapableResourceType(assignedNode.data?.type)) {
+          addError(errors, 'assignedToId', 'Assigned resource must be a VM, VMSS, AKS, App Service, or Azure Functions component', 'warning')
+        } else if (assignedNode.data?.enableManagedIdentity !== true) {
+          addError(errors, 'assignedToId', 'Assigned resource does not have system-assigned managed identity enabled', 'warning')
+        }
       }
     }
-    // User-assigned: isolationScope and resourceId are informational
+
     if (data.identityType === 'UserAssigned') {
       if (data.isolationScope && !['Regional', 'None'].includes(data.isolationScope)) {
         addError(errors, 'isolationScope', 'Isolation scope must be Regional or None', 'warning')
       }
-      // Warn if not assigned to any resource (optional, but best practice)
+      if (data.resourceId && !isUserAssignedIdentityResourceId(String(data.resourceId))) {
+        addError(errors, 'resourceId', 'User-assigned identity resource ID should use /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{name}', 'warning')
+      }
+
       const assigned = nodes.some(n => {
         const d = n.data || {};
         return Array.isArray(d.userAssignedIdentityIds) && d.userAssignedIdentityIds.includes(data.id);
@@ -2265,13 +2725,10 @@ function validateNetworkIC(data: any, nodes: any[]): ValidationResult {
     try {
       const [cidrIp, prefixStr] = cidr.split('/')
       const prefix = parseInt(prefixStr, 10)
-      
       const ipOctets = ip.split('.').map(o => parseInt(o, 10))
       const cidrOctets = cidrIp.split('.').map(o => parseInt(o, 10))
-      
       const ipBits = (ipOctets[0] << 24) | (ipOctets[1] << 16) | (ipOctets[2] << 8) | ipOctets[3]
       const cidrBits = (cidrOctets[0] << 24) | (cidrOctets[1] << 16) | (cidrOctets[2] << 8) | cidrOctets[3]
-      
       const mask = -1 << (32 - prefix)
       return (ipBits & mask) === (cidrBits & mask)
     } catch {
@@ -2284,23 +2741,64 @@ function validateNetworkIC(data: any, nodes: any[]): ValidationResult {
     try {
       const [cidrIp, prefixStr] = cidr.split('/')
       const prefix = parseInt(prefixStr, 10)
-      
       const cidrOctets = cidrIp.split('.').map(o => parseInt(o, 10))
       const ipOctets = ip.split('.').map(o => parseInt(o, 10))
-      
       // Network address (all host bits 0)
       const cidrBits = (cidrOctets[0] << 24) | (cidrOctets[1] << 16) | (cidrOctets[2] << 8) | cidrOctets[3]
       const ipBits = (ipOctets[0] << 24) | (ipOctets[1] << 16) | (ipOctets[2] << 8) | ipOctets[3]
       const mask = -1 << (32 - prefix)
-      
       const networkAddr = cidrBits & mask
       const broadcastAddr = networkAddr | ~mask
-      
       // Check if IP is network address, gateway (.1), or broadcast
       return ipBits === networkAddr || ipBits === (networkAddr | 1) || ipBits === broadcastAddr
     } catch {
       return false
     }
+  }
+
+  // Service Endpoint-specific validation
+  if (data.type === NetworkComponentType.SERVICE_ENDPOINT) {
+    const normalizedService = normalizeServiceEndpointServiceName(data.service)
+
+    if (!normalizedService) {
+      addError(errors, 'service', 'Service is required')
+    } else if (!isKnownServiceEndpointService(normalizedService)) {
+      addError(
+        errors,
+        'service',
+        `Unknown service endpoint value "${normalizedService}". Confirm it is supported in the selected region.`,
+        'warning',
+      )
+    }
+
+    if (!data.subnetId) {
+      addError(errors, 'subnetId', 'Subnet is required')
+    } else {
+      const subnetNode = findNodeById(data.subnetId, nodes)
+      if (!subnetNode) {
+        addError(errors, 'subnetId', 'Referenced subnet does not exist')
+      } else if (subnetNode.data?.type !== NetworkComponentType.SUBNET) {
+        addError(errors, 'subnetId', 'Referenced subnet must be a Subnet component')
+      }
+    }
+
+    // Azure SQL service endpoints should use a same-region VNet/service resource pairing.
+    if (normalizedService === 'Microsoft.Sql' && data.subnetId && Array.isArray(data.locations) && data.locations.length > 0) {
+      const subnet = findNodeById(data.subnetId, nodes)?.data
+      const vnet = subnet?.vnetId ? findNodeById(subnet.vnetId, nodes)?.data : undefined
+      const subnetRegion = vnet?.region || undefined
+      const locationSet = new Set((data.locations || []).map((l: string) => String(l || '').toLowerCase()))
+      if (subnetRegion && !locationSet.has(String(subnetRegion).toLowerCase())) {
+        addError(
+          errors,
+          'locations',
+          `Microsoft.Sql service endpoint should use same-region resources. Subnet region "${subnetRegion}" is not in [${data.locations.join(', ')}].`,
+          'warning',
+        )
+      }
+    }
+
+    return { isValid: errors.filter(e => e.severity === 'error').length === 0, errors }
   }
 
   // NIC-specific validation
@@ -2363,24 +2861,117 @@ function validateNetworkIC(data: any, nodes: any[]): ValidationResult {
     }
   }
 
-  // Service Endpoint validation
-  if (data.type === NetworkComponentType.SERVICE_ENDPOINT) {
-    if (!data.subnetId) {
-      addError(errors, 'subnetId', 'Subnet is required')
-    } else if (!nodeExists(data.subnetId, nodes)) {
-      addError(errors, 'subnetId', 'Referenced subnet does not exist')
-    }
-  }
-
   // Private Endpoint validation
   if (data.type === NetworkComponentType.PRIVATE_ENDPOINT) {
+    if (!data.connectionName || !String(data.connectionName).trim()) {
+      addError(errors, 'connectionName', 'Connection name is required')
+    }
+
     if (!data.subnetId) {
       addError(errors, 'subnetId', 'Subnet is required')
-    } else if (!nodeExists(data.subnetId, nodes)) {
-      addError(errors, 'subnetId', 'Referenced subnet does not exist')
+    } else {
+      const subnetNode = findNodeById(data.subnetId, nodes)
+      if (!subnetNode) {
+        addError(errors, 'subnetId', 'Referenced subnet does not exist')
+      } else if (subnetNode.data?.type !== NetworkComponentType.SUBNET) {
+        addError(errors, 'subnetId', 'Referenced subnet must be a Subnet component')
+      } else {
+        const subnetData = subnetNode.data
+
+        if (data.privateIpAddress) {
+          const ipValidation = validateIPAddress(data.privateIpAddress, 'IPv4')
+          if (!ipValidation.valid) {
+            addError(errors, 'privateIpAddress', `Invalid IP format: ${ipValidation.error}`)
+          } else if (subnetData?.addressPrefix) {
+            if (!ipFitsInCidr(data.privateIpAddress, subnetData.addressPrefix)) {
+              addError(errors, 'privateIpAddress',
+                `Private IP ${data.privateIpAddress} does not fit within subnet CIDR ${subnetData.addressPrefix}`)
+            } else if (isReservedAddress(data.privateIpAddress, subnetData.addressPrefix)) {
+              addError(errors, 'privateIpAddress',
+                `Private IP ${data.privateIpAddress} is a reserved subnet address (network, gateway .1, or broadcast)`, 'warning')
+            }
+          }
+        }
+
+        if (subnetData?.privateEndpointNetworkPolicies === 'Enabled') {
+          addError(
+            errors,
+            'subnetId',
+            'Subnet private endpoint network policies are Enabled. Verify this matches your intended NSG/UDR behavior for private endpoint traffic.',
+            'warning',
+          )
+        }
+      }
     }
-    if (data.dnsZoneGroupId && !nodeExists(data.dnsZoneGroupId, nodes)) {
-      addError(errors, 'dnsZoneGroupId', 'Referenced DNS zone does not exist', 'warning')
+
+    if (!data.privateLinkServiceId) {
+      addError(errors, 'privateLinkServiceId', 'Target private-link resource is required')
+    } else {
+      const targetNode = findNodeById(data.privateLinkServiceId, nodes)
+      if (!targetNode) {
+        addError(errors, 'privateLinkServiceId', 'Referenced private-link resource does not exist')
+      } else {
+        const allowedTargetTypes = new Set<NetworkComponentType>([
+          NetworkComponentType.STORAGE_ACCOUNT,
+          NetworkComponentType.BLOB_STORAGE,
+          NetworkComponentType.KEY_VAULT,
+          NetworkComponentType.APP_SERVICE,
+          NetworkComponentType.FUNCTIONS,
+          NetworkComponentType.AKS,
+        ])
+
+        if (!allowedTargetTypes.has(targetNode.data?.type)) {
+          addError(
+            errors,
+            'privateLinkServiceId',
+            `Target resource type ${targetNode.data?.type || 'Unknown'} isn't in the simulator's supported private-link target list`,
+            'warning',
+          )
+        }
+      }
+    }
+
+    if (!Array.isArray(data.groupIds) || data.groupIds.length === 0) {
+      addError(errors, 'groupIds', 'At least one sub-resource group ID is required')
+    } else {
+      const normalizedGroupIds = data.groupIds.map((g: string) => String(g || '').trim()).filter(Boolean)
+      if (normalizedGroupIds.length === 0) {
+        addError(errors, 'groupIds', 'At least one sub-resource group ID is required')
+      }
+
+      const knownGroupIdByType: Partial<Record<NetworkComponentType, string[]>> = {
+        [NetworkComponentType.STORAGE_ACCOUNT]: ['blob', 'file', 'queue', 'table', 'web', 'dfs'],
+        [NetworkComponentType.BLOB_STORAGE]: ['blob'],
+        [NetworkComponentType.KEY_VAULT]: ['vault'],
+        [NetworkComponentType.APP_SERVICE]: ['sites'],
+        [NetworkComponentType.FUNCTIONS]: ['sites'],
+        [NetworkComponentType.AKS]: ['management'],
+      }
+
+      const targetType = findNodeById(data.privateLinkServiceId, nodes)?.data?.type as NetworkComponentType | undefined
+      if (targetType && knownGroupIdByType[targetType]) {
+        const knownGroupIds = knownGroupIdByType[targetType] || []
+        const invalidGroupId = normalizedGroupIds.find((g: string) => !knownGroupIds.includes(g))
+        if (invalidGroupId) {
+          addError(
+            errors,
+            'groupIds',
+            `Group ID "${invalidGroupId}" may not match target type ${targetType}. Validate subresource names from Azure service documentation.`,
+            'warning',
+          )
+        }
+      }
+    }
+
+    if (data.dnsZoneGroupId) {
+      const dnsZoneNode = findNodeById(data.dnsZoneGroupId, nodes)
+      if (!dnsZoneNode) {
+        addError(errors, 'dnsZoneGroupId', 'Referenced DNS zone does not exist', 'warning')
+      } else if (dnsZoneNode.data?.type !== NetworkComponentType.DNS_ZONE) {
+        addError(errors, 'dnsZoneGroupId', 'DNS zone group must reference a DNS Zone component', 'warning')
+      } else if (dnsZoneNode.data?.zoneType !== 'Private') {
+        addError(errors, 'dnsZoneGroupId', 'DNS zone group should reference a Private DNS zone', 'warning')
+      }
     }
   }
 
@@ -2392,6 +2983,7 @@ function validateNetworkIC(data: any, nodes: any[]): ValidationResult {
  */
 function validateAppService(data: any, nodes: any[]): ValidationResult {
   const errors: any[] = []
+  const normalized = validateAppLikeKeyVaultReference(data, nodes, errors)
 
   // Tier validation
   const validTiers = ['Free', 'Shared', 'Basic', 'Standard', 'Premium', 'PremiumV2', 'PremiumV3', 'PremiumV4', 'Isolated', 'IsolatedV2']
@@ -2439,65 +3031,56 @@ function validateAppService(data: any, nodes: any[]): ValidationResult {
     addError(errors, 'minTlsVersion', `TLS ${data.minTlsVersion} is deprecated; use TLS 1.2 or 1.3 (security best practice)`, 'warning')
   }
 
-  // Managed identity validation
-  if (data.enableManagedIdentity && data.userAssignedIdentityIds && data.userAssignedIdentityIds.length > 0) {
-    addError(errors, 'enableManagedIdentity', 'Both system-assigned and user-assigned managed identities are enabled. This is supported in Azure and allows flexible authentication scenarios.', 'warning')
-  }
-
-  // User-assigned identity references
-  if (data.userAssignedIdentityIds && Array.isArray(data.userAssignedIdentityIds)) {
-    for (const identityId of data.userAssignedIdentityIds) {
-      if (!nodeExists(identityId, nodes)) {
-        addError(errors, 'userAssignedIdentityIds', `Referenced identity does not exist: ${identityId}`, 'warning')
-      }
-    }
-  }
+  validateUserAssignedIdentityReferences(normalized, nodes, errors)
 
   // VNet integration validation
-  if (data.vnetIntegrationSubnetId) {
-    if (!nodeExists(data.vnetIntegrationSubnetId, nodes)) {
+  if (normalized.vnetIntegrationSubnetId) {
+    if (!nodeExists(normalized.vnetIntegrationSubnetId, nodes)) {
       addError(errors, 'vnetIntegrationSubnetId', 'Referenced subnet does not exist', 'warning')
     }
   }
 
   // Private endpoint validation
-  if (data.enablePrivateEndpoint && !data.privateEndpointId) {
+  if (normalized.enablePrivateEndpoint && !normalized.privateEndpointId) {
     addError(errors, 'enablePrivateEndpoint', 'Private endpoint enabled but no endpoint ID set', 'warning')
   }
-  if (data.privateEndpointId && !nodeExists(data.privateEndpointId, nodes)) {
-    addError(errors, 'privateEndpointId', 'Referenced private endpoint does not exist', 'warning')
-  }
-
-  // Key Vault integration validation
-  if (data.keyVaultSecretUri && !nodeExists(data.keyVaultSecretUri, nodes)) {
-    addError(errors, 'keyVaultSecretUri', 'Referenced Key Vault does not exist', 'warning')
+  if (normalized.privateEndpointId) {
+    const peNode = findNodeById(normalized.privateEndpointId, nodes)
+    if (!peNode) {
+      addError(errors, 'privateEndpointId', 'Referenced private endpoint does not exist', 'warning')
+    } else if (peNode.data?.type !== NetworkComponentType.PRIVATE_ENDPOINT) {
+      addError(errors, 'privateEndpointId', 'Referenced node is not a Private Endpoint component', 'warning')
+    }
   }
 
   // Application Insights validation
-  if (data.applicationInsightsResourceId && !nodeExists(data.applicationInsightsResourceId, nodes)) {
+  if (normalized.applicationInsightsResourceId && !nodeExists(normalized.applicationInsightsResourceId, nodes)) {
     addError(errors, 'applicationInsightsResourceId', 'Referenced Application Insights resource does not exist', 'warning')
   }
 
   // Health check validation
-  if (data.enableHealthCheck && !data.healthCheckPath) {
+  if (normalized.enableHealthCheck && !normalized.healthCheckPath) {
     addError(errors, 'healthCheckPath', 'Health check path is required when health check is enabled', 'warning')
   }
 
   // Tier-specific warnings
   if (data.tier === 'Free' || data.tier === 'Shared') {
-    if (data.customDomain) {
-      addError(errors, 'customDomain', `${data.tier} tier does not support custom domains`, 'warning')
+    if (normalized.customDomain) {
+      addError(errors, 'customDomain', `${normalized.tier} tier does not support custom domains`, 'warning')
     }
-    if (data.enableManagedIdentity) {
-      addError(errors, 'enableManagedIdentity', `Managed identity not meaningful on ${data.tier} tier (shared compute)`, 'warning')
+    if (normalized.enableManagedIdentity) {
+      addError(errors, 'enableManagedIdentity', `Managed identity not meaningful on ${normalized.tier} tier (shared compute)`, 'warning')
     }
-    if (data.vnetIntegrationSubnetId) {
-      addError(errors, 'vnetIntegrationSubnetId', `${data.tier} tier does not support VNet integration`, 'warning')
+    if (Array.isArray(normalized.userAssignedIdentityIds) && normalized.userAssignedIdentityIds.length > 0) {
+      addError(errors, 'userAssignedIdentityIds', `User-assigned managed identity is not meaningful on ${normalized.tier} tier (shared compute)`, 'warning')
+    }
+    if (normalized.vnetIntegrationSubnetId) {
+      addError(errors, 'vnetIntegrationSubnetId', `${normalized.tier} tier does not support VNet integration`, 'warning')
     }
   }
 
   // Easy Auth validation
-  if (data.enableEasyAuth && !data.easyAuthProvider) {
+  if (normalized.enableEasyAuth && !normalized.easyAuthProvider) {
     addError(errors, 'easyAuthProvider', 'Easy Auth provider must be specified when Easy Auth is enabled', 'warning')
   }
 
@@ -2533,10 +3116,11 @@ function normalizeFunctionsHosting(data: any): { hostingOption?: string; planSku
  */
 function validateFunctions(data: any, nodes: any[]): ValidationResult {
   const errors: any[] = []
-  const normalized = normalizeFunctionsHosting(data)
-  const hostingOption = normalized.hostingOption
-  const planSku = normalized.planSku
-  const os = normalized.os
+  const normalizedData = validateAppLikeKeyVaultReference(data, nodes, errors)
+  const hosting = normalizeFunctionsHosting(data)
+  const hostingOption = hosting.hostingOption
+  const planSku = hosting.planSku
+  const os = hosting.os
 
   const validHostingOptions = ['FlexConsumption', 'Premium', 'Dedicated', 'ContainerApps', 'Consumption']
   if (!hostingOption || !validHostingOptions.includes(hostingOption)) {
@@ -2611,23 +3195,11 @@ function validateFunctions(data: any, nodes: any[]): ValidationResult {
     addError(errors, 'enableHttps', 'HTTPS-only is recommended for secure HTTP endpoints', 'warning')
   }
 
-  // Managed identity validation
-  if (data.enableManagedIdentity && data.userAssignedIdentityIds && data.userAssignedIdentityIds.length > 0) {
-    addError(errors, 'enableManagedIdentity', 'Both system-assigned and user-assigned managed identities are enabled. This is supported in Azure and allows flexible authentication scenarios.', 'warning')
-  }
-
-  // User-assigned identity references
-  if (data.userAssignedIdentityIds && Array.isArray(data.userAssignedIdentityIds)) {
-    for (const identityId of data.userAssignedIdentityIds) {
-      if (!nodeExists(identityId, nodes)) {
-        addError(errors, 'userAssignedIdentityIds', `Referenced identity does not exist: ${identityId}`, 'warning')
-      }
-    }
-  }
+  validateUserAssignedIdentityReferences(normalizedData, nodes, errors)
 
   // VNet integration validation
-  if (data.vnetIntegrationSubnetId) {
-    if (!nodeExists(data.vnetIntegrationSubnetId, nodes)) {
+  if (normalizedData.vnetIntegrationSubnetId) {
+    if (!nodeExists(normalizedData.vnetIntegrationSubnetId, nodes)) {
       addError(errors, 'vnetIntegrationSubnetId', 'Referenced subnet does not exist', 'warning')
     }
     if (hostingOption === 'Premium') {
@@ -2636,28 +3208,28 @@ function validateFunctions(data: any, nodes: any[]): ValidationResult {
   }
 
   // Private endpoint validation
-  if (data.enablePrivateEndpoint && !data.privateEndpointId) {
+  if (normalizedData.enablePrivateEndpoint && !normalizedData.privateEndpointId) {
     addError(errors, 'enablePrivateEndpoint', 'Private endpoint enabled but no endpoint ID set', 'warning')
   }
-  if (data.privateEndpointId && !nodeExists(data.privateEndpointId, nodes)) {
-    addError(errors, 'privateEndpointId', 'Referenced private endpoint does not exist', 'warning')
+  if (normalizedData.privateEndpointId) {
+    const peNode = findNodeById(normalizedData.privateEndpointId, nodes)
+    if (!peNode) {
+      addError(errors, 'privateEndpointId', 'Referenced private endpoint does not exist', 'warning')
+    } else if (peNode.data?.type !== NetworkComponentType.PRIVATE_ENDPOINT) {
+      addError(errors, 'privateEndpointId', 'Referenced node is not a Private Endpoint component', 'warning')
+    }
   }
-  if (data.enablePrivateEndpoint && (hostingOption === 'Premium' || hostingOption === 'Consumption')) {
+  if (normalizedData.enablePrivateEndpoint && (hostingOption === 'Premium' || hostingOption === 'Consumption')) {
     addError(errors, 'enablePrivateEndpoint', `${hostingOption} hosting may not support private endpoints in all scenarios; verify Azure networking support matrix`, 'warning')
   }
 
-  // Key Vault integration validation
-  if (data.keyVaultSecretUri && !nodeExists(data.keyVaultSecretUri, nodes)) {
-    addError(errors, 'keyVaultSecretUri', 'Referenced Key Vault does not exist', 'warning')
-  }
-
   // Application Insights validation
-  if (data.applicationInsightsResourceId && !nodeExists(data.applicationInsightsResourceId, nodes)) {
+  if (normalizedData.applicationInsightsResourceId && !nodeExists(normalizedData.applicationInsightsResourceId, nodes)) {
     addError(errors, 'applicationInsightsResourceId', 'Referenced Application Insights resource does not exist', 'warning')
   }
 
   // Easy Auth validation
-  if (data.enableEasyAuth && !data.easyAuthProvider) {
+  if (normalizedData.enableEasyAuth && !normalizedData.easyAuthProvider) {
     addError(errors, 'easyAuthProvider', 'Easy Auth provider must be specified when Easy Auth is enabled', 'warning')
   }
 
@@ -2708,36 +3280,38 @@ function validateAsg(data: any, nodes: any[]): ValidationResult {
  */
 export function getValidator(type: NetworkComponentType): ValidatorFn<AnyNetworkComponent> | null {
   const validators: Partial<Record<NetworkComponentType, ValidatorFn<AnyNetworkComponent>>> = {
-    [NetworkComponentType.VNET]: validateVNet,
-    [NetworkComponentType.SUBNET]: validateSubnet,
-    [NetworkComponentType.IP_ADDRESS]: validateIpAddress,
-    [NetworkComponentType.NSG]: validateNsg,
-    [NetworkComponentType.UDR]: validateUdr,
-    [NetworkComponentType.LOAD_BALANCER]: validateLoadBalancer,
-    [NetworkComponentType.APP_GATEWAY]: validateAppGateway,
-    [NetworkComponentType.VNET_PEERING]: validateVnetPeering,
-    [NetworkComponentType.VPN_GATEWAY]: validateVpnGateway,
-    [NetworkComponentType.NVA]: validateNva,
-    [NetworkComponentType.VM]: validateCompute,
-    [NetworkComponentType.VMSS]: validateCompute,
-    [NetworkComponentType.AKS]: validateCompute,
-    [NetworkComponentType.APP_SERVICE]: validateAppService,
-    [NetworkComponentType.FUNCTIONS]: validateFunctions,
-    [NetworkComponentType.STORAGE_ACCOUNT]: validateStorage,
-    [NetworkComponentType.BLOB_STORAGE]: validateStorage,
-    [NetworkComponentType.MANAGED_DISK]: validateStorage,
-    [NetworkComponentType.KEY_VAULT]: validateIdentity,
-    [NetworkComponentType.MANAGED_IDENTITY]: validateIdentity,
-    [NetworkComponentType.DNS_ZONE]: validateDnsZone,
-    [NetworkComponentType.FIREWALL]: validateFirewall,
-    [NetworkComponentType.BASTION]: validateBastion,
-    [NetworkComponentType.NETWORK_IC]: validateNetworkIC,
-    [NetworkComponentType.SERVICE_ENDPOINT]: validateNetworkIC,
-    [NetworkComponentType.PRIVATE_ENDPOINT]: validateNetworkIC,
-    [NetworkComponentType.ASG]: validateAsg,
+    [NetworkComponentType.VNET]: (data, allNodes) => validateVNet(data, allNodes || []),
+    [NetworkComponentType.SUBNET]: (data, allNodes) => validateSubnet(data, allNodes || []),
+    [NetworkComponentType.IP_ADDRESS]: (data, allNodes) => validateIpAddress(data, allNodes || []),
+    [NetworkComponentType.NSG]: (data, allNodes) => validateNsg(data, allNodes || []),
+    [NetworkComponentType.UDR]: (data, allNodes) => validateUdr(data, allNodes || []),
+    [NetworkComponentType.LOAD_BALANCER]: (data, allNodes) => validateLoadBalancer(data, allNodes || []),
+    [NetworkComponentType.APP_GATEWAY]: (data, allNodes) => validateAppGateway(data, allNodes || []),
+    [NetworkComponentType.VNET_PEERING]: (data, allNodes) => validateVnetPeering(data, allNodes || []),
+    [NetworkComponentType.VPN_GATEWAY]: (data, allNodes) => validateVpnGateway(data, allNodes || []),
+    [NetworkComponentType.NVA]: (data, allNodes) => validateNva(data, allNodes || []),
+    [NetworkComponentType.VM]: (data, allNodes) => validateCompute(data, allNodes || []),
+    [NetworkComponentType.VMSS]: (data, allNodes) => validateCompute(data, allNodes || []),
+    [NetworkComponentType.AKS]: (data, allNodes) => validateCompute(data, allNodes || []),
+    [NetworkComponentType.APP_SERVICE]: (data, allNodes) => validateAppService(data, allNodes || []),
+    [NetworkComponentType.FUNCTIONS]: (data, allNodes) => validateFunctions(data, allNodes || []),
+    [NetworkComponentType.STORAGE_ACCOUNT]: (data, allNodes) => validateStorage(data, allNodes || []),
+    [NetworkComponentType.BLOB_STORAGE]: (data, allNodes) => validateStorage(data, allNodes || []),
+    [NetworkComponentType.MANAGED_DISK]: (data, allNodes) => validateStorage(data, allNodes || []),
+    [NetworkComponentType.KEY_VAULT]: (data, allNodes) => validateKeyVault(data, allNodes || []),
+    [NetworkComponentType.MANAGED_IDENTITY]: (data, allNodes) => validateIdentity(data, allNodes || []),
+    [NetworkComponentType.DNS_ZONE]: (data, allNodes) => validateDnsZone(data, allNodes || []),
+    [NetworkComponentType.FIREWALL]: (data, allNodes) => validateFirewall(data, allNodes || []),
+    [NetworkComponentType.BASTION]: (data, allNodes) => validateBastion(data, allNodes || []),
+    [NetworkComponentType.NAT_GATEWAY]: (data, allNodes) => validateNatGateway(data, allNodes || []),
+    [NetworkComponentType.NETWORK_IC]: (data, allNodes) => validateNetworkIC(data, allNodes || []),
+    [NetworkComponentType.SERVICE_ENDPOINT]: (data, allNodes) => validateNetworkIC(data, allNodes || []),
+    [NetworkComponentType.PRIVATE_ENDPOINT]: (data, allNodes) => validateNetworkIC(data, allNodes || []),
+    [NetworkComponentType.ASG]: (data, allNodes) => validateAsg(data, allNodes || []),
   }
 
   return validators[type] || null
 }
+
 
 

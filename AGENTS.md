@@ -140,33 +140,36 @@ When a task touches a specific Azure component type, start with the matching fil
 ### Azure Key Vault Component Rules
 
 **Data Model & Validation:**
-- `KeyVaultComponent` in `types/network.ts` includes: `id`, `name`, `type`, `sku`, `tenantId`, `enableSoftDelete`, `softDeleteRetentionDays`, `enablePurgeProtection`, `networkDefaultAction`, `virtualNetworkRules`, `ipRules`, `accessPolicies`, `tags`, `createdAt`
+- `KeyVaultComponent` in `types/network.ts` includes: `id`, `name`, `type`, `sku`, `tenantId`, `enableSoftDelete`, `softDeleteRetentionDays`, `enablePurgeProtection`, `networkDefaultAction`, `allowTrustedMicrosoftServices`, `virtualNetworkRules`, `ipRules`, `accessPolicies`, `tags`, `createdAt`
 - `KeyVaultAccessPolicy` includes: `tenantId`, `objectId`, `permissions` (keys, secrets, certificates arrays)
-- Name: required, 1–24 chars, alphanumeric/hyphen, must start/end with alphanumeric
+- Name: required, 3–24 chars, alphanumeric/hyphen, must start/end with alphanumeric, no consecutive `--`
 - SKU: required, 'Standard' or 'Premium'
 - Soft Delete: if enabled, retention days required (7–90)
-- Purge Protection: optional, recommended enabled
-- Network Default Action: 'Allow' (public) or 'Deny' (private)
-- Virtual Network Rules: if set, all referenced subnets must exist
-- IP Rules: if set, must be valid IPv4 CIDR blocks
-- Access Policies: each must have tenantId, objectId, at least one permission
-- Warn if no access policies defined (vault will be inaccessible)
+- Purge Protection: optional, recommended enabled; requires soft delete
+- Network Default Action: 'Allow' keeps the public endpoint open; 'Deny' enables the firewall and requires selected networks, IP rules, or trusted-service bypass
+- Virtual Network Rules: if set, all referenced subnets must exist, be SUBNET nodes, and stay within max 200 rules
+- IP Rules: if set, must be public IPv4 / IPv4 CIDR only, max 1000, RFC1918 ranges rejected
+- Access Policies: each must have tenantId, objectId, at least one permission; max 16; objectId unique per vault
+- Warn if no access policies defined, if selected subnets lack `Microsoft.KeyVault` service endpoints, or if vault `tenantId` is missing/malformed
 
 **Form Behavior (`IdentityForm.vue`, Key Vault mode):**
-- Name (required, 1–24 chars, Azure naming rules)
+- Name (required, 3–24 chars, Azure naming rules)
+- Tenant ID
 - SKU selector (Standard, Premium)
 - Soft Delete toggle (recommended enabled)
 - Soft Delete Retention Days (shown if soft delete enabled, 7–90)
 - Purge Protection toggle (recommended enabled)
 - Network Default Action (Allow/Deny)
+- Allow Trusted Microsoft Services toggle
 - Virtual Network Rules (checkboxes for subnets in diagram)
-- IP Rules (comma-separated CIDRs)
-- Access Policies (array editor: add/remove principal, set permissions for keys/secrets/certificates)
+- IP Rules (comma-separated public IPv4 / CIDRs)
+- Access Policies (array editor: add/remove principal, set fixed Azure permission lists for keys/secrets/certificates)
+- Helper text must state that Azure RBAC is the current recommended/default model for new vaults created with API version `2026-02-01`+, while simulator behavior remains access-policy based
 - All fields validated per Azure constraints
 
 **Integration Points:**
-- **App Gateway:** `keyVaultCertificateId` references Key Vault for TLS certificate storage/rotation
-- **App Service / Functions:** `keyVaultSecretUri` references Key Vault secret for app settings/connection strings
+- **App Gateway:** structured fields `keyVaultId`, `keyVaultCertificateName`, `keyVaultCertificateVersion`, `keyVaultManagedIdentityId`; legacy `keyVaultCertificateId` is compatibility-only
+- **App Service / Functions:** structured fields `keyVaultId`, `keyVaultSecretName`, `keyVaultSecretVersion`; legacy `keyVaultSecretUri` is compatibility-only
 - **Managed Identity:** Used as principal in access policies for secure access
 - **Subnet/NetworkIC:** Service endpoints can include Microsoft.KeyVault for private access
 - Validation ensures referenced Key Vaults exist and are of correct type
@@ -189,6 +192,21 @@ When a task touches a specific Azure component type, start with the matching fil
 - Private endpoint support
 - Azure RBAC (role-based access control)
 - Managed HSM (separate resource type)
+
+### Azure Managed Identity Component Rules
+
+**Data Model & Validation:**
+- `ManagedIdentityComponent` in `types/network.ts` supports `identityType: 'SystemAssigned' | 'UserAssigned'`.
+- New standalone managed identity nodes default to `UserAssigned` with `isolationScope: 'None'`.
+- `UserAssigned` nodes are assignable resources and may be referenced from `userAssignedIdentityIds[]` on VM, VMSS, AKS, App Service, and Functions.
+- `SystemAssigned` nodes are optional documentation/attachment records only; the source resource itself uses `enableManagedIdentity`.
+- System-assigned documentation nodes validate that `assignedToId` references an identity-capable resource with `enableManagedIdentity: true`.
+- `userAssignedIdentityIds[]` validation must reject non-managed-identity nodes and `SystemAssigned` managed identity nodes.
+- Both system-assigned and user-assigned identities can be enabled on the same supported resource; do not add mutual-exclusion validation.
+
+**Out of Scope:**
+- Do not model RBAC role assignments, role definitions, or permission evaluation in v1.
+- Do not compute effective access to Key Vault, Storage, SQL, or other target resources from managed identity metadata.
 
 **Data Model & Validation:**
 - `NetworkICComponent` in `types/network.ts` includes `dnsServers?: string[]` field (optional custom DNS servers)
@@ -218,10 +236,78 @@ When a task touches a specific Azure component type, start with the matching fil
 - Primary/secondary NIC designation (affects outbound traffic routing)
 - Effective NSG/route computation (combining subnet + NIC + UDR + BGP rules)
 
+### Azure Service Endpoint Component Rules
+
+**Canonical Model & Sync:**
+- `SubnetComponent.serviceEndpoints[]` is authoritative for effective endpoint configuration.
+- `ServiceEndpointComponent` nodes are synchronized mirrors for topology UX and backward compatibility.
+- Reconciliation must run on diagram load and on Service Endpoint/Subnet add-update-remove flows.
+- Reconciliation must merge legacy states that define endpoint intent in either representation.
+- Keep one unique tuple per `(subnetId, service)` after normalization.
+- Materialize missing Service Endpoint nodes from subnet endpoint entries and remove orphan Service Endpoint nodes not present in subnet endpoint lists.
+
+**Data Model & Validation:**
+- `ServiceEndpointComponent` includes: `id`, `name`, `type`, `service`, `subnetId?`, `locations?`, `createdAt`
+- `service` required; normalize known service names to canonical casing.
+- Unknown/custom service values are allowed with warning severity (non-blocking).
+- `subnetId` required and must reference an existing `SUBNET` node.
+- Region warning applies to `Microsoft.Sql` only when `locations[]` is supplied and subnet region is known.
+- Do not apply same-region warning logic to `Microsoft.Storage.Global`.
+
+**Integration Requirements:**
+- Editing Service Endpoint nodes must update subnet `serviceEndpoints[]` via reconciliation.
+- Editing subnet `serviceEndpoints[]` must update Service Endpoint nodes via reconciliation.
+- Key Vault network rule checks must continue to rely on subnet `serviceEndpoints[]` for `Microsoft.KeyVault` presence.
+- Keep Service Endpoint mapped to `compute-node` and `vnet` layer classification.
+
+**Do NOT:**
+- Reintroduce duplicate `SERVICE_ENDPOINT` validation paths.
+- Treat Service Endpoint nodes as authoritative over subnet endpoint lists.
+- Auto-remove unknown endpoint strings; preserve them and warn.
+
+### Azure Private Endpoint Component Rules
+
+**Data Model & Validation:**
+- `PrivateEndpointComponent` in `types/network.ts` includes: `connectionName`, `privateLinkServiceId`, `groupIds`, `subnetId`, `privateIpAddress?`, `dnsZoneGroupId?`, `createdAt`
+- Validator (`validateNetworkIC()` in `componentValidators.ts`) enforces:
+  - ❌ Error: `connectionName` required
+  - ❌ Error: `privateLinkServiceId` required
+  - ❌ Error: `privateLinkServiceId` must reference an existing node
+  - ⚠️ Warning: referenced target type outside simulator-supported private-link targets (`STORAGE_ACCOUNT`, `BLOB_STORAGE`, `KEY_VAULT`, `APP_SERVICE`, `FUNCTIONS`, `AKS`)
+  - ❌ Error: `groupIds[]` required and must be non-empty
+  - ⚠️ Warning: group IDs that do not match known subresources for the selected target type
+  - ❌ Error: `subnetId` required, must exist, and must reference a `SUBNET` node
+  - ❌ Error: `privateIpAddress` invalid IPv4 format (if provided)
+  - ❌ Error: `privateIpAddress` outside subnet CIDR (if provided)
+  - ⚠️ Warning: `privateIpAddress` is subnet reserved address (network, gateway `.1`, or broadcast)
+  - ⚠️ Warning: selected subnet has `privateEndpointNetworkPolicies === 'Enabled'` (review intended NSG/UDR behavior)
+  - ⚠️ Warning: `dnsZoneGroupId` missing reference, non-`DNS_ZONE` reference, or non-private DNS zone reference
+
+**Form Behavior (`NetworkICForm.vue`, Private Endpoint mode):**
+- Required fields marked in UI: Connection Name, Subnet, Target Resource (Private Link Service), Sub-resource Group IDs
+- Inline error/warning feedback shown for all validated PE fields: `connectionName`, `privateIpAddress`, `subnetId`, `privateLinkServiceId`, `groupIds`, `dnsZoneGroupId`
+- Sub-resource helper text explicitly describes Azure-style subresource names (for example: `blob`, `file`, `vault`, `sites`)
+- DNS zone helper text indicates selected private DNS zone should follow target-service private-link DNS conventions
+- DNS zone picker remains filtered to `DNS_ZONE` nodes where `zoneType === 'Private'`
+
+**Integration Requirements:**
+- App Service and Functions `privateEndpointId` references are warning-validated to:
+  - exist
+  - reference `PRIVATE_ENDPOINT` type (not just any node)
+- Graph synthesis in `stores/tests.ts` and `stores/challenges.ts` must continue linking PE nodes to `privateLinkServiceId` and `dnsZoneGroupId`
+- Layer classification remains VNet-managed for `PRIVATE_ENDPOINT`
+
+**Do NOT:**
+- Treat missing `connectionName`, `privateLinkServiceId`, `groupIds`, or `subnetId` as warnings; these are blocking errors
+- Accept `subnetId` references to non-`SUBNET` component types
+- Permit `dnsZoneGroupId` to be treated as authoritative if it points to non-private DNS zones without warning
+- Revert App Service/Functions `privateEndpointId` checks back to existence-only validation
+
 ### Azure Virtual Machine (VM) Component Rules
 
 **Data Model & Validation:**
 - `VmComponent` in `types/network.ts` includes: `size`, `os`, `imagePublisher`, `imageOffer`, `imageSku`, `adminUsername`, `nicIds?`, `subnetId?`, `availabilityZone?`, `diskType?`
+- VM `diskType` is legacy simplified OS disk metadata only (`Standard_LRS`, `StandardSSD_LRS`, `Premium_LRS`); do not expand it to the full managed disk model.
 - VM networking is **NIC-authoritative**: attached NICs determine subnet/VNet context.
 - Validator (`validateCompute()` in `componentValidators.ts`) enforces:
   - ❌ Error: `size` required
@@ -425,6 +511,43 @@ When a task touches a specific Azure component type, start with the matching fil
 - Per-record metadata/tags UI
 - Automatic zone failover across regions
 
+### Azure NAT Gateway Component Rules
+
+**Data Model & Validation:**
+- `NatGatewayComponent` includes: `sku`, `publicIpIds`, `publicIpPrefixIds`, `subnetIds`, `idleTimeoutInMinutes`, `availabilityZones`
+- `sku` must be `Standard`
+- Name required; 1-80 chars; alphanumeric/hyphen; start/end alphanumeric
+- `idleTimeoutInMinutes` must be 4-120
+- `availabilityZones` values must be `1`, `2`, or `3`; single-zone is warning
+- Total capacity references (`publicIpIds.length + publicIpPrefixIds.length`) must be <= 16
+- `publicIpIds` must reference existing `IP_ADDRESS` nodes with `sku: Standard`
+- Public IP cannot be attached to multiple NAT gateways
+- `subnetIds` max 16; each must reference existing `SUBNET` nodes
+- A subnet cannot attach to multiple NAT gateways
+- `publicIpPrefixIds` are compatibility IDs only; unresolved IDs are warnings
+
+**Form Behavior (`NatGatewayForm.vue`):**
+- Name (required)
+- SKU (read-only `Standard`)
+- Idle timeout (4-120)
+- Availability zones (comma-separated)
+- Public IPs multi-select from Standard public IP nodes
+- Public IP Prefix IDs as compatibility text field
+- Subnets multi-select (max 16)
+- Inline error/warning rendering from validator
+
+**Integration Requirements:**
+- `NAT_GATEWAY` must map to `nat-gateway-node` in diagram rendering
+- Palette metadata must include NAT description and aliases (`nat`, `nat gateway`, `egress`)
+- Keep NAT/Subnet synchronization bidirectional:
+  - `NatGatewayComponent.subnetIds[]`
+  - `SubnetComponent.natGatewayId`
+- Reconciliation must run during normalize/add/update/remove/load flows
+
+**Out of Scope:**
+- Dedicated Public IP Prefix component type
+- SNAT-port simulation math and effective connection-capacity modeling
+
 ### Network Virtual Appliance (NVA) Component Rules
 
 **Data Model & Validation:**
@@ -569,7 +692,7 @@ When a task touches a specific Azure component type, start with the matching fil
 - Networking: `vnetIntegrationSubnetId` (optional), `enablePrivateEndpoint` (optional), `privateEndpointId` (optional if enabled), `ipRestrictions[]` (optional IP allow-list)
 - Authentication: `enableEasyAuth` (optional), `easyAuthProvider` (optional if enabled: AzureAD, Microsoft, Google, Facebook, X)
 - Monitoring: `enableDiagnosticLogging`, `applicationInsightsResourceId`, `enableHealthCheck`, `healthCheckPath`
-- Key Vault: `keyVaultSecretUri` (optional reference to Key Vault secrets)
+- Key Vault: structured `keyVaultId`, `keyVaultSecretName`, optional `keyVaultSecretVersion`; legacy `keyVaultSecretUri` remains compatibility-only
 - Custom domain: `customDomain` (optional; not supported on Free/Shared tiers)
 - HTTPS enforcement: `enableHttps` (optional; enables redirect HTTP→HTTPS)
 
@@ -598,7 +721,7 @@ When a task touches a specific Azure component type, start with the matching fil
 - Diagnostic Logging: optional toggle
 - Application Insights: optional resource ID input
 - Health Check: optional toggle + conditional path field
-- Key Vault Secret URI: optional text input
+- Key Vault selector + secret name + optional secret version + read-only secret URI preview
 - Functions-specific: Hosting Option dropdown, option-aware Plan SKU dropdown, OS selector, runtime stack enum dropdown, runtime version text, storage account required select
 
 **Validation Rules (`validateAppService()`, `validateFunctions()`):**
@@ -608,7 +731,7 @@ App Service:
 - ❌ Error: `sku` invalid or not matching selected tier
 - ❌ Error: `os` not Windows or Linux
 - ❌ Error: `minTlsVersion` not 1.0/1.1/1.2/1.3
-- ⚠️ Warning: Both system-assigned and user-assigned managed identities enabled (supported in Azure; informational only)
+- ❌ Error: `userAssignedIdentityIds[]` references a non-managed-identity node or a `SystemAssigned` managed identity node
 - ⚠️ Warning: Runtime stack empty (deployment realism)
 - ⚠️ Warning: TLS < 1.2 (deprecated, use 1.2+)
 - ⚠️ Warning: Custom domain on Free/Shared tier (not supported)
@@ -616,7 +739,9 @@ App Service:
 - ⚠️ Warning: Managed identity on Free/Shared (not meaningful on shared compute)
 - ⚠️ Warning: VNet integration enabled but no subnet reference
 - ⚠️ Warning: Private endpoint enabled but no endpoint ID
-- ⚠️ Warning: Referenced Key Vault, App Insights, or managed identity doesn't exist
+- ⚠️ Warning: Referenced Key Vault/App Insights resource doesn't exist
+- ⚠️ Warning: Key Vault reference configured without managed identity
+- ⚠️ Warning: Selected Key Vault is network-restricted but the app lacks matching VNet integration metadata
 - ⚠️ Warning: Easy Auth enabled but no provider specified
 
 Functions:
@@ -625,11 +750,13 @@ Functions:
 - ❌ Error: `runtimeStack` not one of: dotnet, node, python, java, powershell
 - ❌ Error: `runtimeVersion` empty
 - ❌ Error: `storageAccountId` empty or referenced account doesn't exist
-- ⚠️ Warning: Both system-assigned and user-assigned managed identities enabled (supported in Azure; informational only)
+- ❌ Error: `userAssignedIdentityIds[]` references a non-managed-identity node or a `SystemAssigned` managed identity node
 - ⚠️ Warning: Legacy Consumption hosting (use Flex Consumption for new serverless workloads)
 - ⚠️ Warning: Linux Consumption retirement guidance
 - ⚠️ Warning: Blob-only storage used for host storage
-- ⚠️ Warning: Referenced Key Vault, App Insights, or managed identity doesn't exist
+- ⚠️ Warning: Referenced Key Vault/App Insights resource doesn't exist
+- ⚠️ Warning: Key Vault reference configured without managed identity
+- ⚠️ Warning: Selected Key Vault is network-restricted but the app lacks matching VNet integration metadata
 
 **Layer Classification (`getComponentLayer()` in `stores/diagram.ts`):**
 - **Public-facing:** App Service/Functions with NO VNet integration AND NO private endpoint enabled (public app.azurewebsites.net domain)
@@ -637,8 +764,8 @@ Functions:
 - **Private:** App Service/Functions with private endpoint enabled (inbound only from private networks)
 
 **Key Integration Points:**
-- Managed Identity: Can reference MANAGED_IDENTITY nodes; validator checks existence
-- Key Vault: `keyVaultSecretUri` can reference KEY_VAULT nodes; validator warns if missing
+- Managed Identity: Can reference `UserAssigned` MANAGED_IDENTITY nodes; validator checks existence and rejects system-assigned documentation nodes in `userAssignedIdentityIds[]`
+- Key Vault: structured Key Vault references connect App Service/Functions to KEY_VAULT nodes and derive the secret URI preview from the selected vault
 - Application Insights: `applicationInsightsResourceId` validator warns if referenced resource missing
 - VNet Integration: `vnetIntegrationSubnetId` must reference SUBNET node; validator checks
 - Private Endpoints: `privateEndpointId` optional reference to PRIVATE_ENDPOINT node
@@ -732,16 +859,17 @@ Functions:
 - **Redundancy Constraints:** Ultra = LRS only; Premium SSD v2 = LRS only; Premium SSD = LRS or ZRS; Standard SSD = LRS or ZRS; Standard HDD = LRS only
 - **OS Disk Compatibility:** Premium SSD, Standard SSD, Standard HDD only (Ultra and Premium v2 are data disks only)
 - **Deprecation:** Standard HDD as OS disk retiring September 8, 2028 (warning level)
-- **Performance Configuration:** IOPS/throughput metadata only for Ultra (100–400,000 IOPS, 0.25 MB/s per IOPS) and Premium SSD v2 (3000–80,000 IOPS, 125–2,000 MB/s); ignored for other types with warning
+- **Performance Configuration:** IOPS/throughput metadata only for Ultra (100-400,000 IOPS, 0.25 MB/s per IOPS) and Premium SSD v2 (3000-80,000 IOPS, 125-2,000 MB/s with 750 MB/s max at 3000 IOPS); ignored for other types with warning
 - Validator (`validateStorage()` in `componentValidators.ts`) enforces:
   - ❌ Error: `diskType` must be one of 5 supported types
   - ❌ Error: `redundancy` must match disk type (e.g., Ultra + ZRS error)
   - ❌ Error: `diskRole` must be OS or DATA
-  - ❌ Error: `diskSizeGb` must fit range for selected type
+  - ❌ Error: `diskSizeGb` must be a whole GiB value in range for selected type
   - ❌ Error: OS role with Ultra or Premium SSD v2 (cannot be OS disks)
-  - ❌ Error: `attachedToVmId` must exist if set
+  - ❌ Error: `attachedToVmId` must exist and reference a VM if set
+  - ❌ Error: a VM can have only one modeled OS managed disk
+  - ❌ Error: OS disk `osType`, when set, must match attached VM `os`
   - ⚠️ Warning: Standard HDD as OS disk (retiring Sept 8, 2028)
-  - ⚠️ Warning: Premium SSD v2 with ZRS (not yet supported; use LRS)
   - ⚠️ Warning: Data disk without VM attachment (tracking recommendation)
   - ⚠️ Warning: IOPS/throughput configured on non-configurable types (Premium SSD, Standard SSD, HDD)
   - ⚠️ Warning: IOPS/throughput values outside Azure limits per disk type
@@ -754,7 +882,7 @@ Functions:
 - **Disk Size (GB)** (required): InputNumber with dynamic min/max per selected type; helper text shows valid range
 - **IOPS field** (optional, shown only for Ultra/Premium v2): InputNumber with dynamic range guidance
 - **Throughput (MB/s) field** (optional, shown only for Ultra/Premium v2): InputNumber with dynamic max MB/s guidance
-- **OS Type selector** (optional, shown only for Data disks): SelectButton (Windows/Linux); purely informational metadata for data disks
+- **OS Type selector** (optional, shown only for OS disks): SelectButton (Windows/Linux); must match attached VM OS when set
 - **Attached to VM selector** (optional): Dropdown from VM nodes; warning if data disk unattached
 - Validation errors filtered by severity: only show error-severity messages in red; warnings in orange
 
@@ -767,10 +895,10 @@ Functions:
 - ✓ Performance configuration for Ultra (1000 IOPS/GiB baseline) and Premium SSD v2 (500 IOPS/GiB above 6 GiB baseline)
 - ✓ Node display format: "{DiskType} - {Size}GB ({Redundancy}) ({Role})" (e.g., "Premium_SSD_v2 - 512 GB (LRS) (Data)")
 - ✓ Layer classification: always private (backend storage, not public-facing)
-- ✓ Single-VM attachment constraint for data disks (enforced at validation)
+- ✓ One modeled OS disk per VM; data disk attachment is single-VM metadata in v1
 
 **Key Integration Points:**
-- VM `diskType` field expanded to support all 5 new types (backward compatible)
+- VM `diskType` remains legacy simplified OS disk metadata; full disk modeling belongs to `MANAGED_DISK`
 - Managed disk reachability tests deferred to v2; v1 focuses on form/validation completeness
 - StorageNode display updated to show disk type + redundancy + role
 - ComponentFormModal defaults managed disk to Premium_SSD_v2, LRS, Data role, 128 GB
@@ -786,7 +914,7 @@ Functions:
 - Allow data disk attachment to multiple VMs (single-attachment constraint per Azure)
 - Merge disk role back into osType (role distinction foundational to architecture)
 - Remove IOPS/throughput configuration for Ultra/Premium v2 (feature completeness)
-- Support performance config on non-configurable types (error-level validation)
+- Support performance config on non-configurable types (warning-level validation)
 
 **Future Enhancements (Out of Scope):**
 - Disk snapshots and images (backup/DR; deferred to v2)
@@ -925,7 +1053,7 @@ Functions:
 ### Azure Application Gateway (AppGateway) Component Rules
 
 **Data Model & Validation:**
-- `AppGatewayComponent` in `types/network.ts` includes v2-only fields: `sku` (Standard_v2 | WAF_v2), `capacity` (1-32), `minInstances` (1-125), `maxInstances` (1-125), `idleTimeoutInMinutes` (4-30), `enableHttp2`, `enableWaf`, `wafMode` (Detection | Prevention), `enableMutualAuthentication`, `frontendType` (Public | Internal), `frontendIpId`, `subnetId`, `availabilityZones`, `keyVaultCertificateId`, `backendPools`, `healthProbes`, `loadBalancingRules`
+- `AppGatewayComponent` in `types/network.ts` includes v2-only fields: `sku` (Standard_v2 | WAF_v2), `capacity` (1-32), `minInstances` (1-125), `maxInstances` (1-125), `idleTimeoutInMinutes` (4-30), `enableHttp2`, `enableWaf`, `wafMode` (Detection | Prevention), `enableMutualAuthentication`, `frontendType` (Public | Internal), `frontendIpId`, `subnetId`, `availabilityZones`, `keyVaultId`, `keyVaultCertificateName`, `keyVaultCertificateVersion`, `keyVaultManagedIdentityId`, legacy `keyVaultCertificateId`, `backendPools`, `healthProbes`, `loadBalancingRules`
 - Validator (`validateAppGateway()` in `componentValidators.ts`) enforces:
   - ❌ Error: SKU must be Standard_v2 or WAF_v2 (v1 SKUs deprecated April 28, 2026)
   - ❌ Error: Capacity 1-32 for fixed capacity mode
@@ -941,7 +1069,8 @@ Functions:
   - ⚠️ Warning: No availability zones specified (not zone-redundant)
   - ⚠️ Warning: Public frontend IP SKU not Standard or allocation not Static (Azure requirement)
   - ⚠️ Warning: Key Vault certificate recommended for TLS on public frontend
-  - ⚠️ Warning: Referenced Key Vault certificate does not exist
+  - ❌ Error: Key Vault certificate integration requires a user-assigned managed identity
+  - ⚠️ Warning: Selected Key Vault is network-restricted without trusted-service bypass or matching subnet access
 - `isValid` is calculated from `error`-severity entries only (warnings do not block save)
 
 **Form Behavior (`AppGatewayForm.vue`):**
@@ -968,9 +1097,13 @@ Functions:
   - Error if missing or non-existent when Public frontend selected
   - Warning if IP SKU not Standard or allocation not Static
   - Helper text: "Must be Standard SKU with Static allocation"
-- **Key Vault Certificate selector** (optional; from KEY_VAULT nodes)
+- **Key Vault integration section**
+  - Key Vault selector (KEY_VAULT nodes)
+  - Certificate name input
+  - Optional certificate version input
+  - User-assigned managed identity selector
+  - Read-only secret URI preview
   - Shows warning if public frontend and no cert set (security best practice)
-  - Helper text: "Recommended for TLS certificate storage and auto-rotation"
 - **Backend Pool Members** (checkboxes for NETWORK_IC, VM, VMSS, AKS, APP_SERVICE, FUNCTIONS nodes)
 - `getError(fieldName)` returns only `severity === 'error'` matches
 - `getWarning(fieldName)` returns only `severity === 'warning'` matches

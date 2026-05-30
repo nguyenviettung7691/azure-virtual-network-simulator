@@ -30,6 +30,7 @@ export function getNodeTypeForComponent(componentType: NetworkComponentType): st
     [NetworkComponentType.PRIVATE_ENDPOINT]: 'compute-node',
     [NetworkComponentType.SERVICE_ENDPOINT]: 'compute-node',
     [NetworkComponentType.INTERNET]: 'internet-node',
+    [NetworkComponentType.NAT_GATEWAY]: 'nat-gateway-node',
   }
   return map[componentType] || 'compute-node'
 }

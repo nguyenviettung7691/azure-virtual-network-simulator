@@ -29,10 +29,12 @@
 </template>
 
 <script setup lang="ts">
-import { NetworkComponentType, getComponentLabel, ManagedDiskType, ManagedDiskRedundancy, ManagedDiskRole } from '~/types/network'
+import { NetworkComponentType, getComponentLabel } from '~/types/network'
 import type { AnyNetworkComponent } from '~/types/network'
 import type { VNetComponent } from '~/types/network'
 import { getValidator } from '~/lib/componentValidators'
+import { normalizeComponentKeyVaultReferences } from '~/lib/keyVault'
+import { getManagedDiskDefaults, normalizeManagedDiskData } from '~/lib/managedDisk'
 import type { FieldError } from '~/types/validation'
 
 const diagramStore = useDiagramStore()
@@ -54,7 +56,10 @@ watch(() => diagramStore.showComponentModal, (visible) => {
   if (visible) {
     submitErrors.value = []
     if (diagramStore.editingComponent) {
-      formData.value = { ...diagramStore.editingComponent }
+      formData.value = normalizeComponentKeyVaultReferences(
+        normalizeManagedDiskData({ ...diagramStore.editingComponent } as any),
+        diagramStore.nodes,
+      )
     } else {
       const type = diagramStore.addingComponentType!
       formData.value = buildInitialComponentData(type)
@@ -104,6 +109,7 @@ function buildInitialComponentData(type: NetworkComponentType): Partial<AnyNetwo
       backendPools: [],
       enableWaf: true,
       wafMode: 'Prevention',
+      keyVaultManagedIdentityId: undefined,
     }
   }
 
@@ -129,6 +135,8 @@ function buildInitialComponentData(type: NetworkComponentType): Partial<AnyNetwo
       adminUsername: 'azureadmin',
       nicIds: [],
       diskType: 'StandardSSD_LRS',
+      enableManagedIdentity: false,
+      userAssignedIdentityIds: [],
     }
   }
 
@@ -146,6 +154,31 @@ function buildInitialComponentData(type: NetworkComponentType): Partial<AnyNetwo
       autoscaleEnabled: false,
       availabilityZones: ['1', '2'],
       scaleInPolicy: 'FIFO',
+      enableManagedIdentity: false,
+      userAssignedIdentityIds: [],
+    }
+  }
+
+  if (type === NetworkComponentType.MANAGED_IDENTITY) {
+    return {
+      ...base,
+      identityType: 'UserAssigned',
+      isolationScope: 'None',
+    }
+  }
+
+  if (type === NetworkComponentType.KEY_VAULT) {
+    return {
+      ...base,
+      sku: 'Standard',
+      enableSoftDelete: true,
+      softDeleteRetentionDays: 90,
+      enablePurgeProtection: false,
+      networkDefaultAction: 'Allow',
+      allowTrustedMicrosoftServices: false,
+      virtualNetworkRules: [],
+      ipRules: [],
+      accessPolicies: [],
     }
   }
 
@@ -160,6 +193,28 @@ function buildInitialComponentData(type: NetworkComponentType): Partial<AnyNetwo
       runtimeVersion: '20',
       enableHttps: true,
       enableDiagnosticLogging: true,
+      enableManagedIdentity: false,
+      userAssignedIdentityIds: [],
+    }
+  }
+
+  if (type === NetworkComponentType.SERVICE_ENDPOINT) {
+    return {
+      ...base,
+      service: 'Microsoft.Storage',
+      subnetId: undefined,
+      locations: [],
+    }
+  }
+  if (type === NetworkComponentType.NAT_GATEWAY) {
+    return {
+      ...base,
+      sku: 'Standard',
+      idleTimeoutInMinutes: 4,
+      publicIpIds: [],
+      publicIpPrefixIds: [],
+      subnetIds: [],
+      availabilityZones: [],
     }
   }
 
@@ -167,12 +222,7 @@ function buildInitialComponentData(type: NetworkComponentType): Partial<AnyNetwo
     if (type === NetworkComponentType.MANAGED_DISK) {
       return {
         ...base,
-        diskType: 'Premium_SSD_v2',
-        redundancy: 'LRS',
-        diskRole: 'DATA',
-        diskSizeGb: 128,
-        osType: undefined,
-        attachedToVmId: undefined,
+        ...getManagedDiskDefaults(),
       }
     }
     // STORAGE_ACCOUNT or BLOB_STORAGE
@@ -225,12 +275,17 @@ const formMap: Partial<Record<NetworkComponentType, any>> = {
   [NetworkComponentType.PRIVATE_ENDPOINT]: resolveComponent('NetworkICForm'),
   [NetworkComponentType.FIREWALL]: resolveComponent('FirewallForm'),
   [NetworkComponentType.BASTION]: resolveComponent('BastionForm'),
+  [NetworkComponentType.NAT_GATEWAY]: resolveComponent('NatGatewayForm'),
 }
 
 const activeForm = computed(() => currentType.value ? formMap[currentType.value] : null)
 
 function onSubmit() {
-  const data = formData.value as AnyNetworkComponent
+  const data = normalizeComponentKeyVaultReferences(
+    normalizeManagedDiskData(formData.value as any),
+    diagramStore.nodes,
+  ) as AnyNetworkComponent
+  formData.value = data
   submitErrors.value = []
   if (data.type === NetworkComponentType.INTERNET) {
     diagramStore.closeComponentModal()

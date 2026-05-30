@@ -29,6 +29,17 @@
       <div class="field"><label>Availability Zone</label>
         <Select v-model="model.availabilityZone" :options="['1','2','3','No zone']" class="w-full" />
       </div>
+
+      <div class="form-section-header">Identity</div>
+      <div class="field checkbox-field"><label>Enable Managed Identity</label><ToggleSwitch v-model="model.enableManagedIdentity" />
+        <small class="help-text">System-assigned managed identity scoped to this VM. Can be used together with user-assigned identities.</small>
+      </div>
+      <div class="field"><label>User-Assigned Managed Identities</label>
+        <MultiSelect v-model="model.userAssignedIdentityIds" :options="managedIdentityOptions" option-label="label" option-value="value" class="w-full" placeholder="Select identities (optional)" />
+        <small class="help-text">Standalone identities that can be assigned to one or more resources.</small>
+        <small v-if="getError('userAssignedIdentityIds')" class="error-text">{{ getError('userAssignedIdentityIds') }}</small>
+        <small v-if="getWarning('userAssignedIdentityIds')" class="warning-text">{{ getWarning('userAssignedIdentityIds') }}</small>
+      </div>
     </template>
 
     <!-- VMSS fields -->
@@ -57,6 +68,17 @@
           <Select v-model="model.subnetId" :options="subnetOptions" option-label="label" option-value="value" class="w-full" placeholder="Select subnet" />
         </div>
         <small v-if="getError('subnetId')" class="error-text">{{ getError('subnetId') }}</small>
+      </div>
+
+      <div class="form-section-header">Identity</div>
+      <div class="field checkbox-field"><label>Enable Managed Identity</label><ToggleSwitch v-model="model.enableManagedIdentity" />
+        <small class="help-text">System-assigned managed identity scoped to this scale set. Can be used together with user-assigned identities.</small>
+      </div>
+      <div class="field"><label>User-Assigned Managed Identities</label>
+        <MultiSelect v-model="model.userAssignedIdentityIds" :options="managedIdentityOptions" option-label="label" option-value="value" class="w-full" placeholder="Select identities (optional)" />
+        <small class="help-text">Standalone identities that can be shared by replicated workloads.</small>
+        <small v-if="getError('userAssignedIdentityIds')" class="error-text">{{ getError('userAssignedIdentityIds') }}</small>
+        <small v-if="getWarning('userAssignedIdentityIds')" class="warning-text">{{ getWarning('userAssignedIdentityIds') }}</small>
       </div>
     </template>
 
@@ -188,7 +210,16 @@
         <InputText v-model="model.monitoringWorkspaceId" class="w-full" placeholder="/subscriptions/.../resourceGroups/.../providers/Microsoft.OperationalInsights/workspaces/..." />
         <small class="help-text">Log Analytics workspace for Container Insights</small>
       </div>
-      <div class="field checkbox-field"><label>Enable Managed Identity</label><ToggleSwitch v-model="model.enableManagedIdentity" /></div>
+      <div class="form-section-header">Identity</div>
+      <div class="field checkbox-field"><label>Enable Managed Identity</label><ToggleSwitch v-model="model.enableManagedIdentity" />
+        <small class="help-text">System-assigned managed identity for cluster-to-Azure authentication. Can be used together with user-assigned identities.</small>
+      </div>
+      <div class="field"><label>User-Assigned Managed Identities</label>
+        <MultiSelect v-model="model.userAssignedIdentityIds" :options="managedIdentityOptions" option-label="label" option-value="value" class="w-full" placeholder="Select identities (optional)" />
+        <small class="help-text">Reusable identities for shared cluster access to Azure resources.</small>
+        <small v-if="getError('userAssignedIdentityIds')" class="error-text">{{ getError('userAssignedIdentityIds') }}</small>
+        <small v-if="getWarning('userAssignedIdentityIds')" class="warning-text">{{ getWarning('userAssignedIdentityIds') }}</small>
+      </div>
 
       <!-- Advanced Configuration (Collapsible) -->
       <div style="margin-top: 1.5rem">
@@ -278,6 +309,8 @@
       <div class="field"><label>User-Assigned Managed Identities</label>
         <MultiSelect v-model="model.userAssignedIdentityIds" :options="managedIdentityOptions" option-label="label" option-value="value" class="w-full" placeholder="Select identities (optional)" />
         <small class="help-text">User-assigned managed identities (standalone, reusable, assignable to multiple resources). Both system-assigned and user-assigned can be enabled at the same time.</small>
+        <small v-if="getError('userAssignedIdentityIds')" class="error-text">{{ getError('userAssignedIdentityIds') }}</small>
+        <small v-if="getWarning('userAssignedIdentityIds')" class="warning-text">{{ getWarning('userAssignedIdentityIds') }}</small>
       </div>
       <div class="field checkbox-field"><label>Enable Easy Auth</label><ToggleSwitch v-model="model.enableEasyAuth" />
         <small class="help-text">Built-in authentication/authorization with multiple providers</small>
@@ -303,9 +336,24 @@
 
       <!-- Key Vault Integration -->
       <div class="form-section-header">Key Vault Integration</div>
-      <div class="field"><label>Key Vault Secret URI</label>
-        <InputText v-model="model.keyVaultSecretUri" class="w-full" placeholder="Reference to Key Vault secret" />
-        <small class="help-text">Store sensitive app settings and connection strings securely in Key Vault</small>
+      <div class="field"><label>Key Vault</label>
+        <Select v-model="model.keyVaultId" :options="keyVaultOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Key Vault" showClear />
+        <small v-if="getWarning('keyVaultId')" class="warning-text">{{ getWarning('keyVaultId') }}</small>
+      </div>
+      <div class="field"><label>Secret Name</label>
+        <InputText v-model="model.keyVaultSecretName" class="w-full" placeholder="db-connection-string" />
+        <small class="help-text">Use a Key Vault secret name, not a diagram node ID.</small>
+        <small v-if="getError('keyVaultSecretName')" class="error-text">{{ getError('keyVaultSecretName') }}</small>
+      </div>
+      <div class="field"><label>Secret Version</label>
+        <InputText v-model="model.keyVaultSecretVersion" class="w-full" placeholder="Optional 32-character Key Vault version" />
+        <small v-if="getWarning('keyVaultSecretVersion')" class="warning-text">{{ getWarning('keyVaultSecretVersion') }}</small>
+      </div>
+      <div class="field">
+        <label>Secret URI Preview</label>
+        <InputText :model-value="keyVaultSecretUriPreview" class="w-full" readonly />
+        <small class="help-text">App setting references use `@Microsoft.KeyVault(SecretUri=...)` over this data-plane URI.</small>
+        <small v-if="getWarning('keyVaultSecretUri')" class="warning-text">{{ getWarning('keyVaultSecretUri') }}</small>
       </div>
     </template>
 
@@ -380,6 +428,9 @@
       </div>
       <div class="field"><label>User-Assigned Managed Identities</label>
         <MultiSelect v-model="model.userAssignedIdentityIds" :options="managedIdentityOptions" option-label="label" option-value="value" class="w-full" placeholder="Select identities (optional)" />
+        <small class="help-text">User-assigned identities can be used together with the system-assigned identity.</small>
+        <small v-if="getError('userAssignedIdentityIds')" class="error-text">{{ getError('userAssignedIdentityIds') }}</small>
+        <small v-if="getWarning('userAssignedIdentityIds')" class="warning-text">{{ getWarning('userAssignedIdentityIds') }}</small>
       </div>
 
       <!-- Monitoring & Diagnostics -->
@@ -394,9 +445,24 @@
 
       <!-- Key Vault Integration -->
       <div class="form-section-header">Key Vault Integration</div>
-      <div class="field"><label>Key Vault Secret URI</label>
-        <InputText v-model="model.keyVaultSecretUri" class="w-full" placeholder="Reference to Key Vault secret" />
-        <small class="help-text">Store function secrets securely in Key Vault</small>
+      <div class="field"><label>Key Vault</label>
+        <Select v-model="model.keyVaultId" :options="keyVaultOptions" option-label="label" option-value="value" class="w-full" placeholder="Select Key Vault" showClear />
+        <small v-if="getWarning('keyVaultId')" class="warning-text">{{ getWarning('keyVaultId') }}</small>
+      </div>
+      <div class="field"><label>Secret Name</label>
+        <InputText v-model="model.keyVaultSecretName" class="w-full" placeholder="function-app-secret" />
+        <small class="help-text">Use a Key Vault secret name, not a diagram node ID.</small>
+        <small v-if="getError('keyVaultSecretName')" class="error-text">{{ getError('keyVaultSecretName') }}</small>
+      </div>
+      <div class="field"><label>Secret Version</label>
+        <InputText v-model="model.keyVaultSecretVersion" class="w-full" placeholder="Optional 32-character Key Vault version" />
+        <small v-if="getWarning('keyVaultSecretVersion')" class="warning-text">{{ getWarning('keyVaultSecretVersion') }}</small>
+      </div>
+      <div class="field">
+        <label>Secret URI Preview</label>
+        <InputText :model-value="keyVaultSecretUriPreview" class="w-full" readonly />
+        <small class="help-text">Azure Functions can consume Key Vault references through managed identity-backed app settings.</small>
+        <small v-if="getWarning('keyVaultSecretUri')" class="warning-text">{{ getWarning('keyVaultSecretUri') }}</small>
       </div>
     </template>
   </div>
@@ -405,6 +471,7 @@
 <script setup lang="ts">
 import { NetworkComponentType } from '~/types/network'
 import { getValidator } from '~/lib/componentValidators'
+import { buildKeyVaultObjectUri, normalizeComponentKeyVaultReferences } from '~/lib/keyVault'
 import type { FieldError } from '~/types/validation'
 
 const props = defineProps<{ modelValue: any; nodes: any[] }>()
@@ -418,7 +485,7 @@ const validationErrors = computed(() => {
 })
 
 function getError(fieldName: string): string | undefined {
-  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName)?.message
+  return validationErrors.value.find((e: FieldError) => e.fieldName === fieldName && e.severity === 'error')?.message
 }
 
 function getWarning(fieldName: string): string | undefined {
@@ -427,7 +494,10 @@ function getWarning(fieldName: string): string | undefined {
 
 const subnetOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.SUBNET).map(n => ({ label: n.data.name, value: n.id })))
 const storageOptions = computed(() => (props.nodes || []).filter(n => [NetworkComponentType.STORAGE_ACCOUNT, NetworkComponentType.BLOB_STORAGE].includes(n.data?.type)).map(n => ({ label: n.data.name, value: n.id })))
-const managedIdentityOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.MANAGED_IDENTITY).map(n => ({ label: n.data.name, value: n.id })))
+const keyVaultOptions = computed(() => (props.nodes || []).filter(n => n.data?.type === NetworkComponentType.KEY_VAULT).map(n => ({ label: n.data.name, value: n.id })))
+const managedIdentityOptions = computed(() => (props.nodes || [])
+  .filter(n => n.data?.type === NetworkComponentType.MANAGED_IDENTITY && n.data?.identityType === 'UserAssigned')
+  .map(n => ({ label: n.data.name, value: n.id })))
 
 const computeTypes = [
   { label: 'Virtual Machine', value: NetworkComponentType.VM },
@@ -441,6 +511,24 @@ const isVMSS = computed(() => model.value.type === NetworkComponentType.VMSS)
 const isAKS = computed(() => model.value.type === NetworkComponentType.AKS)
 const isAppService = computed(() => model.value.type === NetworkComponentType.APP_SERVICE)
 const isFunctions = computed(() => model.value.type === NetworkComponentType.FUNCTIONS)
+
+watchEffect(() => {
+  if (!isAppService.value && !isFunctions.value) return
+  const normalized = normalizeComponentKeyVaultReferences(model.value, props.nodes || [])
+  const fields = ['keyVaultId', 'keyVaultSecretName', 'keyVaultSecretVersion', 'keyVaultSecretUri']
+  const changed = fields.some(field => normalized[field] !== model.value[field])
+  if (changed) {
+    model.value = { ...model.value, ...Object.fromEntries(fields.map(field => [field, normalized[field]])) }
+  }
+})
+
+const keyVaultSecretUriPreview = computed(() => {
+  if (!model.value.keyVaultId || !model.value.keyVaultSecretName) return ''
+  const vaultNode = (props.nodes || []).find(node => node.id === model.value.keyVaultId && node.data?.type === NetworkComponentType.KEY_VAULT)
+  const vaultName = vaultNode?.data?.name
+  if (!vaultName) return ''
+  return buildKeyVaultObjectUri(vaultName, 'secrets', model.value.keyVaultSecretName, model.value.keyVaultSecretVersion)
+})
 
 // App Service & Functions computed properties
 const appServiceTiers = ['Free', 'Shared', 'Basic', 'Standard', 'Premium', 'PremiumV2', 'PremiumV3', 'PremiumV4', 'Isolated', 'IsolatedV2']
