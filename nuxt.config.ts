@@ -40,6 +40,7 @@ const MDI_ICON_NAMES = [
   'mdi:fullscreen',
   'mdi:folder-open-outline',
   'mdi:function',
+  'mdi:github',
   'mdi:grid',
   'mdi:harddisk',
   'mdi:help-circle',

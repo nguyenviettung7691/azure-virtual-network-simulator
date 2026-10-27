@@ -182,6 +182,16 @@
         <Icon name="mdi:vector-polygon" mode="svg" class="status-icon mdi-themed-icon" />
         Status
       </span>
+      <a
+        class="github-link"
+        href="https://github.com/nguyenviettung7691/azure-virtual-network-simulator"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="View source on GitHub"
+        v-tooltip.top="'View source on GitHub'"
+      >
+        <Icon name="mdi:github" mode="svg" class="github-icon mdi-themed-icon" />
+      </a>
     </div>
   </footer>
 
@@ -835,6 +845,16 @@ onBeforeUnmount(() => {
   color: var(--text-color-secondary);
   flex-shrink: 0;
 }
+
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-color-secondary);
+}
+
+.github-link:hover { color: var(--text-color); }
+
+.github-icon { font-size: 1.15rem; }
 
 .status-icon {
   font-size: 0.85rem;
