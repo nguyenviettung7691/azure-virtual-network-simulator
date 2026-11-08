@@ -27,7 +27,7 @@
     "@vue-flow/core": "^1.42.1",
     "@vue-flow/minimap": "^1.5.1",
     "@vueuse/core": "^11.3.0",
-    "@xmldom/xmldom": "^0.9.4",
+    "@xmldom/xmldom": "^0.9.12",
     "aws-amplify": "^6.8.1",
     "dagre": "^0.8.5",
     "jszip": "^3.10.1",
