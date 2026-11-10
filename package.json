@@ -6,6 +6,7 @@
     "name": "Nguyen Viet Tung"
   },
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
@@ -31,7 +32,7 @@
     "aws-amplify": "^6.8.1",
     "dagre": "^0.8.5",
     "jszip": "^3.10.1",
-    "nuxt": "4.6.4",
+    "nuxt": "^4.6.4",
     "pdf-lib": "^1.17.1",
     "pinia": "^2.2.6",
     "primeicons": "^7.0.0",

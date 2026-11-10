@@ -247,7 +247,7 @@ For full console setup instructions for each service, see [AWS Services Integrat
 | `useSavedSetupQueries` | Vue Query hooks for S3-backed saved setup list/save/delete |
 | `useExport` | Exports the canvas to PNG, SVG, PDF, or draw.io |
 | `useImport` | Imports diagram files; toolbar flow currently picks `.drawio`, while parser-level `importFromFile(...)` accepts `.drawio` and `.xml`; successful app-native `.drawio` imports can prompt to reset existing network tests after the diagram finishes rendering |
-| `useLayout` | Wraps Dagre to auto-arrange nodes on demand (not triggered automatically on every node addition) |
+| `useAppLayout` | Wraps Dagre to auto-arrange nodes on demand (not triggered automatically on every node addition) |
 | `useSettings` | Reads and writes local user preferences via the settings store |
 | `useSettingsQueries` | Vue Query controller/hooks for MongoDB-backed settings load/save |
 | `useTests` | Runs validation tests against the current diagram state; auto-runs are debounced (500 ms) and skip concurrent runs |

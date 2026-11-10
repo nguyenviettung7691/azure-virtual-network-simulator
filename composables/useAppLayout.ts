@@ -1,7 +1,4 @@
-import { applyDagreLayout } from '~/lib/dagre'
-import type { DiagramNode, DiagramEdge } from '~/types/diagram'
-
-export const useLayout = () => {
+export const useAppLayout = () => {
   const diagramStore = useDiagramStore()
 
   function applyAutoLayout() {
