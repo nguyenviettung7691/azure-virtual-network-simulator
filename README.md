@@ -58,13 +58,13 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 
 | Layer | Library / Version |
 |---|---|
-| Framework | Nuxt 3 (SPA, SSR disabled) |
-| UI component library | PrimeVue 4 (Aura preset via `@primevue/themes`) |
+| Framework | Nuxt 4.6.4 + Vue 3.5.45 (SPA, SSR disabled) |
+| UI component library | PrimeVue 4.5.5 (Aura preset via `@primevue/themes` 4.5.4) |
 | Styling & theming | App-owned CSS tokens in `assets/css/main.css` plus PrimeVue Aura semantic tokens from `assets/primevue-theme.ts` |
 | Icons | PrimeIcons 7 (`primeicons`) for `pi pi-*` UI icons; local Azure Public Service SVG collections bundled through `@nuxt/icon` for the component command palette, Network Summary sidebar, and diagram nodes; Iconify + `@iconify-json/mdi` for remaining diagram/canvas chrome via `@iconify/vue` |
-| Local app state | Pinia |
-| Remote / server state | TanStack Vue Query (`@tanstack/vue-query`) |
-| Diagram engine | Vue Flow (`@vue-flow/core`) + `@vue-flow/controls` + `@vue-flow/background` + `@vue-flow/minimap` |
+| Local app state | Pinia 2.3.1 |
+| Remote / server state | TanStack Vue Query 5.100.6 (`@tanstack/vue-query`) |
+| Diagram engine | Vue Flow (`@vue-flow/core` 1.48.2) + `@vue-flow/controls` 1.1.3 + `@vue-flow/background` 1.3.2 + `@vue-flow/minimap` 1.5.4 |
 | Graph layout | Dagre |
 | Utilities | VueUse |
 | Image export | App-owned DOM-to-SVG serializer (`lib/export/domSnapshot.ts`) |
@@ -72,7 +72,7 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 | XML parsing | @xmldom/xmldom |
 | AWS auth + storage | aws-amplify v6 |
 | AWS AI | @aws-sdk/client-bedrock-runtime |
-| Language | TypeScript 5 |
+| Language | TypeScript 5.9.3 |
 
 When auditing or refactoring styles, treat both token sources as valid. `assets/css/main.css` owns the app's layout and base-color variables and mirrors PrimeVue semantic tokens with fallback aliases so component styles keep resolving even before the runtime theme layer is applied.
 
