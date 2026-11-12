@@ -4,6 +4,10 @@
 
 An interactive, browser-based topology designer and simulator for Azure Virtual Network architectures. Build, visualise, and validate Azure network diagrams using a drag-and-drop canvas, then challenge yourself with AI-generated networking tasks.
 
+[![GitHub Stars](https://img.shields.io/github/stars/nguyenviettung7691/azure-virtual-network-simulator)](https://github.com/nguyenviettung7691/azure-virtual-network-simulator/stargazers)
+[![Total Commits](https://img.shields.io/github/commit-activity/t/nguyenviettung7691/azure-virtual-network-simulator?label=commits)](https://github.com/nguyenviettung7691/azure-virtual-network-simulator/commits)
+[![Last Commit](https://img.shields.io/github/last-commit/nguyenviettung7691/azure-virtual-network-simulator)](https://github.com/nguyenviettung7691/azure-virtual-network-simulator/commits)
+
 ---
 
 ## Table of Contents
