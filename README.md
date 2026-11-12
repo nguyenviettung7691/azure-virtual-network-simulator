@@ -7,6 +7,23 @@ An interactive, browser-based topology designer and simulator for Azure Virtual 
 [![GitHub Stars](https://img.shields.io/github/stars/nguyenviettung7691/azure-virtual-network-simulator)](https://github.com/nguyenviettung7691/azure-virtual-network-simulator/stargazers)
 [![Total Commits](https://img.shields.io/github/commit-activity/t/nguyenviettung7691/azure-virtual-network-simulator?label=commits)](https://github.com/nguyenviettung7691/azure-virtual-network-simulator/commits)
 [![Last Commit](https://img.shields.io/github/last-commit/nguyenviettung7691/azure-virtual-network-simulator)](https://github.com/nguyenviettung7691/azure-virtual-network-simulator/commits)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](https://github.com/nguyenviettung7691/azure-virtual-network-simulator/blob/main/LICENSE)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-azure--vnet.nguyenviettung.id.vn-222222?logo=githubpages&logoColor=white)](https://azure-vnet.nguyenviettung.id.vn/)
+
+![Nuxt](https://img.shields.io/badge/Nuxt-4.6.4-00DC82?logo=nuxt&logoColor=white)
+![Vue](https://img.shields.io/badge/Vue-3.5.45-4FC08D?logo=vuedotjs&logoColor=white)
+![PrimeVue](https://img.shields.io/badge/PrimeVue-4.5.5-41B883?logo=primevue&logoColor=white)
+![PrimeIcons](https://img.shields.io/badge/PrimeIcons-7-41B883)
+![Iconify](https://img.shields.io/badge/Iconify-1769AA?logo=iconify&logoColor=white)
+![Pinia](https://img.shields.io/badge/Pinia-2.3.1-FFD859?logo=pinia&logoColor=black)
+![TanStack Vue Query](https://img.shields.io/badge/TanStack%20Vue%20Query-5.100.6-FF4154)
+![Vue Flow](https://img.shields.io/badge/Vue%20Flow-1.48.2-FF0072)
+![Dagre](https://img.shields.io/badge/Dagre-4A5568)
+![VueUse](https://img.shields.io/badge/VueUse-41B883)
+![pdf-lib](https://img.shields.io/badge/pdf--lib-EC1C24)
+![@xmldom/xmldom](https://img.shields.io/badge/%40xmldom%2Fxmldom-5A67D8)
+![AWS Amplify](https://img.shields.io/badge/AWS%20Amplify-v6-FF9900?logo=awsamplify&logoColor=white)
+![@aws-sdk/client-bedrock-runtime](https://img.shields.io/badge/%40aws--sdk%2Fclient--bedrock--runtime-232F3E)
 
 ---
 
